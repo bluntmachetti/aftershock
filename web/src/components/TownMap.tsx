@@ -1,13 +1,15 @@
 import type { WorldState, MissionState } from '../types'
 
-// Fixed district grid layout (col, row, colSpan, rowSpan in a 6×4 grid)
+// Fixed district grid layout — 2 rows × 3 cols inside a 500×380 viewBox.
+// GRID_Y offsets the whole 2-row block downward so it reads centred with breathing room.
+const GRID_Y = 50  // top margin before row-0 districts
 const DISTRICT_LAYOUT: Record<string, { x: number; y: number; w: number; h: number; label: string }> = {
-  old_town:           { x: 0,   y: 0,   w: 160, h: 120, label: 'Old Town' },
-  harbor:             { x: 160, y: 0,   w: 180, h: 120, label: 'Harbor' },
-  hospital_district:  { x: 340, y: 0,   w: 160, h: 120, label: 'Hospital' },
-  market:             { x: 0,   y: 120, w: 200, h: 140, label: 'Market' },
-  residential_north:  { x: 200, y: 120, w: 180, h: 140, label: 'Residential N.' },
-  industrial:         { x: 380, y: 120, w: 120, h: 140, label: 'Industrial' },
+  old_town:           { x: 0,   y: GRID_Y,       w: 160, h: 130, label: 'Old Town' },
+  harbor:             { x: 160, y: GRID_Y,       w: 180, h: 130, label: 'Harbor' },
+  hospital_district:  { x: 340, y: GRID_Y,       w: 160, h: 130, label: 'Hospital' },
+  market:             { x: 0,   y: GRID_Y + 130, w: 200, h: 150, label: 'Market' },
+  residential_north:  { x: 200, y: GRID_Y + 130, w: 180, h: 150, label: 'Residential N.' },
+  industrial:         { x: 380, y: GRID_Y + 130, w: 120, h: 150, label: 'Industrial' },
 }
 
 const MISSION_COLORS: Record<string, string> = {
@@ -17,11 +19,29 @@ const MISSION_COLORS: Record<string, string> = {
   infra_repair: '#a78bfa',
 }
 
-const MISSION_ICONS: Record<string, string> = {
-  fire: '🔥',
-  collapse_rescue: '🏚',
-  medical_surge: '➕',
-  infra_repair: '🔧',
+// Inline monochrome SVG path icons — rendered as SVG <path> elements, scaled to fit
+// Each icon is authored on a 24×24 viewBox; caller scales via transform.
+const MISSION_ICON_PATHS: Record<string, { d: string; fill?: boolean }> = {
+  // Medical cross — two overlapping rectangles
+  medical_surge: {
+    d: 'M10 2h4v7h7v4h-7v7h-4v-7H3v-4h7z',
+    fill: true,
+  },
+  // Flame — teardrop with inner curl
+  fire: {
+    d: 'M12 2c0 0-1.5 3-3 5.5C7.5 10 6 11.5 6 14a6 6 0 0012 0c0-3-2-5-3-7-0.5 1.5-1 3-3 4 0 0 0.5-3.5 0-4.5C12 6.5 12 2 12 2z',
+    fill: true,
+  },
+  // Collapsing building — house silhouette with crack
+  collapse_rescue: {
+    d: 'M3 10L12 3l9 7v11H3V10zm3 1v8h4v-5h2v5h4v-8l-5-3.9L6 11z M10 13l1 2-1 2h4l-1-2 1-2h-4z',
+    fill: true,
+  },
+  // Wrench
+  infra_repair: {
+    d: 'M16.5 3C14 3 12 5 12 7.5c0 .5.1 1 .3 1.4L4 17.2 4 20l2.8 0 8.3-8.3c.4.2.9.3 1.4.3C19 12 21 10 21 7.5c0-.7-.2-1.4-.5-2l-2.8 2.8-1.5-1.5 2.8-2.8C18.4 3.7 17.5 3 16.5 3z',
+    fill: true,
+  },
 }
 
 function severityRadius(s: number): number {
@@ -91,10 +111,32 @@ function MissionMarker({ mission, cx, cy, selected, onSelect }: MissionMarkerPro
       {mission.status === 'failed' && (
         <circle r={r - 2} fill="#ef444420" stroke="#ef4444" strokeWidth={1} />
       )}
-      {/* Icon */}
-      <text textAnchor="middle" dominantBaseline="central" fontSize={r * 0.9} style={{ userSelect: 'none' }}>
-        {MISSION_ICONS[mission.kind] ?? '?'}
-      </text>
+      {/* Icon — inline SVG path scaled to fit within the circle */}
+      {(() => {
+        const iconDef = MISSION_ICON_PATHS[mission.kind]
+        if (!iconDef) return null
+        const iconSize = r * 1.4
+        const half = iconSize / 2
+        return (
+          <g transform={`translate(${-half},${-half})`}>
+            <svg
+              viewBox="0 0 24 24"
+              width={iconSize}
+              height={iconSize}
+              overflow="visible"
+            >
+              <path
+                d={iconDef.d}
+                fill={iconDef.fill ? color : 'none'}
+                stroke={iconDef.fill ? 'none' : color}
+                strokeWidth={iconDef.fill ? 0 : 2}
+                fillOpacity={isOpen ? 0.9 : 0.4}
+                strokeOpacity={isOpen ? 0.9 : 0.4}
+              />
+            </svg>
+          </g>
+        )
+      })()}
       {/* Lives at risk */}
       {isOpen && (
         <text
@@ -108,19 +150,21 @@ function MissionMarker({ mission, cx, cy, selected, onSelect }: MissionMarkerPro
           {mission.lives_at_risk}♥
         </text>
       )}
-      {/* Staffing pips row */}
+      {/* Staffing pips row — slightly larger for 1080p legibility */}
       {isOpen && totalRequired > 0 && (
-        <g transform={`translate(${-totalRequired * 4},${r + 20})`}>
+        <g transform={`translate(${-totalRequired * 5.5},${r + 20})`}>
           {Array.from({ length: totalRequired }).map((_, i) => (
             <rect
               key={i}
-              x={i * 8}
+              x={i * 10}
               y={0}
-              width={6}
-              height={4}
+              width={8}
+              height={5}
               rx={1}
               fill={i < totalAssigned ? color : '#243047'}
-              opacity={0.9}
+              stroke={i < totalAssigned ? `${color}60` : '#1a2235'}
+              strokeWidth={0.5}
+              opacity={0.95}
             />
           ))}
         </g>
@@ -137,7 +181,7 @@ interface Props {
 
 export function TownMap({ world, selectedMissionId, onSelectMission }: Props) {
   const SVG_W = 500
-  const SVG_H = 280
+  const SVG_H = 380  // expanded: GRID_Y(50) + row0(130) + row1(150) + bottom(50)
 
   // Place missions: spread within district rect
   const missionPositions: Record<string, { cx: number; cy: number }> = {}
@@ -166,7 +210,8 @@ export function TownMap({ world, selectedMissionId, onSelectMission }: Props) {
     <svg
       viewBox={`0 0 ${SVG_W} ${SVG_H}`}
       className="w-full h-full"
-      style={{ background: '#0a0e1a' }}
+      preserveAspectRatio="xMidYMid meet"
+      style={{ background: '#0a0e1a', display: 'block' }}
     >
       {/* District blocks */}
       {Object.entries(DISTRICT_LAYOUT).map(([id, d]) => {
@@ -196,27 +241,40 @@ export function TownMap({ world, selectedMissionId, onSelectMission }: Props) {
             >
               {d.label.toUpperCase()}
             </text>
-            {/* Blocked road indicator */}
+            {/* Blocked road indicator — corner badge */}
             {blocked && (
-              <text
-                x={d.x + d.w - 8}
-                y={d.y + 14}
-                textAnchor="end"
-                fill="#ef4444"
-                fontSize={9}
-                fontFamily="'Share Tech Mono', monospace"
-              >
-                BLOCKED
-              </text>
+              <g>
+                <rect
+                  x={d.x + d.w - 46}
+                  y={d.y + 4}
+                  width={40}
+                  height={13}
+                  rx={2}
+                  fill="#7f1d1d"
+                  stroke="#ef4444"
+                  strokeWidth={0.5}
+                />
+                <text
+                  x={d.x + d.w - 26}
+                  y={d.y + 13}
+                  textAnchor="middle"
+                  fill="#ef4444"
+                  fontSize={8}
+                  fontFamily="'Share Tech Mono', monospace"
+                  letterSpacing={0.5}
+                >
+                  BLOCKED
+                </text>
+              </g>
             )}
           </g>
         )
       })}
 
-      {/* Grid lines */}
-      <line x1={160} y1={0} x2={160} y2={SVG_H} stroke="#1a2235" strokeWidth={1} />
-      <line x1={340} y1={0} x2={340} y2={SVG_H} stroke="#1a2235" strokeWidth={1} />
-      <line x1={0} y1={120} x2={SVG_W} y2={120} stroke="#1a2235" strokeWidth={1} />
+      {/* Grid lines — vertical columns and horizontal row separator */}
+      <line x1={160} y1={GRID_Y} x2={160} y2={GRID_Y + 280} stroke="#1a2235" strokeWidth={1} />
+      <line x1={340} y1={GRID_Y} x2={340} y2={GRID_Y + 280} stroke="#1a2235" strokeWidth={1} />
+      <line x1={0} y1={GRID_Y + 130} x2={SVG_W} y2={GRID_Y + 130} stroke="#1a2235" strokeWidth={1} />
 
       {/* Mission markers */}
       {Object.values(world.missions).map((m) => {

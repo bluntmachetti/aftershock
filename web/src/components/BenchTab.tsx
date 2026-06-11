@@ -11,64 +11,124 @@ const ARM_COLORS: Record<string, string> = {
 
 const ARM_ORDER = ['scripted', 'solo', 'swarm', 'society']
 
+const CHART_H = 200   // usable pixel height for bars
+const LABEL_H = 20    // space below bars for arm name
+
 function BarChart({ arms }: { arms: Record<string, BenchArm> }) {
-  const maxVal = Math.max(
-    ...Object.values(arms).map((a) => a.mean_lives_saved + (a.sd_lives_saved ?? 0)),
-    1,
+  const visibleArms = ARM_ORDER.filter((a) => arms[a])
+
+  // Scale: 0 → CHART_H px, max → 0 px (bars grow upward).
+  // 14% headroom so the tallest whisker's value label never clips the chart top.
+  const maxVal = Math.ceil(
+    Math.max(...visibleArms.map((a) => arms[a].mean_lives_saved + (arms[a].sd_lives_saved ?? 0)), 1) *
+      1.14
   )
+
+  const toY = (v: number) => CHART_H - Math.max(0, Math.min(1, v / maxVal)) * CHART_H
+
+  const totalW = 400
+  const barW = Math.floor(totalW / Math.max(visibleArms.length, 1) * 0.5)
+  const gap = Math.floor(totalW / Math.max(visibleArms.length, 1))
 
   return (
     <div className="flex flex-col gap-3">
       <h3 className="text-[10px] font-mono uppercase tracking-widest text-slate-500">
         Lives Saved — Mean ± SD
       </h3>
-      <div className="flex items-end gap-4 h-40 px-2">
-        {ARM_ORDER.filter((a) => arms[a]).map((armId) => {
+      <svg
+        viewBox={`0 0 ${totalW} ${CHART_H + LABEL_H}`}
+        className="w-full"
+        style={{ height: CHART_H + LABEL_H }}
+        aria-label="Bar chart of lives saved per arm"
+      >
+        {/* Baseline */}
+        <line x1={0} y1={CHART_H} x2={totalW} y2={CHART_H} stroke="#243047" strokeWidth={1} />
+
+        {visibleArms.map((armId, idx) => {
           const arm = arms[armId]
           const color = ARM_COLORS[armId] ?? '#94a3b8'
-          const barH = (arm.mean_lives_saved / maxVal) * 100
-          const sdH = ((arm.sd_lives_saved ?? 0) / maxVal) * 100
+          const mean = arm.mean_lives_saved
+          const sd = arm.sd_lives_saved ?? 0
+          const cx = gap * idx + gap / 2
+          const barTop = toY(mean)
+          const barHeight = CHART_H - barTop
+          const sdTopY = toY(mean + sd)
+          const sdBotY = toY(Math.max(0, mean - sd))
+          const capW = barW * 0.6
+          // value label sits above the whisker top
+          const labelY = Math.max(sdTopY - 6, 4)
 
           return (
-            <div key={armId} className="flex flex-col items-center gap-1 flex-1">
-              <div className="relative w-full flex flex-col items-center justify-end" style={{ height: '100%' }}>
-                {/* SD error bar */}
-                <div
-                  className="absolute w-0.5 rounded"
-                  style={{
-                    background: `${color}80`,
-                    height: `${Math.min(sdH * 2, 100 - barH)}%`,
-                    bottom: `${barH}%`,
-                  }}
-                />
-                {/* Bar */}
-                <div
-                  className="w-full rounded-t transition-all duration-500"
-                  style={{
-                    height: `${barH}%`,
-                    background: `linear-gradient(to top, ${color}cc, ${color}60)`,
-                    boxShadow: `0 0 8px ${color}40`,
-                    minHeight: '2px',
-                  }}
-                />
-                {/* Value */}
-                <div
-                  className="absolute text-[10px] font-mono tabular-nums font-semibold"
-                  style={{ bottom: `${barH + 2}%`, color }}
-                >
-                  {arm.mean_lives_saved.toFixed(1)}
-                </div>
-              </div>
-              <span
-                className="text-[10px] font-mono uppercase tracking-wider"
-                style={{ color }}
+            <g key={armId}>
+              {/* Bar */}
+              <rect
+                x={cx - barW / 2}
+                y={barTop}
+                width={barW}
+                height={Math.max(barHeight, 1)}
+                rx={2}
+                fill={`url(#grad-${armId})`}
+                style={{ filter: `drop-shadow(0 0 4px ${color}40)` }}
+              />
+              {/* Gradient def */}
+              <defs>
+                <linearGradient id={`grad-${armId}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={color} stopOpacity={0.85} />
+                  <stop offset="100%" stopColor={color} stopOpacity={0.35} />
+                </linearGradient>
+              </defs>
+
+              {/* SD whisker — vertical line */}
+              <line
+                x1={cx} y1={sdTopY}
+                x2={cx} y2={sdBotY}
+                stroke={`${color}b0`}
+                strokeWidth={1.5}
+              />
+              {/* Top cap */}
+              <line
+                x1={cx - capW / 2} y1={sdTopY}
+                x2={cx + capW / 2} y2={sdTopY}
+                stroke={color}
+                strokeWidth={1.5}
+              />
+              {/* Bottom cap */}
+              <line
+                x1={cx - capW / 2} y1={sdBotY}
+                x2={cx + capW / 2} y2={sdBotY}
+                stroke={color}
+                strokeWidth={1.5}
+              />
+
+              {/* Value label above whisker */}
+              <text
+                x={cx}
+                y={labelY}
+                textAnchor="middle"
+                fill={color}
+                fontSize={10}
+                fontFamily="'JetBrains Mono', monospace"
+                fontWeight="600"
               >
-                {armId}
-              </span>
-            </div>
+                {mean.toFixed(1)}
+              </text>
+
+              {/* Arm name */}
+              <text
+                x={cx}
+                y={CHART_H + LABEL_H - 4}
+                textAnchor="middle"
+                fill={color}
+                fontSize={9}
+                fontFamily="'JetBrains Mono', monospace"
+                letterSpacing={1}
+              >
+                {armId.toUpperCase()}
+              </text>
+            </g>
           )
         })}
-      </div>
+      </svg>
     </div>
   )
 }
