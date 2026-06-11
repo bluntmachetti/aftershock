@@ -22,6 +22,9 @@ from aftershock.town.events import scheduled_events as _scheduled_events
 from aftershock.town.scoring import score as _score
 from aftershock.town.state import MissionStatus, TownState
 
+# Valid injectable event kinds and their mapping to timeline entry kinds
+_INJECT_KINDS = frozenset({"fire", "aftershock", "road_block"})
+
 # Default six-role mapping: role name == agent id (scripted / society arms)
 _DEFAULT_ROSTER: dict[str, str] = {
     "commander": "commander",
@@ -53,6 +56,9 @@ class TownSociety:
         self._roster: dict[str, str] = dict(roster) if roster is not None else dict(_DEFAULT_ROSTER)
         # Pre-compute a stable sorted tuple for agent_ids()
         self._agent_ids: tuple[str, ...] = tuple(sorted(self._roster))
+        # Queue of pending injections: list of (kind, district_id, event_id)
+        self._injection_queue: list[tuple[str, str, str]] = []
+        self._next_inject_no: int = 0
 
     def agent_ids(self) -> tuple[str, ...]:
         return self._agent_ids
@@ -116,10 +122,42 @@ class TownSociety:
             "totals": totals,
         }
 
+    def inject_event(self, kind: str, district_id: str) -> str:
+        """Queue an external event to be spawned at the start of the next timeline step.
+
+        Args:
+            kind: One of "fire", "aftershock", "road_block".
+            district_id: A valid district id in the town state.
+
+        Returns:
+            A unique event-id string for this injection.
+
+        Raises:
+            ValueError: If kind or district_id are not valid.
+        """
+        from aftershock.town.state import DISTRICTS
+
+        valid_districts = {did for did, _ in DISTRICTS}
+        if kind not in _INJECT_KINDS:
+            raise ValueError(
+                f"unknown inject kind {kind!r}; valid: {sorted(_INJECT_KINDS)}"
+            )
+        if district_id not in valid_districts:
+            raise ValueError(
+                f"unknown district_id {district_id!r}; valid: {sorted(valid_districts)}"
+            )
+        event_id = f"inject-{self._next_inject_no}"
+        self._next_inject_no += 1
+        self._injection_queue.append((kind, district_id, event_id))
+        return event_id
+
     def scheduled_events(self, world: Any, tick: int, rng: random.Random) -> list[WorldEvent]:
         state: TownState = world
         state.tick = tick
-        return _scheduled_events(state, tick, rng)
+        # Drain the injection queue and pass it through; events.py will process it
+        injections = self._injection_queue[:]
+        self._injection_queue.clear()
+        return _scheduled_events(state, tick, rng, injections=injections)
 
     def score(self, world: Any, tick: int) -> dict[str, float]:
         return _score(world, tick)

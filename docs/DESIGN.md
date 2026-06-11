@@ -554,6 +554,95 @@ agent's rejections from the last N ticks (most recent first, capped at 12 entrie
 instead of only the previous tick, so small models stop re-attempting refused actions.
 Applies to every arm identically.
 
+## The observatory (`src/aftershock/web.py`, `src/aftershock/mcp_server.py`, `web/`)
+
+The visual layer: a FastAPI server that replays recorded runs and streams live ones, a
+React map UI, and an MCP spectator. The same server is the Alibaba Cloud deployment
+artifact.
+
+### Kernel plumbing (additive, determinism-preserving)
+
+- `Engine(..., tick_listener: Callable[[TickRecord], None] | None = None)` — called after
+  each tick is recorded; listener exceptions are swallowed (never kill the tick).
+- `Recorder` writes a second sidecar `world.ndjson` — one canonical-JSON line
+  `{"tick": N, "state": <society.world_state(world)>}` per tick. The engine already
+  computes that dict for the world digest; pass it through, do not recompute.
+  `load_run` returns it when present: `(manifest, ticks, worlds | None)`.
+- `TownSociety.inject_event(kind, district_id) -> str` queues an external event
+  (`fire | aftershock | road_block`); the queue is drained at the start of the timeline
+  step in `scheduled_events`, spawning the corresponding mission/blockage with normal
+  WorldEvents (kind `injected` in the payload provenance). Injections are recorded in
+  the tick's events, so replays of live runs remain faithful.
+
+### web.py
+
+```python
+def create_app(runs_root: Path, bench_root: Path | None = None) -> FastAPI
+```
+
+- `GET /api/runs` → `[{run_id, seed, arm, ticks, final_scores, cost}]` (scans runs_root,
+  newest first). **run_id values are validated** (`^[A-Za-z0-9._-]+$`, no path
+  separators) everywhere they appear in a path — path traversal must be impossible.
+- `GET /api/runs/{run_id}` → manifest + final scores + n_ticks + has_world.
+- `GET /api/runs/{run_id}/ticks?start=0&limit=50` → `{ticks: [...], worlds: [...] | null,
+  total}` (paged, limit ≤ 200; tick records zipped with world states when present).
+- `GET /api/bench` → parsed `results.json` files under bench_root (default
+  `bench/results/`), newest first.
+- `POST /api/live {arm, seed, ticks}` → `{live_id}`; runs the arm in an asyncio task.
+  One live run at a time (409 if busy); `ticks ≤ 120`; LLM arms without
+  `DASHSCOPE_API_KEY` → 503 with the friendly hint. The live run also writes a normal
+  run dir under runs_root (so it becomes replayable).
+- `WS /ws/live` → streams `{"type": "tick", "record": ..., "world": ...}` per tick, then
+  `{"type": "done", "summary": ...}`; on connect mid-run, sends all buffered ticks first.
+- `POST /api/live/inject {kind, district}` → 200; 404 when no live run; 422 on bad kind.
+- `GET /api/live` → `{running, live_id, tick, arm, seed}`.
+- Static: serve `web/dist` at `/` when it exists; otherwise `/` returns
+  `{"hint": "run npm install && npm run build in web/"}`.
+
+### mcp_server.py — the spectator
+
+FastMCP (`mcp` SDK), stdio transport, name `aftershock`. Read-only over runs_root plus
+one action that proxies to a locally running server:
+
+- `list_runs()`, `run_summary(run_id)`, `get_ticks(run_id, start, limit ≤ 20)`
+- `negotiation_feed(run_id, start=0, limit=30)` — flattened proposals/rulings with
+  human-readable lines ("medical requested 2 ambulance for m3 — DECLINED: pool
+  exhausted, granted to m2")
+- `agent_story(run_id, agent_id)` — that agent's decisions, rationales, rejections, and
+  proposal outcomes across the whole run
+- `bench_results()` — parsed benchmark tables
+- `inject_event(kind, district)` — POSTs to `http://127.0.0.1:8788/api/live/inject`;
+  returns a clear error string when no live server/run exists
+Same run_id validation as web.py.
+
+### web/ — the map UI (Vite + React 18 + TS + Tailwind, no router)
+
+Single-page observatory with a header scoreboard and three tabs:
+
+1. **Map** (the star): SVG town — six fixed district blocks (old_town, harbor,
+   hospital_district, market, residential_north, industrial), mission markers by kind
+   with severity-scaled emphasis and a lives-at-risk countdown, staffing pips
+   (assigned/required), blocked-road indicators, pending arrivals, a panic gauge, and a
+   resource-pool sidebar. Right rail: the negotiation feed (grants green, pool-exhausted
+   declines red with the winner named) and an agent inspector (click an agent chip →
+   its decisions + rationales + rejections this tick).
+2. **Bench**: bar chart (lives saved mean ± sd per arm) + cost/lives-per-$ table from
+   `/api/bench`, with the honest-caveat footnote rendered from the data.
+3. **Live**: start a run (arm/seed/ticks), follow via WS (auto-scrub to newest), and
+   inject events (kind + district picker) — disabled states when the server lacks a key.
+
+Replay transport: `/api/runs` picker + paged ticks; a scrubber (slider + play/pause +
+speed) drives a cursor over the loaded timeline; all derived map state comes from
+`worlds[cursor]` (no event-folding on the client). Runs without world data fall back to
+feeds-only with a notice.
+
+Aesthetic direction: emergency-operations-center — near-black slate, amber/signal-red
+accents, phosphor-green for grants, monospaced numerals, restrained glow on active
+missions; distinctive and calm, not a generic dashboard. Vite dev proxies `/api` and
+`/ws` to `127.0.0.1:8788`. `npm run build` and `npx tsc --noEmit` must pass; a handful
+of vitest specs cover the timeline reducer/selectors. `web/node_modules` and `web/dist`
+are gitignored.
+
 ## CLI
 
 ```
@@ -561,6 +650,8 @@ aftershock run    --seed 42 --ticks 60 --arm scripted|solo|swarm|society [--out 
                   [--quiet] [--timeout S]
 aftershock bench  [--manifest bench/default.yaml] [--arms ...] [--seeds ...] [--ticks N]
                   [--out DIR] [--fresh]
+aftershock serve  [--runs-dir runs] [--host 127.0.0.1] [--port 8788]
+aftershock mcp    [--runs-dir runs]              # stdio MCP spectator
 aftershock verify --seed 42 --ticks 60     # run twice, assert identical digest sequences
 aftershock replay <run_dir>                # print scoreboard timeline from NDJSON
 aftershock smoke-llm [--model qwen3.5-flash]   # one live call: reply, tokens, cost

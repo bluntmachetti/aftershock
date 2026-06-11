@@ -692,7 +692,7 @@ async def test_e2e_mock_society_run() -> None:
             agent_timeout_s=30.0,
         )
         summary2 = await engine2.run()
-        _, records = load_run(Path(td2) / "test-e2e-check")
+        _, records, _worlds = load_run(Path(td2) / "test-e2e-check")
 
     # Zero errors
     all_errors = [

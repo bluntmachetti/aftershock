@@ -33,7 +33,8 @@ def digest(obj: Any) -> str:
 
 
 class Recorder:
-    """Writes run.json (manifest) and ticks.ndjson (one TickRecord per line)."""
+    """Writes run.json (manifest), ticks.ndjson (one TickRecord per line),
+    and world.ndjson (one world-state dict per line)."""
 
     def __init__(self, out_dir: Path, run_id: str, manifest: dict[str, Any]) -> None:
         self._run_dir = out_dir / run_id
@@ -42,14 +43,25 @@ class Recorder:
             canonical_json(manifest), encoding="utf-8"
         )
         self._ticks_file = (self._run_dir / "ticks.ndjson").open("w", encoding="utf-8")
+        self._world_file = (self._run_dir / "world.ndjson").open("w", encoding="utf-8")
 
-    def write_tick(self, record: TickRecord) -> None:
-        """Append one canonical-JSON line for record, flushed immediately."""
+    def write_tick(self, record: TickRecord, world_state: dict[str, Any] | None = None) -> None:
+        """Append one canonical-JSON line for record, flushed immediately.
+
+        If world_state is provided, also appends a line to world.ndjson.
+        The caller should pass the already-computed world_state dict so we
+        never recompute it here.
+        """
         self._ticks_file.write(canonical_json(record) + "\n")
         self._ticks_file.flush()
+        if world_state is not None:
+            line = canonical_json({"tick": record.tick, "state": world_state})
+            self._world_file.write(line + "\n")
+            self._world_file.flush()
 
     def close(self) -> None:
         self._ticks_file.close()
+        self._world_file.close()
 
     def __enter__(self) -> Recorder:
         return self
@@ -62,8 +74,15 @@ class Recorder:
         return self._run_dir
 
 
-def load_run(run_dir: Path) -> tuple[dict[str, Any], list[TickRecord]]:
-    """Load manifest and all tick records from a run directory."""
+def load_run(
+    run_dir: Path,
+) -> tuple[dict[str, Any], list[TickRecord], list[dict[str, Any]] | None]:
+    """Load manifest, tick records, and optional world states from a run directory.
+
+    Returns:
+        (manifest, ticks, worlds) where worlds is a list of world-state dicts
+        when world.ndjson is present, or None when absent (old run dirs load fine).
+    """
     manifest: dict[str, Any] = json.loads(
         (run_dir / "run.json").read_text(encoding="utf-8")
     )
@@ -74,4 +93,14 @@ def load_run(run_dir: Path) -> tuple[dict[str, Any], list[TickRecord]]:
             line = line.strip()
             if line:
                 ticks.append(TickRecord.model_validate_json(line))
-    return manifest, ticks
+
+    worlds: list[dict[str, Any]] | None = None
+    world_path = run_dir / "world.ndjson"
+    if world_path.exists():
+        worlds = []
+        for line in world_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                worlds.append(json.loads(line))
+
+    return manifest, ticks, worlds

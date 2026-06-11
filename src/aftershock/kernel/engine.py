@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Callable, Protocol, runtime_checkable
 
 from aftershock.kernel.agents import Agent
 from aftershock.kernel.ledger import CostLedger
@@ -69,6 +69,7 @@ class Engine:
         max_ticks: int,
         agent_timeout_s: float = 30.0,
         rejection_memory_ticks: int = 3,
+        tick_listener: Callable[[TickRecord], None] | None = None,
     ) -> None:
         # Boot validation
         soc_ids = set(society.agent_ids())
@@ -101,6 +102,7 @@ class Engine:
         self._max_ticks = max_ticks
         self._agent_timeout_s = agent_timeout_s
         self._rejection_memory_ticks = rejection_memory_ticks
+        self._tick_listener = tick_listener
         self._ledger = CostLedger()
 
         # Feedback buffers filled at end of tick, consumed at start of next
@@ -429,7 +431,8 @@ class Engine:
             if agent_resp.usage is not None:
                 self._ledger.record(tick, agent_id, agent_resp.usage)
 
-        world_dig = digest(self._society.world_state(self._world))
+        world_state_dict = self._society.world_state(self._world)
+        world_dig = digest(world_state_dict)
 
         # Build sorted responses tuple
         sorted_responses = tuple(cleaned_responses[aid] for aid in sorted_ids)
@@ -445,7 +448,14 @@ class Engine:
             scores=scores,
             world_digest=world_dig,
         )
-        self._recorder.write_tick(record)
+        self._recorder.write_tick(record, world_state_dict)
+
+        # Call tick_listener if provided; swallow exceptions so they never kill the tick
+        if self._tick_listener is not None:
+            try:
+                self._tick_listener(record)
+            except Exception:
+                pass
 
         # Refill feedback buffers for next tick
         # Reset inbox and rulings; rejection history is appended, not reset

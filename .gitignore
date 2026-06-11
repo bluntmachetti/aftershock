@@ -28,3 +28,7 @@ runs/
 # Orchestration/session state (never commit)
 .omc/
 .claude/
+
+# Frontend build artifacts
+web/node_modules/
+web/dist/

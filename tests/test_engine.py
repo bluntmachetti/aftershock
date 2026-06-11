@@ -345,7 +345,7 @@ async def test_rejection_appears_in_next_observation(tmp_path: Path) -> None:
     # The best observable signal: rejections for beta in tick 0's record
     from aftershock.kernel.recorder import load_run
 
-    _manifest, ticks = load_run(engine._recorder.run_dir)
+    _manifest, ticks, _worlds = load_run(engine._recorder.run_dir)
     tick0 = ticks[0]
     beta_rejects = [r for r in tick0.rejected if r.agent_id == "beta"]
     assert any(r.reason == "identity mismatch" for r in beta_rejects)
@@ -790,6 +790,136 @@ async def test_rejection_memory_cap_at_12(tmp_path: Path) -> None:
     assert len(recent) == 12, (
         f"cap should limit observation rejections to 12, got {len(recent)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Tests: tick_listener
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_tick_listener_called_once_per_tick(tmp_path: Path) -> None:
+    """tick_listener is called exactly once per tick with the TickRecord."""
+    world = make_world()
+    agents: dict[str, Agent] = {
+        "alpha": IncrAgent("alpha", "worker"),
+        "beta": IncrAgent("beta", "worker"),
+    }
+    received: list[TickRecord] = []
+
+    def listener(record: TickRecord) -> None:
+        received.append(record)
+
+    engine = Engine(
+        world=world,
+        society=CounterSociety(),
+        agents=agents,
+        registry=make_registry(),
+        roles=make_roles(),
+        resolver=DefaultResolver(),
+        recorder=make_recorder(tmp_path),
+        seed=42,
+        max_ticks=5,
+        agent_timeout_s=30.0,
+        tick_listener=listener,
+    )
+
+    # Run 3 ticks manually
+    rec0 = await engine.step(0)
+    rec1 = await engine.step(1)
+    rec2 = await engine.step(2)
+
+    assert len(received) == 3
+    assert received[0] is rec0
+    assert received[1] is rec1
+    assert received[2] is rec2
+    assert received[0].tick == 0
+    assert received[1].tick == 1
+    assert received[2].tick == 2
+
+
+@pytest.mark.asyncio
+async def test_tick_listener_exception_does_not_break_run(tmp_path: Path) -> None:
+    """A tick_listener that raises does not kill the tick or the run."""
+    world = make_world()
+    agents: dict[str, Agent] = {
+        "alpha": IncrAgent("alpha", "worker"),
+        "beta": IncrAgent("beta", "worker"),
+    }
+    call_count = 0
+
+    def bad_listener(record: TickRecord) -> None:
+        nonlocal call_count
+        call_count += 1
+        raise RuntimeError("listener exploded")
+
+    engine = Engine(
+        world=world,
+        society=CounterSociety(),
+        agents=agents,
+        registry=make_registry(),
+        roles=make_roles(),
+        resolver=DefaultResolver(),
+        recorder=make_recorder(tmp_path),
+        seed=42,
+        max_ticks=5,
+        agent_timeout_s=30.0,
+        tick_listener=bad_listener,
+    )
+
+    summary = await engine.run()
+
+    # Run completed despite the listener always raising
+    assert isinstance(summary, RunSummary)
+    assert summary.ticks_run > 0
+    # Listener was still called each tick
+    assert call_count == summary.ticks_run
+    # World progressed normally (alpha+beta each increment once per tick)
+    assert world["counter"] == summary.ticks_run * 2
+
+
+@pytest.mark.asyncio
+async def test_tick_listener_none_is_fine(tmp_path: Path) -> None:
+    """Engine works normally when tick_listener is not provided (None)."""
+    world = make_world()
+    agents: dict[str, Agent] = {
+        "alpha": IncrAgent("alpha", "worker"),
+        "beta": IncrAgent("beta", "worker"),
+    }
+    engine = make_engine(tmp_path, world, agents)
+    summary = await engine.run()
+    assert isinstance(summary, RunSummary)
+    assert summary.ticks_run > 0
+
+
+@pytest.mark.asyncio
+async def test_tick_listener_receives_world_digest(tmp_path: Path) -> None:
+    """TickRecords passed to tick_listener have a non-empty world_digest."""
+    world = make_world()
+    agents: dict[str, Agent] = {
+        "alpha": IncrAgent("alpha", "worker"),
+        "beta": IncrAgent("beta", "worker"),
+    }
+    received: list[TickRecord] = []
+
+    engine = Engine(
+        world=world,
+        society=CounterSociety(),
+        agents=agents,
+        registry=make_registry(),
+        roles=make_roles(),
+        resolver=DefaultResolver(),
+        recorder=make_recorder(tmp_path),
+        seed=42,
+        max_ticks=5,
+        agent_timeout_s=30.0,
+        tick_listener=received.append,
+    )
+
+    await engine.step(0)
+
+    assert len(received) == 1
+    assert len(received[0].world_digest) == 64  # sha256 hex
 
 
 @pytest.mark.asyncio

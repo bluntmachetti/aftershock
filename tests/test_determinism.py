@@ -70,7 +70,7 @@ async def _run_seed(seed: int, tmp: Path, tag: str) -> tuple[list[str], list[str
     run_id = f"seed{seed}-{tag}"
     engine = _build_engine(seed, tmp, run_id)
     await engine.run()
-    _, records = load_run(tmp / run_id)
+    _, records, _worlds = load_run(tmp / run_id)
     digests = [r.world_digest for r in records]
     lines = [canonical_json(r) for r in records]
     return digests, lines
@@ -122,7 +122,7 @@ async def test_scripted_arm_saves_lives() -> None:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         digests, _ = await _run_seed(42, tmp, "lives")
-        _, records = load_run(tmp / "seed42-lives")
+        _, records, _worlds2 = load_run(tmp / "seed42-lives")
     assert records, "no tick records produced"
     final_scores = records[-1].scores
     lives_saved = final_scores.get("lives_saved", 0.0)

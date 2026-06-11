@@ -212,7 +212,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
             agent_timeout_s=setup.default_timeout_s,
         )
         await engine.run()
-        _, records = load_run(tmp / run_id)
+        _, records, _worlds = load_run(tmp / run_id)
         return [r.world_digest for r in records]
 
     with tempfile.TemporaryDirectory() as td:
@@ -242,7 +242,7 @@ def cmd_replay(args: argparse.Namespace) -> int:
         print(f"error: run directory not found: {run_dir}", file=sys.stderr)
         return 1
 
-    manifest, records = load_run(run_dir)
+    manifest, records, _worlds = load_run(run_dir)
     print(f"Replay: {run_dir.name}  seed={manifest.get('seed')}  arm={manifest.get('arm')}")
     print(f"{'Tick':>5}  {'Saved':>6}  {'Lost':>6}  {'Open':>5}  {'Res':>5}  {'Fail':>5}  {'Panic':>7}")  # noqa: E501
     print("-" * 50)

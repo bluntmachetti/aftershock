@@ -38,7 +38,12 @@ def _next_event_id(state: TownState, events: list[WorldEvent]) -> str:
     return f"ev-{state.tick}-{len(events)}"
 
 
-def scheduled_events(state: TownState, tick: int, rng: random.Random) -> list[WorldEvent]:
+def scheduled_events(
+    state: TownState,
+    tick: int,
+    rng: random.Random,
+    injections: list[tuple[str, str, str]] | None = None,
+) -> list[WorldEvent]:
     """Apply all world dynamics for this tick, return accumulated WorldEvents."""
     events: list[WorldEvent] = []
 
@@ -205,8 +210,75 @@ def scheduled_events(state: TownState, tick: int, rng: random.Random) -> list[Wo
             ))
 
     # ------------------------------------------------------------------
-    # Step 3: Timeline — spawn this tick's missions/blockages
+    # Step 3: Timeline — drain injections first, then spawn this tick's entries
     # ------------------------------------------------------------------
+    if injections:
+        for inj_kind, inj_district_id, _inj_event_id in injections:
+            if inj_kind == "road_block":
+                dist = state.districts.get(inj_district_id)
+                if dist is not None and not dist.road_blocked:
+                    dist.road_blocked = True
+                    state.panic = min(1.0, state.panic + PANIC_PER_SPAWN)
+                    events.append(WorldEvent(
+                        event_id=_next_event_id(state, events),
+                        tick=tick,
+                        kind="road_blocked",
+                        payload={"district_id": inj_district_id, "injected": True},
+                    ))
+                    events.append(WorldEvent(
+                        event_id=_next_event_id(state, events),
+                        tick=tick,
+                        kind="panic_changed",
+                        payload={"panic": state.panic, "reason": "road_blocked"},
+                    ))
+            else:
+                # "fire" spawns a fire mission; "aftershock" spawns a collapse_rescue mission
+                if inj_kind == "fire":
+                    mission_kind = MissionKind.fire
+                else:
+                    mission_kind = MissionKind.collapse_rescue
+                severity = 2
+                lives = severity * 5
+                mid = f"m{state.next_mission_no}"
+                state.next_mission_no += 1
+                deadline = tick + DEADLINE_TICKS[mission_kind]
+                required = _make_required(mission_kind, severity)
+                mission = Mission(
+                    id=mid,
+                    kind=mission_kind,
+                    district_id=inj_district_id,
+                    severity=severity,
+                    lives_at_risk=lives,
+                    spawned_tick=tick,
+                    deadline_tick=deadline,
+                    required=required,
+                    assigned={},
+                    progress=0.0,
+                    status=MissionStatus.open,
+                )
+                state.missions[mid] = mission
+                state.panic = min(1.0, state.panic + PANIC_PER_SPAWN)
+                events.append(WorldEvent(
+                    event_id=_next_event_id(state, events),
+                    tick=tick,
+                    kind="mission_spawned",
+                    payload={
+                        "mission_id": mid,
+                        "mission_kind": mission_kind,
+                        "district_id": inj_district_id,
+                        "severity": severity,
+                        "lives_at_risk": lives,
+                        "deadline_tick": deadline,
+                        "injected": True,
+                    },
+                ))
+                events.append(WorldEvent(
+                    event_id=_next_event_id(state, events),
+                    tick=tick,
+                    kind="panic_changed",
+                    payload={"panic": state.panic, "reason": "mission_spawned"},
+                ))
+
     for entry in state.timeline:
         if entry.tick != tick:
             continue

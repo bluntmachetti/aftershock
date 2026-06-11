@@ -132,7 +132,7 @@ def test_recorder_round_trips_tick_record():
         rec.write_tick(record)
         rec.close()
 
-        loaded_manifest, ticks = load_run(rec.run_dir)
+        loaded_manifest, ticks, _worlds = load_run(rec.run_dir)
         assert loaded_manifest == manifest
         assert len(ticks) == 1
         loaded = ticks[0]
@@ -152,7 +152,7 @@ def test_recorder_multiple_ticks():
             for i in range(3):
                 rec.write_tick(_make_tick_record(tick=i))
 
-        _, ticks = load_run(rec.run_dir)
+        _, ticks, _worlds = load_run(rec.run_dir)
         assert len(ticks) == 3
         assert [t.tick for t in ticks] == [0, 1, 2]
 
@@ -181,7 +181,7 @@ def test_load_run_manifest_matches():
         manifest = {"seed": 99, "arm": "llm", "ticks": 30}
         with Recorder(out_dir, "r", manifest) as rec:
             pass
-        loaded_manifest, ticks = load_run(rec.run_dir)
+        loaded_manifest, ticks, _worlds = load_run(rec.run_dir)
         assert loaded_manifest == manifest
         assert ticks == []
 
@@ -196,3 +196,79 @@ def test_canonical_json_used_for_tick_ndjson():
         assert len(lines) == 1
         parsed = json.loads(lines[0])
         assert parsed["tick"] == 5
+
+
+# ---------------------------------------------------------------------------
+# world.ndjson sidecar
+# ---------------------------------------------------------------------------
+
+
+def test_world_sidecar_round_trip():
+    """write_tick with world_state writes world.ndjson; load_run returns worlds list."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = Path(tmp)
+        world_state_0 = {"counter": 0, "tick": 0}
+        world_state_1 = {"counter": 2, "tick": 1}
+        with Recorder(out_dir, "ws-run", {"seed": 1}) as rec:
+            rec.write_tick(_make_tick_record(tick=0), world_state_0)
+            rec.write_tick(_make_tick_record(tick=1), world_state_1)
+
+        manifest, ticks, worlds = load_run(rec.run_dir)
+        assert worlds is not None
+        assert len(worlds) == 2
+        # Each entry is {"tick": N, "state": {...}}
+        assert worlds[0]["tick"] == 0
+        assert worlds[0]["state"] == world_state_0
+        assert worlds[1]["tick"] == 1
+        assert worlds[1]["state"] == world_state_1
+
+
+def test_absent_world_sidecar_returns_none():
+    """Old run dirs without world.ndjson load fine; load_run returns worlds=None."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = Path(tmp)
+        # Write a tick WITHOUT passing world_state — no world.ndjson created
+        with Recorder(out_dir, "no-ws", {"seed": 2}) as rec:
+            # We'll close and manually remove world.ndjson to simulate old run dir
+            rec.write_tick(_make_tick_record(tick=0))
+        # Remove world.ndjson to simulate an old run dir
+        world_path = rec.run_dir / "world.ndjson"
+        if world_path.exists():
+            world_path.unlink()
+
+        manifest, ticks, worlds = load_run(rec.run_dir)
+        assert worlds is None
+        assert len(ticks) == 1
+
+
+def test_world_sidecar_tick_count_matches_ticks():
+    """world.ndjson has exactly as many lines as ticks were recorded."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = Path(tmp)
+        with Recorder(out_dir, "ws-count", {"seed": 3}) as rec:
+            for i in range(5):
+                rec.write_tick(_make_tick_record(tick=i), {"tick": i, "v": i * 10})
+
+        manifest, ticks, worlds = load_run(rec.run_dir)
+        assert worlds is not None
+        assert len(worlds) == 5
+        assert len(ticks) == 5
+        for i, w in enumerate(worlds):
+            assert w["tick"] == i
+            assert w["state"]["v"] == i * 10
+
+
+def test_world_sidecar_canonical_json():
+    """world.ndjson lines use canonical JSON (sorted keys)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = Path(tmp)
+        with Recorder(out_dir, "ws-canon", {}) as rec:
+            rec.write_tick(_make_tick_record(tick=0), {"z": 9, "a": 1})
+
+        lines = (rec.run_dir / "world.ndjson").read_text().splitlines()
+        assert len(lines) == 1
+        parsed = json.loads(lines[0])
+        # Top-level keys sorted: "state" < "tick"
+        assert list(parsed.keys()) == sorted(parsed.keys())
+        # state keys also sorted: "a" < "z"
+        assert list(parsed["state"].keys()) == sorted(parsed["state"].keys())

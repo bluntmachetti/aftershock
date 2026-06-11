@@ -729,7 +729,7 @@ async def test_seed42_has_pool_exhausted_decline(tmp_path: Path):
     )
 
     # Parse NDJSON for rulings
-    _, records = load_run(tmp_path / "test-contention")
+    _, records, _worlds = load_run(tmp_path / "test-contention")
     pool_exhausted_declines = []
     commander_accepted_escalations = []
     for record in records:
@@ -745,3 +745,164 @@ async def test_seed42_has_pool_exhausted_decline(tmp_path: Path):
     assert len(commander_accepted_escalations) >= 1, (
         f"Expected >= 1 commander-accepted escalation, got {len(commander_accepted_escalations)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# inject_event tests
+# ---------------------------------------------------------------------------
+
+
+def test_inject_fire_spawns_fire_mission_next_tick():
+    """inject_event('fire', district) queues a fire mission spawned on the next tick."""
+    state = make_minimal_state()
+    society = TownSociety()
+    rng = dummy_rng()
+
+    event_id = society.inject_event("fire", "old_town")
+    assert isinstance(event_id, str)
+    assert len(event_id) > 0
+
+    # Call scheduled_events (tick 1) — injections are drained here
+    events = society.scheduled_events(state, 1, rng)
+
+    spawned = [e for e in events if e.kind == "mission_spawned"]
+    assert len(spawned) == 1
+    assert spawned[0].payload["district_id"] == "old_town"
+    assert spawned[0].payload["mission_kind"] == "fire"
+    assert spawned[0].payload["injected"] is True
+
+    # Mission must be in state
+    fire_missions = [
+        m for m in state.missions.values()
+        if m.kind == "fire" and m.district_id == "old_town"
+    ]
+    assert len(fire_missions) == 1
+
+
+def test_inject_fire_mission_has_injected_provenance():
+    """Injected fire mission event carries injected=True in payload."""
+    state = make_minimal_state()
+    society = TownSociety()
+    rng = dummy_rng()
+
+    society.inject_event("fire", "harbor")
+    events = society.scheduled_events(state, 0, rng)
+
+    spawned = [e for e in events if e.kind == "mission_spawned"]
+    assert len(spawned) == 1
+    assert spawned[0].payload.get("injected") is True
+
+
+def test_inject_road_block_blocks_road():
+    """inject_event('road_block', district) blocks the road for that district."""
+    state = make_minimal_state()
+    society = TownSociety()
+    rng = dummy_rng()
+
+    assert not state.districts["market"].road_blocked
+
+    society.inject_event("road_block", "market")
+    events = society.scheduled_events(state, 0, rng)
+
+    blocked_events = [e for e in events if e.kind == "road_blocked"]
+    assert len(blocked_events) == 1
+    assert blocked_events[0].payload["district_id"] == "market"
+    assert blocked_events[0].payload.get("injected") is True
+    assert state.districts["market"].road_blocked is True
+
+
+def test_inject_aftershock_spawns_collapse_rescue():
+    """inject_event('aftershock', district) spawns a collapse_rescue mission."""
+    state = make_minimal_state()
+    society = TownSociety()
+    rng = dummy_rng()
+
+    society.inject_event("aftershock", "residential_north")
+    events = society.scheduled_events(state, 5, rng)
+
+    spawned = [e for e in events if e.kind == "mission_spawned"]
+    assert len(spawned) == 1
+    assert spawned[0].payload["mission_kind"] == "collapse_rescue"
+    assert spawned[0].payload["district_id"] == "residential_north"
+    assert spawned[0].payload.get("injected") is True
+
+
+def test_inject_bad_kind_raises_value_error():
+    """inject_event with unknown kind raises ValueError."""
+    society = TownSociety()
+    with pytest.raises(ValueError, match="unknown inject kind"):
+        society.inject_event("tsunami", "old_town")
+
+
+def test_inject_bad_district_raises_value_error():
+    """inject_event with unknown district_id raises ValueError."""
+    society = TownSociety()
+    with pytest.raises(ValueError, match="unknown district_id"):
+        society.inject_event("fire", "nonexistent_district")
+
+
+def test_inject_queue_drained_after_scheduled_events():
+    """Injection queue is empty after scheduled_events drains it."""
+    state = make_minimal_state()
+    society = TownSociety()
+    rng = dummy_rng()
+
+    society.inject_event("fire", "industrial")
+    society.inject_event("road_block", "harbor")
+    assert len(society._injection_queue) == 2
+
+    society.scheduled_events(state, 0, rng)
+
+    # Queue drained
+    assert len(society._injection_queue) == 0
+
+
+def test_inject_event_id_is_unique():
+    """Each call to inject_event returns a unique event id."""
+    society = TownSociety()
+    ids = [society.inject_event("fire", "old_town") for _ in range(5)]
+    assert len(ids) == len(set(ids))
+
+
+@pytest.mark.asyncio
+async def test_inject_fire_appears_in_engine_run(tmp_path: Path):
+    """inject_event during an Engine run produces a mission in the recorded tick events."""
+    roles = load_roles(ROLES_DIR)
+    registry = make_registry()
+    state = make_minimal_state()
+    society = TownSociety(max_ticks=5)
+    resolver = TownResolver()
+
+    agents = {
+        "commander": CommanderScripted("commander", "commander"),
+        "medical": MedicalScripted("medical", "medical"),
+        "rescue": RescueScripted("rescue", "rescue"),
+        "fire": FireScripted("fire", "fire"),
+        "infrastructure": InfraScripted("infrastructure", "infrastructure"),
+        "comms": CommsScripted("comms", "comms"),
+    }
+
+    from aftershock.kernel.engine import Engine
+    from aftershock.kernel.recorder import Recorder, load_run
+
+    recorder = Recorder(tmp_path, "test-inject", {"seed": 42})
+    engine = Engine(
+        world=state, society=society, agents=agents, registry=registry,
+        roles=roles, resolver=resolver, recorder=recorder,
+        seed=42, max_ticks=5, agent_timeout_s=10.0,
+    )
+
+    # Step tick 0; inject a fire before tick 1 runs
+    await engine.step(0)
+    society.inject_event("fire", "hospital_district")
+    await engine.step(1)
+
+    _, records, _worlds = load_run(tmp_path / "test-inject")
+    # Tick 1 should contain a mission_spawned event with injected=True
+    tick1 = records[1]
+    injected_spawns = [
+        e for e in tick1.events
+        if e.kind == "mission_spawned" and e.payload.get("injected") is True
+    ]
+    assert len(injected_spawns) >= 1
+    assert injected_spawns[0].payload["district_id"] == "hospital_district"
