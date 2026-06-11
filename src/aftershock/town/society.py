@@ -22,22 +22,43 @@ from aftershock.town.events import scheduled_events as _scheduled_events
 from aftershock.town.scoring import score as _score
 from aftershock.town.state import MissionStatus, TownState
 
-# Fixed agent/role mapping: role name == agent id
-_AGENT_IDS = ("commander", "comms", "fire", "infrastructure", "medical", "rescue")
+# Default six-role mapping: role name == agent id (scripted / society arms)
+_DEFAULT_ROSTER: dict[str, str] = {
+    "commander": "commander",
+    "comms": "comms",
+    "fire": "fire",
+    "infrastructure": "infrastructure",
+    "medical": "medical",
+    "rescue": "rescue",
+}
 
 
 class TownSociety:
-    """Society implementation for the disaster-response town."""
+    """Society implementation for the disaster-response town.
 
-    def __init__(self, max_ticks: int | None = None) -> None:
+    Args:
+        max_ticks:  Optional tick budget; ``is_over`` returns True once reached.
+        roster:     Explicit ``{agent_id: role_name}`` mapping.  Defaults to the
+                    canonical six-role mapping (role name == agent id) so the
+                    scripted-arm determinism tests remain byte-identical.
+    """
+
+    def __init__(
+        self,
+        max_ticks: int | None = None,
+        roster: dict[str, str] | None = None,
+    ) -> None:
         self._max_ticks = max_ticks
+        # Use the supplied roster or fall back to the six-agent default.
+        self._roster: dict[str, str] = dict(roster) if roster is not None else dict(_DEFAULT_ROSTER)
+        # Pre-compute a stable sorted tuple for agent_ids()
+        self._agent_ids: tuple[str, ...] = tuple(sorted(self._roster))
 
     def agent_ids(self) -> tuple[str, ...]:
-        return _AGENT_IDS
+        return self._agent_ids
 
     def role_of(self, agent_id: str) -> str:
-        # role name == agent id in the town society
-        return agent_id
+        return self._roster[agent_id]
 
     def build_view(self, world: Any, agent_id: str, tick: int) -> dict[str, Any]:
         """Return a compact world view (everyone sees the same coarse state)."""

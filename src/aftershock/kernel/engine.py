@@ -8,6 +8,7 @@ in sorted agent order regardless of completion order.
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
@@ -67,6 +68,7 @@ class Engine:
         seed: int,
         max_ticks: int,
         agent_timeout_s: float = 30.0,
+        rejection_memory_ticks: int = 3,
     ) -> None:
         # Boot validation
         soc_ids = set(society.agent_ids())
@@ -98,6 +100,7 @@ class Engine:
         self._seed = seed
         self._max_ticks = max_ticks
         self._agent_timeout_s = agent_timeout_s
+        self._rejection_memory_ticks = rejection_memory_ticks
         self._ledger = CostLedger()
 
         # Feedback buffers filled at end of tick, consumed at start of next
@@ -105,8 +108,11 @@ class Engine:
         self._next_inbox: dict[str, list[Proposal]] = {aid: [] for aid in soc_ids}
         # rulings: agent_id -> list of ProposalRuling (for proposals that agent sent)
         self._next_rulings: dict[str, list[ProposalRuling]] = {aid: [] for aid in soc_ids}
-        # rejections: agent_id -> list of Rejection
-        self._next_rejections: dict[str, list[Rejection]] = {aid: [] for aid in soc_ids}
+        # rejection history: agent_id -> deque of (tick, Rejection), oldest first
+        # trimmed to rejection_memory_ticks horizon at the end of each tick
+        self._rejection_history: dict[str, deque[tuple[int, Rejection]]] = {
+            aid: deque() for aid in soc_ids
+        }
         # pending bilateral proposals delivered last tick, waiting for responses
         # maps proposal_id -> Proposal
         self._pending_bilateral: dict[str, Proposal] = {}
@@ -143,6 +149,17 @@ class Engine:
         for agent_id in sorted_ids:
             role_name = self._society.role_of(agent_id)
             role_spec = self._roles[role_name]
+            # Build rejections from the last rejection_memory_ticks ticks,
+            # most recent first, capped at 12 entries total.
+            # Include ticks t where t >= tick - rejection_memory_ticks.
+            cutoff = tick - self._rejection_memory_ticks
+            recent: list[Rejection] = []
+            for t, rej in reversed(self._rejection_history[agent_id]):
+                if t < cutoff:
+                    break
+                recent.append(rej)
+                if len(recent) == 12:
+                    break
             obs = Observation(
                 tick=tick,
                 agent_id=agent_id,
@@ -150,7 +167,7 @@ class Engine:
                 view=self._society.build_view(self._world, agent_id, tick),
                 inbox=tuple(self._next_inbox[agent_id]),
                 rulings=tuple(self._next_rulings[agent_id]),
-                rejections=tuple(self._next_rejections[agent_id]),
+                rejections=tuple(recent),
                 allowed_decisions=role_spec.allowed_decisions,
             )
             observations[agent_id] = obs
@@ -431,11 +448,10 @@ class Engine:
         self._recorder.write_tick(record)
 
         # Refill feedback buffers for next tick
-        # Reset
+        # Reset inbox and rulings; rejection history is appended, not reset
         for aid in sorted_ids:
             self._next_inbox[aid] = []
             self._next_rulings[aid] = []
-            self._next_rejections[aid] = []
 
         # Bilateral proposals delivered next tick (to recipient's inbox)
         self._pending_bilateral = {}
@@ -460,8 +476,15 @@ class Engine:
             if ruling is not None and prop.sender in self._next_rulings:
                 self._next_rulings[prop.sender].append(ruling)
 
-        # Rejections to the issuing agents
+        # Append this tick's rejections to each agent's history, then trim
+        # entries that fall outside the memory window (tick <= tick - memory_ticks).
+        horizon = tick - self._rejection_memory_ticks
         for agent_id in sorted_ids:
-            self._next_rejections[agent_id] = list(this_tick_rejections[agent_id])
+            hist = self._rejection_history[agent_id]
+            for rej in this_tick_rejections[agent_id]:
+                hist.append((tick, rej))
+            # Trim from the left: remove entries too old to ever appear again
+            while hist and hist[0][0] <= horizon:
+                hist.popleft()
 
         return record

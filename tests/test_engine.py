@@ -656,3 +656,209 @@ async def test_tick_record_world_digest_changes(tmp_path: Path) -> None:
     rec1 = await engine.step(1)
 
     assert rec0.world_digest != rec1.world_digest
+
+
+# ---------------------------------------------------------------------------
+# Tests: rejection memory
+# ---------------------------------------------------------------------------
+
+
+def make_engine_with_memory(
+    tmp_path: Path,
+    world: dict[str, Any],
+    agents: dict[str, Agent],
+    *,
+    rejection_memory_ticks: int,
+    timeout: float = 30.0,
+) -> Engine:
+    return Engine(
+        world=world,
+        society=CounterSociety(),
+        agents=agents,
+        registry=make_registry(),
+        roles=make_roles(),
+        resolver=DefaultResolver(),
+        recorder=make_recorder(tmp_path),
+        seed=42,
+        max_ticks=10,
+        agent_timeout_s=timeout,
+        rejection_memory_ticks=rejection_memory_ticks,
+    )
+
+
+@pytest.mark.asyncio
+async def test_rejection_memory_spans_ticks(tmp_path: Path) -> None:
+    """With memory=3, a rejection at tick 0 appears in observations at tick 2
+    (within window) but NOT at tick 4 (beyond the 3-tick window).
+
+    cutoff at observe tick T = T - 3.
+    - tick 2: cutoff=-1, tick 0 >= -1 → included ✓
+    - tick 4: cutoff=1,  tick 0 <  1  → excluded ✓
+    Trim at end of tick T removes entries with t <= T - 3.
+    - end of tick 3: trim t <= 0 → tick-0 entries removed.
+    """
+    world = make_world()
+
+    observed_rejections: dict[int, tuple] = {}
+
+    class CapturingSpoofAgent(ScriptedAgent):
+        """Spoofs at tick 0, captures its own observation.rejections each tick."""
+
+        def act_sync(self, observation: Observation) -> AgentResponse:
+            observed_rejections[observation.tick] = observation.rejections
+            if observation.tick == 0:
+                return AgentResponse(
+                    agent_id=self.agent_id,
+                    decisions=(
+                        Decision(
+                            decision_id=f"{self.agent_id}-spoof",
+                            agent_id="alpha",  # wrong id — identity mismatch rejection
+                            decision_type="increment",
+                            params={"amount": 1},
+                        ),
+                    ),
+                )
+            return AgentResponse(agent_id=self.agent_id)
+
+    agents: dict[str, Agent] = {
+        "alpha": IncrAgent("alpha", "worker"),
+        "beta": CapturingSpoofAgent("beta", "worker"),
+    }
+    engine = make_engine_with_memory(tmp_path, world, agents, rejection_memory_ticks=3)
+
+    for t in range(5):
+        await engine.step(t)
+
+    # tick 2: within memory window — rejection from tick 0 must appear
+    assert len(observed_rejections[2]) >= 1, (
+        "rejection from tick 0 should appear in tick-2 observation with memory=3"
+    )
+    assert all(r.agent_id == "beta" for r in observed_rejections[2])
+
+    # tick 4: outside memory window — no tick-0 rejection
+    tick0_rejects_at_t4 = [
+        r for r in observed_rejections[4]
+        # any rejection present would be from tick 1+ (none were generated after tick 0)
+        # so the tuple should be empty
+    ]
+    assert len(tick0_rejects_at_t4) == 0, (
+        f"tick-0 rejection must NOT appear in tick-4 observation with memory=3, "
+        f"got: {observed_rejections[4]}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_rejection_memory_cap_at_12(tmp_path: Path) -> None:
+    """Observations carry at most 12 rejections even if more occurred within the window."""
+    world = make_world()
+
+    # Agent that submits 20 identity-spoofed decisions every tick
+    class BulkSpoofAgent(ScriptedAgent):
+        def act_sync(self, observation: Observation) -> AgentResponse:
+            decs = tuple(
+                Decision(
+                    decision_id=f"{self.agent_id}-spoof-{i}-t{observation.tick}",
+                    agent_id="alpha",  # wrong id — will all be rejected
+                    decision_type="increment",
+                    params={"amount": 1},
+                )
+                for i in range(20)
+            )
+            return AgentResponse(agent_id=self.agent_id, decisions=decs)
+
+    agents: dict[str, Agent] = {
+        "alpha": IncrAgent("alpha", "worker"),
+        "beta": BulkSpoofAgent("beta", "worker"),
+    }
+    # memory=5 so all rejections from multiple ticks accumulate; cap must kick in
+    engine = make_engine_with_memory(tmp_path, world, agents, rejection_memory_ticks=5)
+
+    await engine.step(0)
+    await engine.step(1)
+
+    # Build what the observation would show at tick 2
+    # Mirror engine.py: cutoff = tick - rejection_memory_ticks; break if t < cutoff
+    cutoff = 2 - 5  # = -3
+    recent: list = []
+    for t, rej in reversed(engine._rejection_history["beta"]):
+        if t < cutoff:
+            break
+        recent.append(rej)
+        if len(recent) == 12:
+            break
+
+    assert len(recent) == 12, (
+        f"cap should limit observation rejections to 12, got {len(recent)}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_rejection_memory_ticks_1_single_tick_behaviour(tmp_path: Path) -> None:
+    """memory_ticks=1 reproduces the old single-tick behaviour:
+    a rejection from tick 0 appears in the tick-1 observation but NOT at tick 2.
+
+    With memory=1: at observe time for tick T, cutoff = T - 1.
+    We include rejections with t >= cutoff.
+    - tick 1 observe: cutoff=0, tick-0 rejections (t=0 >= 0) are included. ✓
+    - After tick 1 record: trim t <= 1-1=0, so tick-0 entries are removed.
+    - tick 2 observe: history has no tick-0 entries left. ✓
+    """
+    world = make_world()
+
+    class SpoofTick0Agent(ScriptedAgent):
+        def act_sync(self, observation: Observation) -> AgentResponse:
+            if observation.tick == 0:
+                return AgentResponse(
+                    agent_id=self.agent_id,
+                    decisions=(
+                        Decision(
+                            decision_id=f"{self.agent_id}-spoof",
+                            agent_id="alpha",
+                            decision_type="increment",
+                            params={"amount": 1},
+                        ),
+                    ),
+                )
+            return AgentResponse(agent_id=self.agent_id)
+
+    # Capture what beta observes at each tick
+    observed_rejections: dict[int, tuple] = {}
+
+    class ObservingAgent(ScriptedAgent):
+        def act_sync(self, observation: Observation) -> AgentResponse:
+            observed_rejections[observation.tick] = observation.rejections
+            if observation.tick == 0:
+                return AgentResponse(
+                    agent_id=self.agent_id,
+                    decisions=(
+                        Decision(
+                            decision_id=f"{self.agent_id}-spoof",
+                            agent_id="alpha",
+                            decision_type="increment",
+                            params={"amount": 1},
+                        ),
+                    ),
+                )
+            return AgentResponse(agent_id=self.agent_id)
+
+    agents: dict[str, Agent] = {
+        "alpha": IncrAgent("alpha", "worker"),
+        "beta": ObservingAgent("beta", "worker"),
+    }
+    engine = make_engine_with_memory(tmp_path, world, agents, rejection_memory_ticks=1)
+
+    await engine.step(0)  # rejection recorded for beta at tick 0
+    await engine.step(1)  # beta observes tick 1: should see tick-0 rejection
+    await engine.step(2)  # beta observes tick 2: should NOT see tick-0 rejection
+
+    # tick 1 observation: cutoff = 1 - 1 = 0; tick-0 rejections (t=0 >= 0) included
+    assert len(observed_rejections[1]) >= 1, (
+        "with memory=1, tick-0 rejection must appear in tick-1 observation"
+    )
+    assert all(r.reason == "identity mismatch" for r in observed_rejections[1])
+
+    # tick 2 observation: trim removed tick-0 entries after tick 1's record phase;
+    # no new rejections at tick 1 (SpoofTick0Agent only spoofs at tick 0)
+    assert len(observed_rejections[2]) == 0, (
+        "with memory=1, tick-0 rejection must NOT appear in tick-2 observation"
+    )

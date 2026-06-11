@@ -1,0 +1,4 @@
+ticks: 60
+seeds: [11, 23, 37, 42, 57]
+arms: [scripted, solo, swarm, society]
+out: runs/bench

@@ -1,7 +1,9 @@
-"""Aftershock CLI: run | verify | replay | smoke-llm.
+"""Aftershock CLI: run | verify | replay | bench | smoke-llm.
 
-aftershock run    --seed 42 --ticks 60 --arm scripted|society [--out runs] [--quiet]
-                  [--timeout S]
+aftershock run    --seed 42 --ticks 60 --arm scripted|solo|swarm|society [--out runs]
+                  [--quiet] [--timeout S]
+aftershock bench  [--manifest bench/default.yaml] [--arms a,b] [--seeds 1,2] [--ticks N]
+                  [--out DIR] [--fresh]
 aftershock verify --seed 42 --ticks 60
 aftershock replay <run_dir>
 aftershock smoke-llm [--model qwen3.5-flash]
@@ -11,7 +13,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -19,80 +23,32 @@ from typing import Any
 
 from aftershock.kernel.engine import Engine
 from aftershock.kernel.recorder import Recorder, load_run
-from aftershock.kernel.registry import DecisionRegistry
-from aftershock.kernel.roles import load_roles
-from aftershock.town.decisions import register_all
-from aftershock.town.heuristics import (
-    CommanderScripted,
-    CommsScripted,
-    FireScripted,
-    InfraScripted,
-    MedicalScripted,
-    RescueScripted,
+from aftershock.town.arms import ARMS, build_arm
+
+_BENCH_DEFAULT_MANIFEST = Path(__file__).parent.parent.parent / "bench" / "default.yaml"
+
+# Friendly exit-2 hint printed when a key is required but absent
+_KEY_HINT = (
+    "No DASHSCOPE_API_KEY set. Please export DASHSCOPE_API_KEY=<your-key>\n"
+    "Get a key at https://dashscope.aliyuncs.com — then re-run this command."
 )
-from aftershock.town.society import TownResolver, TownSociety
-from aftershock.town.state import new_town
 
-_ROLES_DIR = Path(__file__).parent / "town" / "roles"
-
-# Default timeouts per arm
-_DEFAULT_TIMEOUT_SCRIPTED = 5.0
-_DEFAULT_TIMEOUT_SOCIETY = 45.0
+_LLM_ARMS = {"society", "solo", "swarm"}
 
 
-def _build_scripted_agents(roles: dict) -> dict:
-    return {
-        "commander": CommanderScripted("commander", "commander"),
-        "medical": MedicalScripted("medical", "medical"),
-        "rescue": RescueScripted("rescue", "rescue"),
-        "fire": FireScripted("fire", "fire"),
-        "infrastructure": InfraScripted("infrastructure", "infrastructure"),
-        "comms": CommsScripted("comms", "comms"),
-    }
+def _provider_for_arm(arm: str, timeout_s: float) -> Any | None:
+    """Return a live QwenProvider for LLM arms, None for scripted.
 
-
-def _build_engine(
-    seed: int,
-    ticks: int,
-    out_dir: Path,
-    run_id: str,
-    arm: str = "scripted",
-    timeout_s: float = _DEFAULT_TIMEOUT_SCRIPTED,
-    provider: Any = None,
-) -> Engine:
-    world = new_town(seed)
-    society = TownSociety(max_ticks=ticks)
-    registry = DecisionRegistry()
-    register_all(registry)
-    roles = load_roles(_ROLES_DIR)
-
-    if arm == "society":
-        from aftershock.town.prompts import build_llm_agents
-        assert provider is not None, "provider required for society arm"
-        agents = build_llm_agents(roles, provider)
-    else:
-        agents = _build_scripted_agents(roles)
-
-    resolver = TownResolver()
-    manifest: dict[str, Any] = {
-        "run_id": run_id,
-        "seed": seed,
-        "ticks": ticks,
-        "arm": arm,
-    }
-    recorder = Recorder(out_dir, run_id, manifest)
-    return Engine(
-        world=world,
-        society=society,
-        agents=agents,
-        registry=registry,
-        roles=roles,
-        resolver=resolver,
-        recorder=recorder,
-        seed=seed,
-        max_ticks=ticks,
-        agent_timeout_s=timeout_s,
-    )
+    Prints the friendly exit-2 hint and exits with code 2 when the key is missing.
+    """
+    if arm not in _LLM_ARMS:
+        return None
+    api_key = os.environ.get("DASHSCOPE_API_KEY", "")
+    if not api_key:
+        print(_KEY_HINT)
+        sys.exit(2)
+    from aftershock.llm.provider import QwenProvider
+    return QwenProvider(api_key=api_key, timeout_s=timeout_s)
 
 
 def _run_id(seed: int, arm: str) -> str:
@@ -106,30 +62,39 @@ def cmd_run(args: argparse.Namespace) -> int:
     out_dir = Path(args.out)
     quiet: bool = args.quiet
 
-    # Determine timeout
-    timeout_s: float = args.timeout if args.timeout is not None else (
-        _DEFAULT_TIMEOUT_SOCIETY if arm == "society" else _DEFAULT_TIMEOUT_SCRIPTED
+    # Determine default timeout based on arm
+    _ARM_DEFAULT_TIMEOUT = {"scripted": 5.0, "solo": 90.0, "swarm": 45.0, "society": 45.0}
+    timeout_s: float = (
+        args.timeout if args.timeout is not None else _ARM_DEFAULT_TIMEOUT.get(arm, 30.0)
     )
 
-    provider = None
-    if arm == "society":
-        api_key = os.environ.get("DASHSCOPE_API_KEY", "")
-        if not api_key:
-            print("No DASHSCOPE_API_KEY set. Please export DASHSCOPE_API_KEY=<your-key>")
-            print("Get a key at https://dashscope.aliyuncs.com — then re-run this command.")
-            return 2
-        from aftershock.llm.provider import QwenProvider
-        provider = QwenProvider(api_key=api_key, timeout_s=timeout_s)
+    # Key check before any work (exits 2 with hint if key missing for LLM arms)
+    provider = _provider_for_arm(arm, timeout_s)
 
     run_id = _run_id(seed, arm)
-    engine = _build_engine(
-        seed, ticks, out_dir, run_id, arm=arm, timeout_s=timeout_s, provider=provider
+    setup = build_arm(arm, seed, provider)
+
+    manifest: dict[str, Any] = {
+        "run_id": run_id,
+        "seed": seed,
+        "ticks": ticks,
+        "arm": arm,
+    }
+    recorder = Recorder(out_dir, run_id, manifest)
+    engine = Engine(
+        world=setup.world,
+        society=setup.society,
+        agents=setup.agents,
+        registry=setup.registry,
+        roles=setup.roles,
+        resolver=setup.resolver,
+        recorder=recorder,
+        seed=seed,
+        max_ticks=ticks,
+        agent_timeout_s=timeout_s,
     )
 
-    async def _run() -> Any:
-        return await engine.run()
-
-    summary = asyncio.run(_run())
+    summary = asyncio.run(engine.run())
 
     if not quiet:
         print(f"Run {summary.run_id}  seed={summary.seed}  ticks={summary.ticks_run}")
@@ -147,13 +112,105 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_bench(args: argparse.Namespace) -> int:
+    """Run the benchmark suite from a manifest with optional flag overrides."""
+    import yaml  # type: ignore[import-untyped]
+
+    from aftershock.bench import aggregate, render_markdown, run_bench
+
+    # Load manifest
+    manifest_path = Path(args.manifest) if args.manifest else _BENCH_DEFAULT_MANIFEST
+    if manifest_path.exists():
+        with manifest_path.open(encoding="utf-8") as fh:
+            manifest: dict[str, Any] = yaml.safe_load(fh) or {}
+    else:
+        # Sensible fallback when no manifest file exists
+        manifest = {
+            "ticks": 60,
+            "seeds": [42],
+            "arms": ["scripted"],
+            "out": "runs/bench",
+        }
+
+    # Apply flag overrides
+    if args.arms:
+        arm_list = [a.strip() for a in args.arms.split(",") if a.strip()]
+        for a in arm_list:
+            if a not in ARMS:
+                print(f"error: unknown arm {a!r}; valid: {ARMS}", file=sys.stderr)
+                return 1
+        manifest["arms"] = arm_list
+    if args.seeds:
+        try:
+            manifest["seeds"] = [int(s.strip()) for s in args.seeds.split(",") if s.strip()]
+        except ValueError:
+            print("error: --seeds must be comma-separated integers (e.g. 42,57)", file=sys.stderr)
+            return 1
+    if args.ticks is not None:
+        manifest["ticks"] = args.ticks
+
+    out_dir = Path(args.out) if args.out else Path(manifest.get("out", "runs/bench"))
+
+    # Key check: if any LLM arm is requested, ensure the key is present first
+    requested_arms: list[str] = manifest.get("arms", ["scripted"])
+    needs_llm = any(a in _LLM_ARMS for a in requested_arms)
+    provider: Any = None
+    if needs_llm:
+        api_key = os.environ.get("DASHSCOPE_API_KEY", "")
+        if not api_key:
+            print(_KEY_HINT)
+            return 2
+        from aftershock.llm.provider import QwenProvider
+        provider = QwenProvider(api_key=api_key)
+
+    # --fresh: wipe each cell directory before running
+    if args.fresh:
+        for arm in requested_arms:
+            for seed in manifest.get("seeds", []):
+                cell_dir = out_dir / f"{arm}-seed{seed}"
+                if cell_dir.exists():
+                    shutil.rmtree(cell_dir)
+
+    cells = run_bench(manifest, provider=provider, out_dir=out_dir)
+    agg = aggregate(cells)
+    md = render_markdown(agg)
+
+    # Print the markdown table to stdout
+    print(md)
+
+    # Write results.json and RESULTS.md
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "results.json").write_text(
+        json.dumps(agg, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    (out_dir / "RESULTS.md").write_text(md, encoding="utf-8")
+
+    return 0
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     seed: int = args.seed
     ticks: int = args.ticks
 
     async def _run_into(tmp: Path, tag: str) -> list[str]:
         run_id = f"verify-{tag}"
-        engine = _build_engine(seed, ticks, tmp, run_id)
+        setup = build_arm("scripted", seed, None)
+        manifest: dict[str, Any] = {
+            "run_id": run_id, "seed": seed, "ticks": ticks, "arm": "scripted",
+        }
+        recorder = Recorder(tmp, run_id, manifest)
+        engine = Engine(
+            world=setup.world,
+            society=setup.society,
+            agents=setup.agents,
+            registry=setup.registry,
+            roles=setup.roles,
+            resolver=setup.resolver,
+            recorder=recorder,
+            seed=seed,
+            max_ticks=ticks,
+            agent_timeout_s=setup.default_timeout_s,
+        )
         await engine.run()
         _, records = load_run(tmp / run_id)
         return [r.world_digest for r in records]
@@ -215,8 +272,7 @@ def cmd_smoke_llm(args: argparse.Namespace) -> int:
     """Make one tiny JSON-mode call and print reply, token counts, and cost."""
     api_key = os.environ.get("DASHSCOPE_API_KEY", "")
     if not api_key:
-        print("No DASHSCOPE_API_KEY set. Please export DASHSCOPE_API_KEY=<your-key>")
-        print("Get a key at https://dashscope.aliyuncs.com — then re-run this command.")
+        print(_KEY_HINT)
         return 2
 
     model: str = args.model
@@ -260,11 +316,26 @@ def main() -> None:
     p_run = sub.add_parser("run", help="Run a simulation")
     p_run.add_argument("--seed", type=int, required=True)
     p_run.add_argument("--ticks", type=int, required=True)
-    p_run.add_argument("--arm", default="scripted", choices=["scripted", "society"])
+    p_run.add_argument("--arm", default="scripted", choices=list(ARMS))
     p_run.add_argument("--out", default="runs")
     p_run.add_argument("--quiet", action="store_true")
     p_run.add_argument("--timeout", type=float, default=None,
-                       help="Agent timeout in seconds (default: 5.0 scripted, 45.0 society)")
+                       help="Agent timeout in seconds (default: arm-specific default)")
+
+    # bench
+    p_bench = sub.add_parser("bench", help="Run the benchmark suite")
+    p_bench.add_argument("--manifest", default=None,
+                         help="Path to manifest YAML (default: bench/default.yaml)")
+    p_bench.add_argument("--arms", default=None,
+                         help="Comma-separated arm list to override manifest")
+    p_bench.add_argument("--seeds", default=None,
+                         help="Comma-separated seed list to override manifest")
+    p_bench.add_argument("--ticks", type=int, default=None,
+                         help="Tick count override")
+    p_bench.add_argument("--out", default=None,
+                         help="Output directory override")
+    p_bench.add_argument("--fresh", action="store_true",
+                         help="Wipe cell dirs before running (force re-run)")
 
     # verify
     p_verify = sub.add_parser("verify", help="Verify determinism")
@@ -283,6 +354,8 @@ def main() -> None:
 
     if args.command == "run":
         sys.exit(cmd_run(args))
+    elif args.command == "bench":
+        sys.exit(cmd_bench(args))
     elif args.command == "verify":
         sys.exit(cmd_verify(args))
     elif args.command == "replay":

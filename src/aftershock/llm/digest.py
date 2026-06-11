@@ -48,7 +48,7 @@ def render_observation(obs: Observation, max_missions: int = 12) -> str:
     4. MISSIONS table (priority desc, deadline asc, id); capped at max_missions with (+N more)
     5. YOUR INBOX
     6. RULINGS
-    7. REJECTED LAST TICK  (prefixed "do not repeat these")
+    7. RECENTLY REJECTED (last 3 ticks)  (prefixed "do not repeat these")
     8. ALLOWED DECISIONS
     """
     view = obs.view
@@ -157,8 +157,8 @@ def render_observation(obs: Observation, max_missions: int = 12) -> str:
         lines.append("  (none)")
     lines.append("")
 
-    # --- Section 7: REJECTED LAST TICK ---
-    lines.append("REJECTED LAST TICK")
+    # --- Section 7: RECENTLY REJECTED ---
+    lines.append("RECENTLY REJECTED (last 3 ticks)")
     if obs.rejections:
         lines.append("  do not repeat these")
         for rej in obs.rejections:

@@ -152,3 +152,189 @@ def test_timeout_flag_accepted_society_without_key_still_exits_2() -> None:
         env=_env_without_key(),
     )
     _assert_rc(result, 2)
+
+
+# ---------------------------------------------------------------------------
+# swarm arm without key -> exit 2 + friendly hint
+# ---------------------------------------------------------------------------
+
+
+def test_swarm_arm_without_key_exits_2() -> None:
+    """--arm swarm without DASHSCOPE_API_KEY must exit 2."""
+    result = _run_aftershock(
+        "run", "--seed", "1", "--ticks", "5", "--arm", "swarm",
+        env=_env_without_key(),
+    )
+    _assert_rc(result, 2)
+
+
+def test_swarm_arm_without_key_prints_hint() -> None:
+    """--arm swarm without key must print a friendly hint mentioning DASHSCOPE_API_KEY."""
+    result = _run_aftershock(
+        "run", "--seed", "1", "--ticks", "5", "--arm", "swarm",
+        env=_env_without_key(),
+    )
+    combined = result.stdout + result.stderr
+    assert "DASHSCOPE_API_KEY" in combined, (
+        f"Expected hint mentioning DASHSCOPE_API_KEY:\n{combined}"
+    )
+    nonempty_lines = [line for line in combined.splitlines() if line.strip()]
+    assert len(nonempty_lines) >= 2, (
+        f"Expected at least 2 hint lines, got:\n{combined}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# solo arm without key -> exit 2 + friendly hint
+# ---------------------------------------------------------------------------
+
+
+def test_solo_arm_without_key_exits_2() -> None:
+    """--arm solo without DASHSCOPE_API_KEY must exit 2."""
+    result = _run_aftershock(
+        "run", "--seed", "1", "--ticks", "5", "--arm", "solo",
+        env=_env_without_key(),
+    )
+    _assert_rc(result, 2)
+
+
+def test_solo_arm_without_key_prints_hint() -> None:
+    """--arm solo without key must print a friendly hint mentioning DASHSCOPE_API_KEY."""
+    result = _run_aftershock(
+        "run", "--seed", "1", "--ticks", "5", "--arm", "solo",
+        env=_env_without_key(),
+    )
+    combined = result.stdout + result.stderr
+    assert "DASHSCOPE_API_KEY" in combined, (
+        f"Expected hint mentioning DASHSCOPE_API_KEY:\n{combined}"
+    )
+    nonempty_lines = [line for line in combined.splitlines() if line.strip()]
+    assert len(nonempty_lines) >= 2, (
+        f"Expected at least 2 hint lines, got:\n{combined}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# bench: keyless with LLM arms -> exit 2 before any cell
+# ---------------------------------------------------------------------------
+
+
+def test_bench_llm_arm_without_key_exits_2() -> None:
+    """bench with an LLM arm and no DASHSCOPE_API_KEY must exit 2."""
+    result = _run_aftershock(
+        "bench", "--arms", "society", "--seeds", "42", "--ticks", "5",
+        env=_env_without_key(),
+    )
+    _assert_rc(result, 2)
+
+
+def test_bench_llm_arm_without_key_prints_hint() -> None:
+    """bench with an LLM arm and no key must print a friendly hint."""
+    result = _run_aftershock(
+        "bench", "--arms", "society", "--seeds", "42", "--ticks", "5",
+        env=_env_without_key(),
+    )
+    combined = result.stdout + result.stderr
+    assert "DASHSCOPE_API_KEY" in combined, (
+        f"Expected hint mentioning DASHSCOPE_API_KEY:\n{combined}"
+    )
+
+
+def test_bench_llm_arm_without_key_no_cell_dirs_created() -> None:
+    """bench with an LLM arm and no key must exit before creating any cell dirs."""
+    with tempfile.TemporaryDirectory() as td:
+        result = _run_aftershock(
+            "bench", "--arms", "society", "--seeds", "42", "--ticks", "5",
+            "--out", td,
+            env=_env_without_key(),
+        )
+        _assert_rc(result, 2)
+        created = [p for p in os.listdir(td) if not p.startswith(".")]
+        assert created == [], f"No cell dirs should be created, found: {created}"
+
+
+def test_bench_swarm_arm_without_key_exits_2() -> None:
+    """bench with swarm arm and no key must exit 2."""
+    result = _run_aftershock(
+        "bench", "--arms", "swarm", "--seeds", "42", "--ticks", "5",
+        env=_env_without_key(),
+    )
+    _assert_rc(result, 2)
+
+
+# ---------------------------------------------------------------------------
+# bench --arms scripted --seeds 42,7 --ticks 8: end-to-end offline
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# bench --seeds with invalid value -> exit 1 + friendly error
+# ---------------------------------------------------------------------------
+
+
+def test_bench_invalid_seeds_exits_1() -> None:
+    """bench --seeds with a non-integer value must exit 1 with a friendly error."""
+    result = _run_aftershock(
+        "bench", "--arms", "scripted", "--seeds", "42,abc", "--ticks", "5",
+        env=_env_without_key(),
+    )
+    _assert_rc(result, 1)
+
+
+def test_bench_invalid_seeds_prints_error_message() -> None:
+    """bench --seeds with invalid value must print a clear error, not a traceback."""
+    result = _run_aftershock(
+        "bench", "--arms", "scripted", "--seeds", "42,abc", "--ticks", "5",
+        env=_env_without_key(),
+    )
+    combined = result.stdout + result.stderr
+    assert "error" in combined.lower(), (
+        f"Expected an error message, got:\n{combined}"
+    )
+    assert "Traceback" not in combined, (
+        f"Should not print a raw traceback, got:\n{combined}"
+    )
+    assert "--seeds" in combined, (
+        f"Error message should mention --seeds, got:\n{combined}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# bench --arms scripted --seeds 42,7 --ticks 8: end-to-end offline
+# ---------------------------------------------------------------------------
+
+
+def test_bench_scripted_two_seeds_end_to_end() -> None:
+    """bench --arms scripted --seeds 42,7 --ticks 8 runs offline, writes RESULTS.md + results.json
+    and the printed table contains both seeds."""
+    with tempfile.TemporaryDirectory() as td:
+        result = _run_aftershock(
+            "bench",
+            "--arms", "scripted",
+            "--seeds", "42,7",
+            "--ticks", "8",
+            "--out", td,
+            env=_env_without_key(),
+        )
+        _assert_rc(result, 0)
+
+        # RESULTS.md must exist and contain both seeds
+        results_md = Path(td) / "RESULTS.md"
+        assert results_md.exists(), "RESULTS.md was not written"
+        md_text = results_md.read_text(encoding="utf-8")
+        assert "42" in md_text, "Seed 42 missing from RESULTS.md"
+        assert "7" in md_text, "Seed 7 missing from RESULTS.md"
+
+        # results.json must exist and be valid JSON
+        results_json = Path(td) / "results.json"
+        assert results_json.exists(), "results.json was not written"
+        import json
+        data = json.loads(results_json.read_text(encoding="utf-8"))
+        assert "arms" in data
+        assert "scripted" in data["arms"]
+
+        # stdout table must also mention both seeds
+        combined = result.stdout + result.stderr
+        assert "scripted" in combined, "arm 'scripted' missing from stdout table"
+        assert "42" in combined, "seed 42 missing from stdout table"
+        assert "7" in combined, "seed 7 missing from stdout table"

@@ -1,0 +1,357 @@
+"""Tests for town/arms.py: build_arm wiring, rosters, envelopes, contracts, determinism."""
+
+from __future__ import annotations
+
+import pytest
+
+from aftershock.llm.provider import MockProvider
+from aftershock.town.arms import ARMS, ArmSetup, build_arm
+from aftershock.town.heuristics import (
+    CommanderScripted,
+    CommsScripted,
+    FireScripted,
+    InfraScripted,
+    MedicalScripted,
+    RescueScripted,
+)
+from aftershock.town.society import TownResolver, TownSociety
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_SEED = 42
+
+
+def _mock() -> MockProvider:
+    return MockProvider(script=['{"decisions": []}'])
+
+
+# ---------------------------------------------------------------------------
+# ARMS tuple
+# ---------------------------------------------------------------------------
+
+
+def test_arms_tuple_values() -> None:
+    assert set(ARMS) == {"scripted", "solo", "swarm", "society"}
+
+
+# ---------------------------------------------------------------------------
+# build_arm("scripted", seed) — provider=None is fine
+# ---------------------------------------------------------------------------
+
+
+def test_scripted_builds_without_provider() -> None:
+    setup = build_arm("scripted", _SEED, None)
+    assert isinstance(setup, ArmSetup)
+
+
+def test_scripted_six_agents() -> None:
+    setup = build_arm("scripted", _SEED, None)
+    assert len(setup.agents) == 6
+
+
+def test_scripted_agent_types() -> None:
+    setup = build_arm("scripted", _SEED, None)
+    assert isinstance(setup.agents["commander"], CommanderScripted)
+    assert isinstance(setup.agents["medical"], MedicalScripted)
+    assert isinstance(setup.agents["rescue"], RescueScripted)
+    assert isinstance(setup.agents["fire"], FireScripted)
+    assert isinstance(setup.agents["infrastructure"], InfraScripted)
+    assert isinstance(setup.agents["comms"], CommsScripted)
+
+
+def test_scripted_uses_town_resolver() -> None:
+    setup = build_arm("scripted", _SEED, None)
+    assert isinstance(setup.resolver, TownResolver)
+
+
+def test_scripted_timeout() -> None:
+    setup = build_arm("scripted", _SEED, None)
+    assert setup.default_timeout_s == pytest.approx(5.0)
+
+
+def test_scripted_roles_no_dispatch_in_envelope() -> None:
+    """Society/scripted roles must NOT include dispatch in their envelopes."""
+    setup = build_arm("scripted", _SEED, None)
+    for role in setup.roles.values():
+        assert "dispatch" not in role.allowed_decisions, (
+            f"role {role.name!r} must not have dispatch in allowed_decisions"
+        )
+
+
+def test_scripted_determinism() -> None:
+    """Two build_arm('scripted', seed) calls produce byte-identical world to_dict."""
+    setup_a = build_arm("scripted", _SEED, None)
+    setup_b = build_arm("scripted", _SEED, None)
+    assert setup_a.world.to_dict() == setup_b.world.to_dict()
+
+
+# ---------------------------------------------------------------------------
+# build_arm with provider=None for LLM arms raises ValueError
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("arm", ["society", "swarm", "solo"])
+def test_llm_arm_provider_none_raises(arm: str) -> None:
+    with pytest.raises(ValueError, match="requires a Provider"):
+        build_arm(arm, _SEED, None)
+
+
+# ---------------------------------------------------------------------------
+# build_arm("swarm", ...) — five agents, dispatch in envelopes, decisions-only contract
+# ---------------------------------------------------------------------------
+
+
+def test_swarm_five_agents() -> None:
+    setup = build_arm("swarm", _SEED, _mock())
+    assert len(setup.agents) == 5
+
+
+def test_swarm_no_commander() -> None:
+    setup = build_arm("swarm", _SEED, _mock())
+    assert "commander" not in setup.agents
+
+
+def test_swarm_agent_ids() -> None:
+    setup = build_arm("swarm", _SEED, _mock())
+    assert set(setup.agents) == {"comms", "fire", "infrastructure", "medical", "rescue"}
+
+
+def test_swarm_all_roles_have_dispatch() -> None:
+    setup = build_arm("swarm", _SEED, _mock())
+    for role in setup.roles.values():
+        assert "dispatch" in role.allowed_decisions, (
+            f"swarm role {role.name!r} must include dispatch in allowed_decisions"
+        )
+
+
+def test_swarm_all_roles_have_recall() -> None:
+    setup = build_arm("swarm", _SEED, _mock())
+    for role in setup.roles.values():
+        assert "recall" in role.allowed_decisions, (
+            f"swarm role {role.name!r} must include recall in allowed_decisions"
+        )
+
+
+def test_swarm_infrastructure_has_repair_road() -> None:
+    setup = build_arm("swarm", _SEED, _mock())
+    assert "repair_road" in setup.roles["infrastructure"].allowed_decisions
+
+
+def test_swarm_comms_has_broadcast() -> None:
+    setup = build_arm("swarm", _SEED, _mock())
+    assert "broadcast" in setup.roles["comms"].allowed_decisions
+
+
+def test_swarm_models_are_flash() -> None:
+    setup = build_arm("swarm", _SEED, _mock())
+    for role in setup.roles.values():
+        assert role.model == "qwen3.5-flash", f"swarm role {role.name!r} should use qwen3.5-flash"
+
+
+def test_swarm_temperatures() -> None:
+    setup = build_arm("swarm", _SEED, _mock())
+    for role in setup.roles.values():
+        assert role.temperature == pytest.approx(0.3)
+
+
+def test_swarm_uses_default_resolver() -> None:
+    from aftershock.kernel.negotiation import DefaultResolver
+    setup = build_arm("swarm", _SEED, _mock())
+    assert isinstance(setup.resolver, DefaultResolver)
+
+
+def test_swarm_timeout() -> None:
+    setup = build_arm("swarm", _SEED, _mock())
+    assert setup.default_timeout_s == pytest.approx(45.0)
+
+
+def test_swarm_society_uses_town_society() -> None:
+    setup = build_arm("swarm", _SEED, _mock())
+    assert isinstance(setup.society, TownSociety)
+
+
+def test_swarm_contracts_no_proposals_schema() -> None:
+    """Swarm contracts must not contain proposals or responses schema fields."""
+    from aftershock.llm.agent import LLMAgent
+    setup = build_arm("swarm", _SEED, _mock())
+    for agent_id, agent in setup.agents.items():
+        assert isinstance(agent, LLMAgent)
+        contract = agent._system
+        # decisions-only schema: no proposals/responses keys in the schema block
+        assert '"proposals"' not in contract, (
+            f"swarm agent {agent_id!r} contract must not contain proposals schema"
+        )
+        assert '"responses"' not in contract, (
+            f"swarm agent {agent_id!r} contract must not contain responses schema"
+        )
+
+
+def test_swarm_contracts_no_proposals_rule() -> None:
+    """Swarm contracts must contain the no-proposals hard rule."""
+    from aftershock.llm.agent import LLMAgent
+    setup = build_arm("swarm", _SEED, _mock())
+    for agent_id, agent in setup.agents.items():
+        assert isinstance(agent, LLMAgent)
+        contract = agent._system
+        assert "do not emit proposals" in contract.lower(), (
+            f"swarm agent {agent_id!r} contract must contain 'do not emit proposals' rule"
+        )
+
+
+# ---------------------------------------------------------------------------
+# build_arm("solo", ...) — one agent, all five decisions, decisions-only contract
+# ---------------------------------------------------------------------------
+
+
+def test_solo_one_agent() -> None:
+    setup = build_arm("solo", _SEED, _mock())
+    assert len(setup.agents) == 1
+
+
+def test_solo_agent_id() -> None:
+    setup = build_arm("solo", _SEED, _mock())
+    assert "solo" in setup.agents
+
+
+def test_solo_all_five_decisions() -> None:
+    setup = build_arm("solo", _SEED, _mock())
+    role = setup.roles["solo"]
+    assert set(role.allowed_decisions) == {
+        "dispatch", "recall", "set_priority", "repair_road", "broadcast"
+    }
+
+
+def test_solo_model_is_qwen3_max() -> None:
+    setup = build_arm("solo", _SEED, _mock())
+    assert setup.roles["solo"].model == "qwen3-max"
+
+
+def test_solo_temperature() -> None:
+    setup = build_arm("solo", _SEED, _mock())
+    assert setup.roles["solo"].temperature == pytest.approx(0.3)
+
+
+def test_solo_uses_default_resolver() -> None:
+    from aftershock.kernel.negotiation import DefaultResolver
+    setup = build_arm("solo", _SEED, _mock())
+    assert isinstance(setup.resolver, DefaultResolver)
+
+
+def test_solo_timeout() -> None:
+    setup = build_arm("solo", _SEED, _mock())
+    assert setup.default_timeout_s == pytest.approx(90.0)
+
+
+def test_solo_contract_no_proposals_schema() -> None:
+    """Solo contract must not contain proposals or responses schema fields."""
+    from aftershock.llm.agent import LLMAgent
+    setup = build_arm("solo", _SEED, _mock())
+    agent = setup.agents["solo"]
+    assert isinstance(agent, LLMAgent)
+    contract = agent._system
+    assert '"proposals"' not in contract
+    assert '"responses"' not in contract
+
+
+def test_solo_contract_no_proposals_rule() -> None:
+    """Solo contract must contain the no-proposals hard rule."""
+    from aftershock.llm.agent import LLMAgent
+    setup = build_arm("solo", _SEED, _mock())
+    agent = setup.agents["solo"]
+    assert isinstance(agent, LLMAgent)
+    contract = agent._system
+    assert "do not emit proposals" in contract.lower()
+
+
+def test_solo_society_uses_town_society() -> None:
+    setup = build_arm("solo", _SEED, _mock())
+    assert isinstance(setup.society, TownSociety)
+
+
+# ---------------------------------------------------------------------------
+# build_arm("society", ...) — six agents, no dispatch in envelopes, full contract
+# ---------------------------------------------------------------------------
+
+
+def test_society_six_agents() -> None:
+    setup = build_arm("society", _SEED, _mock())
+    assert len(setup.agents) == 6
+
+
+def test_society_agent_ids() -> None:
+    setup = build_arm("society", _SEED, _mock())
+    assert set(setup.agents) == {
+        "commander", "comms", "fire", "infrastructure", "medical", "rescue"
+    }
+
+
+def test_society_no_dispatch_in_envelope() -> None:
+    setup = build_arm("society", _SEED, _mock())
+    for role in setup.roles.values():
+        assert "dispatch" not in role.allowed_decisions, (
+            f"society role {role.name!r} must not have dispatch in allowed_decisions"
+        )
+
+
+def test_society_uses_town_resolver() -> None:
+    setup = build_arm("society", _SEED, _mock())
+    assert isinstance(setup.resolver, TownResolver)
+
+
+def test_society_contracts_include_proposals_schema() -> None:
+    """Society contracts must contain proposals and responses schema fields."""
+    from aftershock.llm.agent import LLMAgent
+    setup = build_arm("society", _SEED, _mock())
+    for agent_id, agent in setup.agents.items():
+        assert isinstance(agent, LLMAgent)
+        contract = agent._system
+        assert '"proposals"' in contract, (
+            f"society agent {agent_id!r} contract must contain proposals schema"
+        )
+        assert '"responses"' in contract, (
+            f"society agent {agent_id!r} contract must contain responses schema"
+        )
+
+
+def test_society_timeout() -> None:
+    setup = build_arm("society", _SEED, _mock())
+    assert setup.default_timeout_s == pytest.approx(45.0)
+
+
+# ---------------------------------------------------------------------------
+# Unknown arm
+# ---------------------------------------------------------------------------
+
+
+def test_unknown_arm_raises() -> None:
+    with pytest.raises(ValueError, match="unknown arm"):
+        build_arm("unknown_arm", _SEED, None)
+
+
+# ---------------------------------------------------------------------------
+# Cross-arm world identity: all arms must produce the same seeded world
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("arm", ["scripted", "swarm", "solo", "society"])
+def test_cross_arm_world_identity_same_as_scripted(arm: str) -> None:
+    """build_arm(arm, seed) must produce a world identical to build_arm('scripted', seed).
+
+    This is the benchmark's load-bearing fairness invariant: all arms run
+    identical seeded starting conditions so results are directly comparable.
+    """
+    provider = _mock()
+    scripted_world = build_arm("scripted", _SEED, None).world.to_dict()
+    arm_world = build_arm(arm, _SEED, provider if arm != "scripted" else None).world.to_dict()
+    assert arm_world == scripted_world, (
+        f"arm {arm!r} produced a different world than 'scripted' for seed {_SEED}"
+    )
+
+
+def test_cross_arm_world_identity_different_seed_differs() -> None:
+    """Different seeds must produce different worlds (sanity check for the identity test)."""
+    world_42 = build_arm("scripted", 42, None).world.to_dict()
+    world_11 = build_arm("scripted", 11, None).world.to_dict()
+    assert world_42 != world_11, "seed 42 and seed 11 must produce different worlds"

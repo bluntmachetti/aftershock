@@ -221,7 +221,7 @@ def test_render_section_order():
     missions_pos = out.index("MISSIONS")
     inbox_pos = out.index("YOUR INBOX")
     rulings_pos = out.index("RULINGS")
-    rejected_pos = out.index("REJECTED LAST TICK")
+    rejected_pos = out.index("RECENTLY REJECTED")
     allowed_pos = out.index("ALLOWED DECISIONS")
     assert tick_pos < pools_pos < blocked_pos < missions_pos
     assert missions_pos < inbox_pos < rulings_pos < rejected_pos < allowed_pos
@@ -426,7 +426,7 @@ def test_render_allowed_decisions_last():
     """Allowed decisions section appears at end of output."""
     obs = make_obs(allowed_decisions=("set_priority", "broadcast"))
     out = render_observation(obs)
-    assert out.rindex("ALLOWED DECISIONS") > out.index("REJECTED LAST TICK")
+    assert out.rindex("ALLOWED DECISIONS") > out.index("RECENTLY REJECTED")
     assert "set_priority" in out
     assert "broadcast" in out
 

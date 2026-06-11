@@ -462,11 +462,105 @@ class LLMAgent(Agent):
   new `aftershock smoke-llm [--model qwen3.5-flash]` makes one tiny JSON-mode call and
   prints the reply, token counts, and cost — the first thing to run when credits land.
 
+## The benchmark (`src/aftershock/town/arms.py`, `src/aftershock/bench.py`)
+
+The central claim of this project is measured, not asserted: on identical seeded scenarios,
+does a structured society of cheap models beat (a) one flagship model doing everything and
+(b) the same cheap models without a coordination protocol? Four arms, same worlds:
+
+| arm | agents | model(s) | coordination |
+|---|---|---|---|
+| `scripted` | 6 heuristics | none ($0) | auction protocol |
+| `solo` | 1 generalist | qwen3-max | none — single agent holds every capability |
+| `swarm` | 5 specialists | qwen3.5-flash | none — direct dispatch, no proposals, no commander |
+| `society` | 6 roles | qwen3.5-flash ×5 + qwen3.5-plus commander | full negotiation protocol |
+
+Fairness rules: every arm runs the same seeds (identical worlds/timelines); cost and tokens
+are recorded identically through the one provider chokepoint; the swarm is NOT handicapped —
+it may dispatch directly (no auction round-trip), so a society win is attributable to
+coordination, not crippled baselines; per-call timeouts may differ per arm (infrastructure,
+not capability).
+
+### town/arms.py
+
+```python
+ARMS = ("scripted", "solo", "swarm", "society")
+
+@dataclass
+class ArmSetup:
+    world: TownState; society: TownSociety; agents: dict[str, Agent]
+    registry: DecisionRegistry; roles: dict[str, RoleSpec]; resolver: Resolver
+    default_timeout_s: float
+
+def build_arm(arm: str, seed: int, provider: Provider | None) -> ArmSetup
+    # scripted: existing six heuristics + TownResolver; provider unused; timeout 5.0
+    # society:  existing six LLMAgents + TownResolver; timeout 45.0
+    # swarm:    five LLMAgents (medical, rescue, fire, infrastructure, comms) from
+    #           town/roles_swarm/*.yaml; DefaultResolver; timeout 45.0
+    # solo:     one LLMAgent "solo" from town/roles_solo/solo.yaml; DefaultResolver;
+    #           timeout 90.0 (flagship latency)
+    # LLM arms with provider=None -> ValueError (CLI converts to the friendly exit-2 hint)
+```
+
+- `town/roles_swarm/`: five YAMLs, `model: qwen3.5-flash`, envelopes INCLUDE `dispatch`
+  (+ recall; repair_road for infrastructure; broadcast for comms). Prompts: act directly
+  on the world, no negotiation exists, watch pool availability — if the pool lacks units
+  the decision is rejected with a reason. No mention of proposals.
+- `town/roles_solo/solo.yaml`: `model: qwen3-max`, all five decision types allowed,
+  prompt = a complete one-person incident-command brief (triage, dispatch, repair,
+  public comms).
+- `TownSociety` accepts an explicit roster (`agent_ids`/`role_of` driven by the roles
+  mapping passed in) so the same society logic serves all rosters.
+- `decision_contract` renders a decisions-only contract when `proposal_docs` is empty
+  (schema shows `{"decisions": [...]}` only, plus a "do not emit proposals" rule).
+  `town/prompts.py` gains `DECISION_DOCS_DIRECT` (dispatch documented as directly
+  usable) for swarm/solo, alongside the auction-framed `DECISION_DOCS` for society.
+- `cli.py run --arm` accepts all four arms and delegates wiring to `build_arm`.
+
+### bench.py
+
+Manifest-driven (default `bench/default.yaml`):
+
+```yaml
+ticks: 60
+seeds: [11, 23, 37, 42, 57]
+arms: [scripted, solo, swarm, society]
+out: runs/bench
+```
+
+```python
+def run_bench(manifest: dict, provider: Provider | None,
+              out_dir: Path) -> BenchResult
+    # Runs each (arm, seed) cell sequentially via build_arm + Engine.
+    # Resume: a cell whose <out>/<arm>-seed<seed>/summary.json exists is skipped
+    # (deleted dir = rerun); each cell writes its full NDJSON run dir + summary.json
+    # {arm, seed, ticks_run, scores, cost, wall_s, models}.
+def aggregate(cells: list[dict]) -> dict
+    # per-arm: n, mean & sample-sd of lives_saved, lives_lost, missions_resolved,
+    # missions_failed, cost_usd, wall_s; lives_per_dollar = mean_lives/mean_cost
+    # (omit for zero-cost arms); plus the per-seed paired table arm x seed -> lives_saved.
+def render_markdown(agg: dict) -> str   # RESULTS.md: headline table + paired table
+```
+
+CLI: `aftershock bench [--manifest PATH] [--arms a,b] [--seeds 1,2] [--ticks N]
+[--out DIR] [--fresh]` — flags override the manifest; prints the markdown tables and
+writes `results.json` + `RESULTS.md` to the out dir. LLM arms requested without
+`DASHSCOPE_API_KEY` ⇒ the friendly exit-2 hint before any cell runs.
+
+### Engine: rejection memory
+
+`Engine(..., rejection_memory_ticks: int = 3)` — `Observation.rejections` carries the
+agent's rejections from the last N ticks (most recent first, capped at 12 entries)
+instead of only the previous tick, so small models stop re-attempting refused actions.
+Applies to every arm identically.
+
 ## CLI
 
 ```
-aftershock run    --seed 42 --ticks 60 --arm scripted|society [--out runs] [--quiet]
-                  [--timeout S]
+aftershock run    --seed 42 --ticks 60 --arm scripted|solo|swarm|society [--out runs]
+                  [--quiet] [--timeout S]
+aftershock bench  [--manifest bench/default.yaml] [--arms ...] [--seeds ...] [--ticks N]
+                  [--out DIR] [--fresh]
 aftershock verify --seed 42 --ticks 60     # run twice, assert identical digest sequences
 aftershock replay <run_dir>                # print scoreboard timeline from NDJSON
 aftershock smoke-llm [--model qwen3.5-flash]   # one live call: reply, tokens, cost

@@ -1,8 +1,11 @@
 """Prompt documentation and LLM agent factory for the town society.
 
-DECISION_DOCS  — one usage line per registered decision type (five total).
-PROPOSAL_DOCS  — one usage line per ProposalKind value (four total).
-build_llm_agents — constructs six LLMAgents for the town society.
+DECISION_DOCS        — one usage line per registered decision type (auction-framed; for
+                       society arm where dispatch is auction-granted only).
+DECISION_DOCS_DIRECT — same decision types but dispatch is documented as directly usable;
+                       for swarm/solo arms where agents dispatch without an auction.
+PROPOSAL_DOCS        — one usage line per ProposalKind value (four total).
+build_llm_agents     — constructs six LLMAgents for the town society.
 """
 
 from __future__ import annotations
@@ -36,6 +39,37 @@ DECISION_DOCS: dict[str, str] = {
     "set_priority": (
         "set_priority {mission_id, priority 0-10}: set a mission's auction priority; "
         "higher priority wins resource_request auctions over lower-priority missions"
+    ),
+    "repair_road": (
+        "repair_road {district_id}: consume one repair_crew for several ticks to unblock "
+        "a road, restoring full-speed dispatch to that district"
+    ),
+    "broadcast": (
+        "broadcast {message <= 280 chars}: transmit a public message that reduces panic "
+        "by 0.1; keep messages calm and specific"
+    ),
+}
+
+# ---------------------------------------------------------------------------
+# Direct-dispatch decision documentation (swarm / solo arms)
+#
+# Identical to DECISION_DOCS except dispatch is documented as directly usable
+# (move qty of resource from the pool to a mission you can see).  The other
+# four lines are shared copy for consistency, but dispatch is the key change.
+# ---------------------------------------------------------------------------
+
+DECISION_DOCS_DIRECT: dict[str, str] = {
+    "dispatch": (
+        "dispatch {mission_id, resource, qty}: move qty of resource from the pool to a "
+        "mission you can see — check pool availability first; rejected if pool lacks units"
+    ),
+    "recall": (
+        "recall {mission_id, resource, qty}: return assigned resources from a mission back "
+        "to the shared pool when they are no longer needed"
+    ),
+    "set_priority": (
+        "set_priority {mission_id, priority 0-10}: set a mission's priority; "
+        "higher priority missions should receive resources first"
     ),
     "repair_road": (
         "repair_road {district_id}: consume one repair_crew for several ticks to unblock "
