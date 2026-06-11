@@ -772,6 +772,332 @@ unchanged (compare is additive). Backend, determinism, and the `OBSERVATORY_TOKE
 behaviour untouched. **Deferred (explicit non-goals for the video):** full sans-serif font
 migration, mission-marker redesign, design-system migration of every last component.
 
+## Real-data scenario packs (task #4 — engine/data + observatory)
+
+Run the existing agent society on scenarios compiled from **real open incident data**, with
+real response latency as the on-screen baseline. Distinct from task #3 (arm-vs-arm compare,
+same synthetic seed, `8047d54`): this is **sim-vs-reality** — real demand arrival, real
+first-on-scene times, simulated outcomes. Research provenance: 14 datasets adversarially
+verified 2026-06-11 (live API fetches, exact row counts) in
+`.omc/research/open-datasets-compare-mode.md`. Folded here from `docs/SCENARIOS.md` (deleted
+in the same commit — one spec copy at all times).
+
+### UX contract (CCG tri-model review, 2026-06-11 — authoritative for Phase S4)
+
+A Claude–Codex–Gemini UX review approved the spec and pinned 8 deltas; the surface table below
+already encodes them. The principle: **credibility through transparency, not complexity through
+labels.**
+
+1. **District-name override is P0 and swaps immediately** — showing "OLD TOWN" during a real-NYC
+   demo breaks credibility in 3 seconds.
+2. **RealityStrip is scenario-level, never arm-level.** MapTab: one strip as a map *footer above
+   the Scrubber*. CompareTab: **one shared band under the existing `DeltaStripView`** comparing
+   *both* arms' sim latency against the *single* real baseline — **not** per-`SidePanel` (that
+   double-renders the same grey number and implies two realities). Render only when both arms
+   share the scenario; suppress otherwise.
+3. **Honesty is always-visible, not click-only.** Always shown: the per-pack caveat line + a tiny
+   inline provenance summary (`REAL demand · REAL latency · INFERRED lives`). The full
+   source/license/mapping table + 4-badge grid live behind the `DATA` chip (deep dive only).
+4. **Short caveat copy.** RealityStrip sub-caption is **"Same real demand; simulated dispatch &
+   travel differ."** (replaces the 83-char "directionally comparable…" line, which judges won't
+   read). The per-pack Invariant-4 caveat lines are unchanged (they are the data contract).
+5. **Two badge tiers, neutral colors.** Solid fill = `REAL` (ground truth); ghost/dotted border =
+   `MAPPED/INFERRED/SYNTHETIC`. `INFERRED` is a border-only ghost badge so it never reads as an
+   *error*. Mono 9px. Provenance badges stay **out of the arm-color space** — amber already = the
+   baseline arm and cyan = society; reusing them would collide on the very RealityStrip that pairs
+   grey-real vs arm-color-agent. The hazard chip alone carries a signal accent (REAL) vs dim (SYN).
+6. **Scenario select auto-prefills ticks and de-emphasizes the ticks input** — a presenter never
+   reasons about tick counts mid-demo.
+7. **Hazard chips dim in RunPicker rows, stronger only in the selected-run / header context** —
+   no equal-weight stamping of every row.
+8. **Mission-popover real-vs-agent latency lines are KEPT** (operator decision, against the
+   reviewers' "defer" suggestion) — built with care for the popover's already-dense small SVG text
+   (`TownMap.tsx` `MissionPopover`): the two lines + INFERRED ghost-badge must stay legible at
+   1080p capture, so the popover height math must grow and the lines use the same 9px mono.
+
+### Invariants (non-negotiable)
+
+1. **No engine vocabulary change.** `MissionKind`, `ResourceKind`, district ids, dynamics,
+   scoring are untouched. Real incident types map onto the existing four mission kinds *in the
+   compiler*, and the mapping is published as provenance. (All-hazards vocabulary refactor is
+   deferred — see "Deferred".)
+2. **Determinism preserved.** The compiler runs **offline** and emits a versioned JSON artifact
+   committed to the repo. The engine never touches the network. Same pack + same seed + same
+   decisions = same outcome, byte for byte. `aftershock verify` must pass with `--scenario`.
+3. **Bench fairness.** Scenario packs are demo/observatory surfaces only. `aftershock bench` and
+   `bench/default.yaml` refuse scenario packs; the published 4-arm results stay synthetic-seed
+   only. (Same spirit as the lessons-only-for-society guard in `build_arm`.)
+4. **Honesty labels are part of the contract, not polish.** Every scenario surface carries the
+   field-provenance markers (REAL / MAPPED / INFERRED / SYNTHETIC) and a caveat line drawn from a
+   fixed approved set, **chosen per pack so it never claims a category the pack's
+   `field_provenance` does not support**:
+   - dispatch packs (SF, NYC): *"Demand: real · Latency baseline: real · Lives & outcomes:
+     simulated model."*
+   - hazard-only packs (Türkiye): *"Hazard timing: real · Demand & outcomes: simulated model."*
+   Never claim agents are compared against real responders' *outcomes*.
+5. **Sequencing.** Phase-S4 gate is satisfied by `8047d54` — S1–S6 are parallel-startable. S1–S3
+   touch only Python/`Dockerfile`/`scenarios/`; S4 touches `web/src/**` per the surface table.
+
+### The scenario pack (`scenarios/<id>/scenario.json`)
+
+One self-contained JSON artifact per scenario, validated by pydantic models in
+`town/scenario.py`. Canonical example (`nyc-ida-2021`, abridged where marked):
+
+```jsonc
+{
+  "format_version": 1,
+  "id": "nyc-ida-2021",                      // ^[a-z0-9][a-z0-9-]*$, dir name == id
+  "name": "Hurricane Ida — NYC, night of 2021-09-01",
+  "hazard": "hurricane_flood",               // free label: earthquake|hurricane_flood|storm|routine
+  "adapter": "nyc",                          // which compiler adapter produced this pack
+  "compiler_version": "<git rev of the compiler at emit time>",
+  "config_sha256": "<sha256 of the adapter config YAML>",
+  "tick_minutes": 12,                        // real minutes per tick (display + reference math)
+  "window": { "start": "2021-09-01T18:00:00-04:00", "end": "2021-09-02T06:00:00-04:00" },
+
+  // Canonical district ids are POSITIONAL SLOTS — the SVG map layout keys off them.
+  // Packs override display names; `members` documents the real zoning.
+  "districts": [
+    { "id": "old_town",          "name": "Manhattan",      "members": ["M1", "M2"] },
+    { "id": "harbor",            "name": "Staten Island",  "members": ["S1", "S2"] },
+    { "id": "hospital_district", "name": "Bronx",          "members": ["B1", "B2"] },
+    { "id": "market",            "name": "Brooklyn West",  "members": ["K1", "K2"] },
+    { "id": "residential_north", "name": "Queens",         "members": ["Q1", "Q2"] },
+    { "id": "industrial",        "name": "Brooklyn East",  "members": ["K3", "K4"] }
+  ],
+
+  "pools": {                                  // feeds ResourcePool(kind, total, available)
+    "ambulance":   { "size": 4, "basis": "calibrated", "note": "no EMS unit counts in 76xm-jjuj; calibrated against held_indicator saturation" },
+    "rescue_crew": { "size": 3, "basis": "calibrated", "note": "no real analog; synthetic default" },
+    "fire_engine": { "size": 3, "basis": "observed",   "note": "engines_assigned p75 in window (8m42-w767)" },
+    "repair_crew": { "size": 3, "basis": "calibrated", "note": "no real analog" },
+    "supply_truck":{ "size": 3, "basis": "calibrated", "note": "no real analog" }
+  },
+
+  "timeline": [                               // exact TimelineEntry shape, sorted by tick
+    // tick = floor((received − window.start) / tick_minutes): 21:04:11 → tick 15
+    { "tick": 15, "kind": "mission", "mission_kind": "medical_surge",
+      "district_id": "residential_north", "severity": 4, "lives_at_risk": 16 },
+    { "tick": 17, "kind": "blockage", "district_id": "residential_north" }
+  ],
+
+  "field_provenance": {                       // drives the REAL/MAPPED/INFERRED/SYNTHETIC badges
+    "tick": "real", "district_id": "real", "mission_kind": "mapped",
+    "severity": "mapped", "lives_at_risk": "inferred", "blockage": "synthetic"
+  },
+
+  "mapping": {                                // the semantic decisions, published verbatim
+    "version": "nyc-v1",
+    "mission_kind": { "EMS severity 1-3 medical": "medical_surge",
+                      "Fire incident_classification Structural Fires": "fire",
+                      "NonStructural/utility": "infra_repair",
+                      "rescue classifications + water rescue": "collapse_rescue" },
+    "severity_rule": "EMS code 1-2→5, 3→4 (codes 4-8 excluded by filter); Fire by units-assigned quantile",
+    "lives_rule": "LIVES[kind][severity] lookup table vNYC-1 (inferred field)"
+  },
+
+  "sampling": {                               // no silent caps — say what was dropped
+    "method": "stratified by (tick-bucket, mission_kind)",
+    "sample_seed": 4636,                      // compiler-only RNG; recorded, not engine rng_for
+    "kept": 16, "total": "<post-filter incident count, computed by the adapter>",
+    "filter": "severity codes 1-3 OR Fire structural/rescue; boroughs only (CW/X1 dropped)"
+  },
+
+  "source": [                                 // one entry per upstream dataset
+    { "dataset": "EMS Incident Dispatch Data", "provider": "FDNY via NYC Open Data",
+      "dataset_id": "76xm-jjuj",
+      "query_url": "https://data.cityofnewyork.us/resource/76xm-jjuj.json?$where=...",
+      "fetched_at": "2026-06-11", "rows_fetched": 2003,
+      "license": "NYC Open Data terms (no formal license)", "license_url": "https://opendata.cityofnewyork.us/overview/",
+      "attribution": "FDNY via NYC Open Data" },
+    { "dataset": "Fire Incident Dispatch Data", "provider": "FDNY via NYC Open Data",
+      "dataset_id": "8m42-w767",
+      "query_url": "https://data.cityofnewyork.us/resource/8m42-w767.json?$where=...",
+      "fetched_at": "2026-06-11", "rows_fetched": 2022,
+      "license": "NYC Open Data terms (no formal license)", "license_url": "https://opendata.cityofnewyork.us/overview/",
+      "attribution": "FDNY via NYC Open Data" }
+  ],
+
+  "reference": {                              // the reality baseline (only what the data proves)
+    "missions": {                             // keyed by TIMELINE INDEX of the mission entry
+      "0": { "received": "2021-09-01T21:04:11-04:00",
+             "first_on_scene": "2021-09-01T21:19:53-04:00",
+             "latency_s": 942 }               // null first_on_scene/latency when no unit arrived
+    },
+    "aggregates": {                           // computed over the FULL filtered window, not sample
+      "mean_latency_s": 948,                  // mean AND median both emitted (Ida figures are MEANS)
+      "median_latency_s": "<computed>",
+      "held_rate": 0.165,
+      "baseline_mean_latency_s": "<computed>", "baseline_median_latency_s": "<computed>",
+      "baseline_held_rate": "<computed>",
+      "baseline_note": "<adapter-computed calm window, stated explicitly, e.g. 2021-08-18/19>"
+      // 538 s / 6.9 % normal-period figures are the 2012-10-15/16 pre-Sandy baseline — the NYC
+      // adapter must compute an Ida-adjacent baseline rather than reuse them, and name the window.
+    }
+  }
+}
+```
+
+**Index ↔ mission id.** Engine mission ids (`m1..`) come from a single shared counter, and live
+injections consume it *before* that tick's timeline spawns (`town/events.py:217` drains
+injections first; ids at `events.py:244`/`:288`). Timeline index → mission id is **not**
+reconstructible by counting. The UI maps them by walking `mission_spawned` events in record order
+and **skipping events whose payload has `injected: true`** (`events.py:274`); the nth non-injected
+spawn is the nth mission entry in `timeline`. Injection-safe; normative for `reference.missions`.
+
+Loader validation (pydantic, hard errors): district ids exactly the canonical six; pool kinds
+exactly the five `ResourceKind`s, sizes 1–12; mission kinds in `MissionKind`; severity 1–5;
+`lives_at_risk` 1–64; timeline sorted by tick; **last mission tick + max(`DEADLINE_TICKS`) (= 16)
+≤ 120** (engine loop `while tick < max_ticks`, `kernel/engine.py:127`, `_MAX_TICKS_LIVE = 120`);
+reference mission keys must index mission entries. The pack's SHA-256 (`pack_digest`) is computed
+at load and stamped into the run manifest.
+
+### The compiler (`src/aftershock/data/` — NEW package)
+
+Offline CLI pipeline, one adapter per upstream dataset. Never imported by the engine.
+
+```
+aftershock compile-scenario --adapter sf --config src/aftershock/data/configs/sf-routine.yaml \
+    --out scenarios/sf-routine-2026
+```
+
+Stages (shared skeleton, per the verified research mappings):
+
+1. **Extract** — adapter-specific fetch (SODA query, CSV slice) → raw rows cached to
+   `scenarios/<id>/raw/` (gitignored — add `scenarios/*/raw/` to `.gitignore`; for AFAD this is
+   also a license requirement). Fetch metadata (`fetched_at`, `rows_fetched`, `query_url`) is
+   recorded **once, at extract time**, into `raw/manifest.json`; Emit copies it verbatim. Tests
+   use small committed fixture slices under `tests/fixtures/data/` — **tests never touch network**.
+2. **Aggregate** — group unit rows to incidents; compute per-incident `received`,
+   `first_on_scene = MIN(on_scene over units, nulls dropped)`, unit roster, zone, type, priority.
+   Adapter gotchas live here and are unit-tested (SF: drop battalion junk B99/AMB/XXX, use
+   `original_priority` not `final_priority`; NYC: filter by `valid_*_indc`, never use Fire
+   `highest_alarm_level`).
+3. **Discretize** — windows ÷ `tick_minutes` → ticks; zone→district lookup from config; type→kind
+   mapping; severity rule; `LIVES[kind][severity]` lookup; blockage synthesis rule (or none);
+   **deterministic stratified sampling** to `target_missions` (default 16) via
+   `random.Random(sample_seed)` — compiler-only randomness, recorded in the pack. Pools from
+   observed unit roster scaled by sampling ratio, clamped [2, 6], each marked
+   `observed`/`calibrated` (`observed` only where the dataset actually counts units). Reference
+   aggregates (mean **and** median, plus the named baseline window) over the **full filtered
+   window**, not the sample.
+4. **Emit** — `scenario.json` with sorted keys, stamped `adapter`/`compiler_version`/
+   `config_sha256`, plus a per-pack human `README.md` (source, license, attribution, caveat line).
+
+**Byte-identity scope:** recompiling from identical `raw/` + identical config hash is
+byte-identical (golden test). Re-*fetching* is never byte-stable (SF refreshes daily, NYC
+~quarterly) — which is why fetch metadata is frozen at extract time.
+
+Sampling rationale: a real 12 h city window is 300–2,000 incidents; the society + pool model is
+tuned for ~10–20 missions. Downscaling is stratified (preserves arrival-time distribution and kind
+mix), seeded, and published (`kept`/`total`) rather than silent.
+
+### Engine integration (single touchpoint)
+
+- **`town/scenario.py` (NEW):** pydantic models + `load_scenario(path) -> ScenarioPack` +
+  `town_from_scenario(pack, seed) -> TownState` (districts with display names from the pack, pools
+  from the pack, timeline verbatim, counters zeroed). `state.py` is not modified.
+- **`town/arms.py`:** `build_arm(arm, seed, provider, lessons=None, scenario: ScenarioPack | None
+  = None)`; `world = town_from_scenario(scenario, seed) if scenario else new_town(seed)`
+  (`town/arms.py:101`). `seed` keeps its meaning for every other `rng_for` stream and replay.
+- **`cli.py`:** `aftershock run --scenario <id>` (resolves `scenarios/<id>/scenario.json`); with
+  `--scenario`, `--ticks` defaults to `min(last timeline tick + 20, 120)` — an explicit
+  under-budget `--ticks` is a hard error, not silent truncation. Same for `aftershock verify
+  --scenario <id>` (two-run digest check). `bench` rejects `--scenario` (invariant 3).
+- **Run manifest** (`run.json`) gains `"scenario": {id, name, hazard, tick_minutes, pack_digest,
+  config_sha256, source, field_provenance, caveat_line, reference_aggregates}` — enough for the UI
+  to render provenance without a second fetch. Absent for synthetic runs (UI treats absence as
+  `SYN·QUAKE`).
+
+Mission deadlines remain the `DEADLINE_TICKS` model constants — part of the outcome model, not the
+data (at 12 min/tick, medical_surge's 8-tick deadline = 96 min, defensible). Live injection
+(`/api/live/inject`) keeps working in scenario runs; injected events carry `injected: true`, and
+the index↔id mapping above is injection-safe.
+
+### Web API (`web.py` — additive)
+
+- **`GET /api/scenarios`** — scans `scenarios/` (ids validated against `^[a-z0-9][a-z0-9-]*$`, same
+  traversal-guard pattern as `_validate_run_id`), returns `[{id, name, hazard, tick_minutes,
+  window, missions, sampling: {kept, total}, source: [{dataset, provider, license, attribution}]}]`.
+  **Deliberately ungated** like every existing GET — only POST endpoints are token-gated.
+- **`GET /api/scenarios/{id}`** — full pack including `reference` (the RealityStrip data source).
+- **`POST /api/live`** — `LiveRunRequest` gains `scenario: str | None = None`, and `ticks` changes
+  to `int | None = None` so the server distinguishes "omitted" (default 30 synthetic, `min(last
+  timeline tick + 20, 120)` for scenario) from explicit 30. Unknown scenario id → 404. Pack loads
+  server-side, passes to `build_arm`. Token gate unchanged. Manifest gains the scenario block.
+- **`GET /api/runs`** — `_scan_runs` passes through compact `scenario: {id, name, hazard} | null`;
+  `GET /api/runs/{id}` returns the full block.
+- **Deployment:** `scenarios/` is committed and `COPY`d in the Dockerfile; no runtime network/env.
+
+### Web UI (Phase S4 — surface table, UX-contract-applied)
+
+Honors the task #3 style contract (text floor, hierarchy by weight, effects restraint) and its
+token system; all colors via `palette.ts`. This table is the authoritative ownership map and
+already folds in the 8 UX deltas above.
+
+| Surface | Owns | What it does |
+|---|---|---|
+| **Trigger** | `LiveTab.tsx` (+`api.ts` additive) | SCENARIO select **above** the arm/seed/ticks controls: `SYNTHETIC QUAKE (seed N)` default + one entry per `/api/scenarios` (`IDA · NYC 2021 · 16 missions`). Selecting a real pack **auto-prefills ticks and visually de-emphasizes the ticks input** (delta 6). Seed still seeds the agents. POST includes `scenario`. Token flow unchanged. |
+| **Badges** | `RunPicker.tsx`, `palette.ts` (additive), `types.ts`, `CompareTab.tsx` (additive) | Hazard chip: **dim in RunPicker rows**, **stronger in the run/side header** (delta 7). `SYN·QUAKE` (dim) vs `REAL·IDA NYC` (signal accent) from a new `palette.ts` hazard map. CompareTab renders its own per-side header inside `SidePanel` (`CompareTab.tsx:389`); add the chip there (or extract a shared `RunHeader` — implementer's choice). |
+| **Provenance** | `ProvenancePanel.tsx` (NEW) | A `DATA` chip opens a **deep-dive** panel: source table (dataset · provider · license · fetched_at · query URL, monospaced, copyable), mapping version + rules verbatim, `config_sha256` + `compiler_version`, sampling line ("16 of N incidents, stratified, seed 4636"), and the field-provenance grid. **Badge tiers (delta 5): solid fill = REAL, ghost/dotted border = MAPPED/INFERRED/SYNTHETIC; neutral colors only (no amber/cyan).** Footer: attribution line(s) verbatim. The *summary* of honesty is NOT hidden here — see RealityStrip. |
+| **Reality baseline** | `RealityStrip.tsx` (NEW) | **Scenario-level, one instance (delta 2).** MapTab: a **map footer pinned above the Scrubber**. CompareTab: **one shared band under `DeltaStripView`** comparing *both* arms' sim latency to the *single* real baseline — never per-`SidePanel`; render only when both sides share the scenario, else suppress. Content: REAL mean/median first-on-scene (grey, labeled **mean** or **median** to match the field) vs AGENTS mean **spawn→first-arrival** (`ticks × tick_minutes`, arm color) · held-rate pair where present · always-visible inline summary `REAL demand · REAL latency · INFERRED lives` + the pack caveat line (not dismissible) · sub-caption **"Same real demand; simulated dispatch & travel differ."** (delta 3, 4). Prefer a paired-bar chartlet (grey vs arm color) over raw numbers. |
+| **Map names + popover** | `TownMap.tsx` (additive) | **P0 (delta 1):** district labels are hardcoded in `DISTRICT_LAYOUT` (`TownMap.tsx:26–32`, rendered `:396`); `world.districts[].name` reaches the frontend (`state.py:196`, `types.ts:5`) but the map ignores it. Change the label source to `world.districts[id]?.name ?? DISTRICT_LAYOUT[id].label` (geometry stays keyed by canonical id), so `nyc-ida-2021` renders "Manhattan" not "Old Town". **Mission popover (delta 8, KEPT):** two scenario lines `first on scene (real): 14 min` / `agents (sim): 24 min` from `reference.missions` via the injection-safe index map; `lives_at_risk` gets an `INFERRED` **ghost badge**. Grow the popover height math; keep 9px mono; verify 1080p legibility. |
+| **Integration** | `App.tsx`, `MapTab.tsx` (mount edits) | Mounts the `DATA` chip in the app header (`App.tsx:165` area) and `RealityStrip` as the MapTab map-footer / the CompareTab shared band when `run.scenario` is present. Final density sweep. |
+
+### Packs to ship
+
+| Pack | Source (verified 2026-06-11) | Role | Ground truth |
+|---|---|---|---|
+| `sf-routine-2026` | DataSF `nuek-vuh3` (SODA, keyless, **PDDL**), 7.34 M rows | **MVP** — cleanest single source, builds the compiler | Real demand + real per-unit latency |
+| `nyc-ida-2021` | NYC Open Data `76xm-jjuj` + `8m42-w767` (keyless); Ida window: 2,003 EMS incidents, 16.5 % held, **avg** 948 s (vs avg 538 s in 2012-10-15/16 normal window; adapter computes an Ida-adjacent baseline) | **Headline** — real disaster surge | Real demand + latency + held-rate |
+| `tur-2023` *(optional, deferred)* | AFAD `apiv2/event/filter` + USGS ComCat/ShakeMap/PAGER for `us6000jllz` | On-theme showpiece — real M7.7→M7.6 doublet | Hazard only — demand/response synthesized; no `reference`, so RealityStrip does not render; caveat *"Hazard timing: real · Demand & outcomes: simulated model"* |
+
+Licensing for `tur-2023`: AFAD has **no formal open license** — attribution required, **do not
+commit/redistribute the raw catalog** (`raw/` gitignored). USGS products are US public domain
+("Credit: U.S. Geological Survey"). SF/NYC mapping decisions (call-type → kind tables, severity
+rules, null-handling) are in §2 of the research report — implemented as config YAMLs, not code.
+
+### Testing & definition of done
+
+- **Compiler:** unit tests per adapter against committed fixtures (no network); golden-file test
+  (recompile from identical `raw/` fixture + config → byte-identical `scenario.json`); sampling
+  determinism (same `sample_seed` → same `kept` set).
+- **Pack loading:** pydantic rejection tests (bad district id, severity 0/6, unsorted timeline,
+  unknown pool kind, reference key out of range, last-mission-tick + 16 > 120).
+- **Engine:** `aftershock verify --scenario sf-routine-2026` passes (two runs, identical digests);
+  scripted-arm e2e on a fixture pack resolves/fails missions and spawned count == `sampling.kept`;
+  under-budget explicit `--ticks` errors; `bench --scenario` errors.
+- **API:** `/api/scenarios` list + detail; `POST /api/live` unknown scenario → 404, valid →
+  manifest scenario block + server-side ticks default when omitted; `/api/runs` carries the
+  compact summary; path-traversal probes on scenario id → 404.
+- **Web:** `npm run build` + `npx tsc --noEmit` clean; vitest for RealityStrip math
+  (ticks×tick_minutes, null-latency), the injection-safe index↔mission-id map (with/without
+  injected spawns), provenance badge rendering (2-tier), district-name fallback, **and the kept
+  popover latency lines + INFERRED ghost-badge**; existing single-run and compare behaviour
+  unchanged when `run.scenario` is null.
+- **Docs:** README "Real-data scenarios" subsection with attribution lines; per-pack `README.md`
+  committed alongside each `scenario.json`.
+
+### Phasing & effort
+
+All phases unblocked (task #3 merged). S1–S3 and S4 share no files.
+
+| Phase | Scope | Files | Est. |
+|---|---|---|---|
+| **S1** | `town/scenario.py`, `town/arms.py`, `cli.py`, tests | engine-side only | 0.5–1 d |
+| **S2** | compiler package + SF adapter + `sf-routine-2026` pack + fixtures | `src/aftershock/data/`, `scenarios/`, `.gitignore` | 1–2 d |
+| **S3** | API endpoints + manifest plumbing + Dockerfile COPY | `web.py`, `Dockerfile` | 0.5–1 d |
+| **S4** | UI per surface table (UX-contract-applied) | `web/src/**` | 1.5–2 d |
+| **S5** | `nyc-ida-2021` (EMS+Fire join, computed baseline window) | adapter + pack | 1–2 d |
+| **S6** *(deferred)* | `tur-2023` (AFAD+ShakeMap) | adapter + pack | 2–3 d |
+
+This pass = **S1–S5** (headline: SF compiler + NYC Ida).
+
+**Deferred (explicit non-goals):** all-hazards engine vocabulary (scenario-defined mission/resource
+kinds, dynamics packs) — post-hackathon v2; live re-fetching of upstream data at run time (never —
+invariant 2); scenario packs in `bench` (invariant 3); renaming injection kinds per hazard;
+`tur-2023` pack (S6).
+
 ## After-action reports and the memory loop (`src/aftershock/llm/aar.py`)
 
 At the end of a society run, the flagship model writes the analysis — completing the
