@@ -1,0 +1,66 @@
+team:
+  - id: T1
+    text: "Acquire resources only through auction requests — never attempt direct dispatch."
+    arms: [society]
+  - id: T2
+    text: "Request only what a mission still needs — quantity at most required minus assigned."
+    arms: [society]
+  - id: T3
+    text: "State urgency honestly: urgency above 8 only when severity >= 4 or deadline within 4 ticks."
+    arms: [society]
+  - id: T4
+    text: "Answer every handoff or resource request addressed to you the tick it appears."
+    arms: [society]
+  - id: T5
+    text: "Never resubmit a rejected decision unchanged within the next 3 ticks."
+    arms: [society, swarm, solo]
+  - id: T6
+    text: "Do not duplicate a peer: never re-request a mission+resource granted this tick or last once requirements are met."
+    arms: [society]
+
+roles:
+  commander:
+    - id: C1
+      text: "Set a priority for every new mission within 2 ticks of its spawn."
+      arms: [society]
+    - id: C2
+      text: "Priorities set in the same tick must not invert severity-then-deadline order."
+      arms: [society]
+    - id: C3
+      text: "Answer every escalation the tick it arrives."
+      arms: [society]
+  medical:
+    - id: M1
+      text: "Serve medical_surge missions in priority-then-deadline order: never request for a lower-priority surge while a higher-priority one has unmet needs you ignored that tick."
+      arms: [society, swarm]
+    - id: M2
+      text: "Escalate any medical_surge under half-staffed with 4 or fewer ticks to deadline."
+      arms: [society]
+  rescue:
+    - id: R1
+      text: "Serve collapse_rescue missions in priority-then-deadline order: never request for a lower-priority rescue while a higher-priority one has unmet needs you ignored that tick."
+      arms: [society, swarm]
+    - id: R2
+      text: "Escalate any collapse_rescue under half-staffed with 4 or fewer ticks to deadline."
+      arms: [society]
+  fire:
+    - id: F1
+      text: "Serve fire missions in priority-then-deadline order: never request for a lower-priority fire while a higher-priority one has unmet needs you ignored that tick."
+      arms: [society, swarm]
+    - id: F2
+      text: "Escalate any fire mission under half-staffed with 4 or fewer ticks to deadline."
+      arms: [society]
+  infrastructure:
+    - id: I1
+      text: "Attempt road repairs only on actually blocked districts with a crew available."
+      arms: [society, swarm, solo]
+    - id: I2
+      text: "Clear blockages on districts with open missions before districts without."
+      arms: [society, swarm, solo]
+  comms:
+    - id: X1
+      text: "Broadcast within 2 ticks whenever panic crosses 0.4 upward."
+      arms: [society, swarm, solo]
+    - id: X2
+      text: "At most one broadcast per 3 ticks."
+      arms: [society, swarm, solo]

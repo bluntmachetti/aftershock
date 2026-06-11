@@ -843,6 +843,88 @@ def test_live_aar_and_memory_end_to_end(tmp_path: Path, monkeypatch: pytest.Monk
     assert len(first_entry["lessons"]) >= 1
 
 
+# ---------------------------------------------------------------------------
+# Tests: GET /api/runs/{run_id}/conformance
+# ---------------------------------------------------------------------------
+
+
+def _make_conformance_fixture() -> dict[str, Any]:
+    return {
+        "arm": "scripted",
+        "seed": 7,
+        "rules": {},
+        "role_conformance": {"commander": 1.0, "medical": 0.95},
+        "team_alignment": 0.98,
+        "notes": [],
+    }
+
+
+def test_conformance_endpoint_404_when_absent(seeded_runs_root: tuple[Path, str]) -> None:
+    """GET /api/runs/{run_id}/conformance returns 404 when conformance.json is absent."""
+    root, run_id = seeded_runs_root
+    app = create_app(root)
+    with TestClient(app) as client:
+        resp = client.get(f"/api/runs/{run_id}/conformance")
+    assert resp.status_code == 404
+
+
+def test_conformance_endpoint_200_after_fixture_written(
+    seeded_runs_root: tuple[Path, str],
+) -> None:
+    """GET /api/runs/{run_id}/conformance returns 200 with data after conformance.json exists."""
+    root, run_id = seeded_runs_root
+    conf_data = _make_conformance_fixture()
+    (root / run_id / "conformance.json").write_text(
+        json.dumps(conf_data), encoding="utf-8"
+    )
+
+    app = create_app(root)
+    with TestClient(app) as client:
+        resp = client.get(f"/api/runs/{run_id}/conformance")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["arm"] == "scripted"
+    assert body["team_alignment"] == pytest.approx(0.98)
+    assert "role_conformance" in body
+
+
+@pytest.mark.parametrize("bad_id", [
+    "../etc",
+    "..%2fetc",
+    "%2e%2e",
+    "/etc/passwd",
+    "a/b",
+    "a\\b",
+])
+def test_conformance_traversal_rejected(runs_root: Path, bad_id: str) -> None:
+    """Path traversal on /api/runs/{run_id}/conformance must be rejected 404/422."""
+    app = create_app(runs_root)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        resp = client.get(f"/api/runs/{bad_id}/conformance")
+    assert resp.status_code in (404, 422), (
+        f"Expected 404/422 for traversal {bad_id!r}, got {resp.status_code}"
+    )
+
+
+def test_conformance_no_lazy_generation(seeded_runs_root: tuple[Path, str]) -> None:
+    """Conformance endpoint must NOT generate conformance.json server-side when absent.
+
+    The file must remain absent after a 404 response.
+    """
+    root, run_id = seeded_runs_root
+    conf_path = root / run_id / "conformance.json"
+    assert not conf_path.exists(), "pre-condition: conformance.json should not exist"
+
+    app = create_app(root)
+    with TestClient(app) as client:
+        resp = client.get(f"/api/runs/{run_id}/conformance")
+
+    assert resp.status_code == 404
+    assert not conf_path.exists(), (
+        "conformance.json must not be generated lazily by the server"
+    )
+
+
 def test_live_memory_loads_lessons_into_commander(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

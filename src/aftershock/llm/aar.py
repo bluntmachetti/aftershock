@@ -44,6 +44,7 @@ class AAR_SCHEMA(BaseModel):
     coordination_failures: list[str] = Field(default_factory=list)
     key_moments: list[KeyMoment] = Field(default_factory=list)
     lessons: list[str] = Field(default_factory=list, max_length=5)
+    doctrine_notes: list[str] = Field(default_factory=list)
 
     @field_validator("grade")
     @classmethod
@@ -63,6 +64,11 @@ class AAR_SCHEMA(BaseModel):
                     f"lessons[{i}] exceeds 140 chars (len={len(lesson)}): {lesson[:60]!r}..."
                 )
         return v
+
+    @field_validator("doctrine_notes")
+    @classmethod
+    def _validate_doctrine_notes(cls, v: list[str]) -> list[str]:
+        return v[:3]
 
 
 # ---------------------------------------------------------------------------
@@ -227,10 +233,82 @@ def build_run_digest(manifest: dict[str, Any], ticks: list[TickRecord]) -> str:
         lines.append("  (none)")
 
     result = "\n".join(lines)
-    # Bound to < ~3500 chars
-    if len(result) > 3500:
-        result = result[:3500]
+    # Bound to < ~4500 chars (raised from 3500 to accommodate doctrine section)
+    if len(result) > 4500:
+        result = result[:4500]
     return result
+
+
+def _build_doctrine_section(run_dir: Path) -> str:
+    """Build the =====DOCTRINE===== digest section from conformance.json if present.
+
+    Returns an empty string when conformance.json is absent.
+
+    Section content:
+    - Team alignment rate
+    - Per-rule violation counts with rule text (from doctrine.yaml)
+    - Top 5 concrete violations (tick + detail)
+    """
+    conf_path = run_dir / "conformance.json"
+    if not conf_path.exists():
+        return ""
+
+    try:
+        report = json.loads(conf_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return ""
+
+    from aftershock.town.doctrine import load_doctrine
+
+    try:
+        rules = load_doctrine()
+        rule_text_map = {r.id: r.text for r in rules}
+    except Exception:  # noqa: BLE001
+        rule_text_map = {}
+
+    lines: list[str] = []
+    lines.append("=== DOCTRINE ===")
+
+    ta = report.get("team_alignment", 1.0)
+    lines.append(f"  team_alignment={ta:.3f}")
+    lines.append("")
+
+    # Per-rule violation counts with rule text
+    rules_report = report.get("rules", {})
+    rule_summary_lines: list[str] = []
+    for rule_id in sorted(rules_report.keys()):
+        agent_data = rules_report[rule_id]
+        total_violations = sum(len(d.get("violations", [])) for d in agent_data.values())
+        if total_violations == 0:
+            continue
+        rule_text = rule_text_map.get(rule_id, "")
+        short_text = rule_text[:80] + "..." if len(rule_text) > 80 else rule_text
+        rule_summary_lines.append(
+            f"  {rule_id}: {total_violations} violation(s) — {short_text}"
+        )
+
+    if rule_summary_lines:
+        lines.append("Rule violations:")
+        lines.extend(rule_summary_lines)
+        lines.append("")
+
+    # Top 5 concrete violations across all rules/agents
+    all_violations: list[tuple[int, str, str, str]] = []  # (tick, rule_id, agent_id, detail)
+    for rule_id, agent_data in rules_report.items():
+        for agent_id, data in agent_data.items():
+            for v in data.get("violations", []):
+                all_violations.append((v["tick"], rule_id, agent_id, v["detail"]))
+
+    all_violations.sort(key=lambda x: x[0])
+    top5 = all_violations[:5]
+
+    if top5:
+        lines.append("Top violations:")
+        for tick, rule_id, agent_id, detail in top5:
+            lines.append(f"  t={tick} [{rule_id}] {agent_id}: {detail[:100]}")
+        lines.append("")
+
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +330,9 @@ _AAR_USER_TEMPLATE = (
     'Output a JSON object with these fields: "headline" (str), "grade" (A/B/C/D/F), '
     '"what_worked" (list[str]), "coordination_failures" (list[str]), '
     '"key_moments" (list of {{tick: int, description: str}}), '
-    '"lessons" (list of at most 5 imperative strings, each at most 140 chars). '
+    '"lessons" (list of at most 5 imperative strings, each at most 140 chars), '
+    '"doctrine_notes" (optional list of at most 3 strings referencing doctrine rule ids '
+    'from the DOCTRINE section, e.g. "T5 violated 3 times — agents repeated rejected decisions"). '
     "Output ONLY valid JSON."
 )
 
@@ -265,15 +345,26 @@ async def generate_aar(
     """Generate an after-action report for a completed run.
 
     Steps:
-    1. Load the run (manifest + tick records).
-    2. Build the run digest.
-    3. Call the LLM with the digest.
-    4. Validate against AAR_SCHEMA.
-    5. Write aar.json with usage/cost included.
-    6. Return the report dict.
+    1. Run check_run to produce/update conformance.json.
+    2. Load the run (manifest + tick records).
+    3. Build the run digest (includes DOCTRINE section when conformance.json exists).
+    4. Call the LLM with the digest.
+    5. Validate against AAR_SCHEMA.
+    6. Write aar.json with usage/cost included.
+    7. Return the report dict.
     """
+    # Step 1: run conformance check first so the doctrine section is available
+    import contextlib
+
+    from aftershock.town.conformance import check_run as _check_run
+
+    with contextlib.suppress(Exception):
+        _check_run(run_dir)
+
     manifest, ticks, _worlds = load_run(run_dir)
-    digest_text = build_run_digest(manifest, ticks)
+    base_digest = build_run_digest(manifest, ticks)
+    doctrine_section = _build_doctrine_section(run_dir)
+    digest_text = base_digest + "\n\n" + doctrine_section if doctrine_section else base_digest
 
     user = _AAR_USER_TEMPLATE.format(digest=digest_text)
     result = await provider.chat(

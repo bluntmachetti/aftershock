@@ -124,6 +124,24 @@ def run_bench(
                 "models": models,
             }
 
+            # Conformance metrics: run check_run and attach team_alignment / role_conformance.
+            # Failure must never prevent summary.json from being written.
+            try:
+                from aftershock.town.conformance import check_run as _check_run
+
+                conf = _check_run(cell_dir)
+                cell_summary["team_alignment"] = conf.get("team_alignment")
+                cell_summary["role_conformance"] = conf.get("role_conformance")
+            except Exception as exc:  # noqa: BLE001
+                # Keys absent -> aggregate treats them as null; but never silently:
+                # a conformance failure on a fresh cell is a bug worth seeing.
+                import sys
+
+                print(
+                    f"warning: conformance check failed for {cell_dir.name}: {exc!r}",
+                    file=sys.stderr,
+                )
+
             summary_path.write_text(
                 json.dumps(cell_summary, indent=2, sort_keys=True),
                 encoding="utf-8",
@@ -213,6 +231,14 @@ def aggregate(cells: list[dict[str, Any]]) -> dict[str, Any]:
         if stat["mean_cost_usd"] > 0:
             stat["lives_per_dollar"] = stat["mean_lives_saved"] / stat["mean_cost_usd"]
 
+        # team_alignment: mean across cells that have the key; null when none do
+        ta_vals = [
+            float(c["team_alignment"])
+            for c in arm_cells
+            if c.get("team_alignment") is not None
+        ]
+        stat["mean_team_alignment"] = _mean(ta_vals) if ta_vals else None
+
         arm_stats[arm] = stat
 
     # Per-seed paired lives_saved table: {arm: {seed: lives_saved}}
@@ -253,9 +279,10 @@ def render_markdown(agg: dict[str, Any]) -> str:
         "| arm | n | mean_lives_saved | sd | mean_lives_lost | sd |"
         " mean_missions_resolved | mean_missions_failed |"
         " mean_cost_usd | mean_wall_s | lives_per_dollar (= mean lives / mean cost) |"
+        " mean_team_alignment |"
     )
     sep = (
-        "|---|---|---|---|---|---|---|---|---|---|---|"
+        "|---|---|---|---|---|---|---|---|---|---|---|---|"
     )
     lines.append(header)
     lines.append(sep)
@@ -263,6 +290,8 @@ def render_markdown(agg: dict[str, Any]) -> str:
     for arm in sorted_arms:
         s = arm_stats[arm]
         lpd = f"{s['lives_per_dollar']:.4f}" if "lives_per_dollar" in s else "—"
+        ta = s.get("mean_team_alignment")
+        ta_str = f"{ta:.3f}" if ta is not None else "—"
         row = (
             f"| {arm} "
             f"| {s['n']} "
@@ -274,7 +303,8 @@ def render_markdown(agg: dict[str, Any]) -> str:
             f"| {s['mean_missions_failed']:.2f} "
             f"| {s['mean_cost_usd']:.4f} "
             f"| {s['mean_wall_s']:.2f} "
-            f"| {lpd} |"
+            f"| {lpd} "
+            f"| {ta_str} |"
         )
         lines.append(row)
 

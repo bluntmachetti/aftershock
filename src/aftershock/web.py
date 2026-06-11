@@ -383,6 +383,27 @@ def create_app(
         })
 
     # ------------------------------------------------------------------
+    # GET /api/runs/{run_id}/conformance
+    # ------------------------------------------------------------------
+
+    @app.get("/api/runs/{run_id}/conformance")
+    async def run_conformance(run_id: str) -> JSONResponse:
+        _CONF_MAX_BYTES = 1024 * 1024  # 1 MB cap
+
+        run_dir = _validate_run_id(run_id, runs_root)
+        conf_path = run_dir / "conformance.json"
+        if not conf_path.exists():
+            raise HTTPException(status_code=404, detail="conformance not found")
+        try:
+            raw_bytes = conf_path.read_bytes()
+            if len(raw_bytes) > _CONF_MAX_BYTES:
+                raise ValueError("conformance.json exceeds size cap")
+            data = json.loads(raw_bytes.decode("utf-8"))
+        except Exception:  # noqa: BLE001
+            raise HTTPException(status_code=404, detail="conformance not found") from None
+        return JSONResponse(data)
+
+    # ------------------------------------------------------------------
     # GET /api/runs/{run_id}/aar
     # ------------------------------------------------------------------
 

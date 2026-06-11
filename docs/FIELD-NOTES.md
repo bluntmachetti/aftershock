@@ -132,3 +132,26 @@ log exists.
   heavy casualties; we report both.
 - **Negative results get published** (notes 5, 8). They are the reason to believe
   the positive ones.
+
+## 11. Written doctrine raises conformance — outcomes TBD (2026-06-11)
+
+**Observed:** we gave every agent a two-tier playbook (six shared coordination rules,
+two-three role rules each) and built a deterministic conformance checker over the run
+records (no LLM judging; scripted agents calibrate it at 1.0 team alignment). On the
+same seed: doctrine-naive agents scored **0.759** team alignment; with the doctrine in
+their prompts, **0.904** — five of six roles improved (comms 0.83→1.00, rescue
+0.63→0.84), infrastructure improved but remains the chronic offender (0.56→0.69, still
+attempting repairs with no crew available).
+
+**Tension to resolve:** the doctrine run saved *fewer* lives (96 vs 113, n=1). Possibly
+noise — but it rhymes with note 8: every instruction added to a prompt has a cost, and
+discipline is not automatically performance. A paired doctrine-on/off comparison across
+seeds is queued; until then we claim the conformance effect, not an outcome effect.
+
+**Also:** verifying the checkers was its own lesson. Of twelve review findings against
+the conformance engine, the confirmed ones were almost all *measurement* bugs —
+degenerate denominators (rules whose "applicable" count only incremented on violation,
+making rates 0-or-1), rules applied to arms whose protocol makes them impossible, and a
+calibration test that passed vacuously because 16 of 19 rules never occurred in the
+calibration scenario. Measuring agent behavior is as bug-prone as the behavior itself;
+our anti-vacuity guard now asserts the calibration actually exercises its rules.

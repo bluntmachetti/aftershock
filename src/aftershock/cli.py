@@ -406,6 +406,25 @@ def cmd_aar(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_conformance(args: argparse.Namespace) -> int:
+    """Check a completed run against all 18 doctrine rules."""
+    run_dir = Path(args.run_dir)
+    if not run_dir.exists():
+        print(f"error: run directory not found: {run_dir}", file=sys.stderr)
+        return 1
+
+    from aftershock.town.conformance import check_run, render_markdown
+
+    report = check_run(run_dir)
+
+    if getattr(args, "json", False):
+        print(json.dumps(report, indent=2, sort_keys=True))
+    else:
+        print(render_markdown(report))
+
+    return 0
+
+
 def cmd_episodes(args: argparse.Namespace) -> int:
     """Run N sequential society runs with AAR+memory between them.
 
@@ -616,6 +635,18 @@ def main() -> None:
         help="Display an existing aar.json without regenerating (no API key required)",
     )
 
+    # conformance
+    p_conformance = sub.add_parser(
+        "conformance",
+        help="Check a completed run against all 18 doctrine rules",
+    )
+    p_conformance.add_argument("run_dir", help="Path to the run directory")
+    p_conformance.add_argument(
+        "--json",
+        action="store_true",
+        help="Output raw JSON instead of markdown",
+    )
+
     # episodes
     p_episodes = sub.add_parser(
         "episodes",
@@ -655,3 +686,5 @@ def main() -> None:
         sys.exit(cmd_aar(args))
     elif args.command == "episodes":
         sys.exit(cmd_episodes(args))
+    elif args.command == "conformance":
+        sys.exit(cmd_conformance(args))

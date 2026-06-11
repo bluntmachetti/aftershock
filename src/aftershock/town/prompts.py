@@ -15,6 +15,7 @@ from aftershock.kernel.roles import RoleSpec
 from aftershock.llm.agent import LLMAgent
 from aftershock.llm.contract import decision_contract
 from aftershock.llm.provider import Provider
+from aftershock.town.doctrine import Rule, doctrine_blocks, load_doctrine
 
 # ---------------------------------------------------------------------------
 # Decision documentation (one line per handler registered in decisions.py)
@@ -120,28 +121,53 @@ def build_llm_agents(
     roles: dict[str, RoleSpec],
     provider: Provider,
     lessons: list[str] | None = None,
+    arm: str = "society",
+    _doctrine_rules: list[Rule] | None = None,
 ) -> dict[str, Agent]:
     """Build one LLMAgent per town role, sharing the same provider instance.
 
     The contract is built once per role from DECISION_DOCS/PROPOSAL_DOCS filtered
-    to the role's allowed_decisions.
+    to the role's allowed_decisions.  Doctrine blocks (from doctrine.yaml) are
+    inserted between the role system_prompt and the contract.
 
     When lessons are provided, the commander's system_prompt gains a final block:
     "LESSONS FROM PREVIOUS DISASTERS (apply where relevant):" + numbered lessons.
     Other roles are unchanged.
+
+    Doctrine load failure raises at build time — a missing or malformed doctrine.yaml
+    is a configuration error that must not be silently skipped.
 
     Args:
         roles: mapping loaded by load_roles() — must contain all six town roles.
         provider: a Provider instance (QwenProvider or MockProvider).
         lessons: optional list of lesson strings from a previous AAR memory loop.
                  Applied to the commander only; other roles are unaffected.
+        arm: the benchmark arm name used to filter doctrine rules (default "society").
+        _doctrine_rules: pre-loaded rules list; if None, load_doctrine() is called.
+                         Exposed for testing only.
 
     Returns:
         dict mapping agent_id -> LLMAgent for all six town agents.
+
+    Raises:
+        ValueError: if doctrine.yaml contains duplicate rule ids.
+        FileNotFoundError: if doctrine.yaml is missing.
     """
+    # Load doctrine once; failure must raise at build time (not silently skipped)
+    rules: list[Rule] = _doctrine_rules if _doctrine_rules is not None else load_doctrine()
+
     agents: dict[str, Agent] = {}
     for agent_id in _TOWN_AGENT_IDS:
         role = roles[agent_id]
+
+        # Build the doctrine block for this role+arm
+        blocks = doctrine_blocks(rules, role=agent_id, arm=arm)
+
+        # Compose the system prompt: role prompt + optional doctrine + lessons (commander)
+        system_prompt = role.system_prompt
+
+        if blocks:
+            system_prompt = system_prompt + "\n\n" + blocks
 
         # Inject lessons into the commander's system prompt only
         if lessons and agent_id == "commander":
@@ -149,10 +175,11 @@ def build_llm_agents(
             lessons_block = (
                 "\n\nLESSONS FROM PREVIOUS DISASTERS (apply where relevant):\n" + numbered
             )
-            # RoleSpec is frozen; create a copy with the augmented system_prompt
-            role = role.model_copy(
-                update={"system_prompt": role.system_prompt + lessons_block}
-            )
+            system_prompt = system_prompt + lessons_block
+
+        # RoleSpec is frozen; create a copy with the augmented system_prompt if changed
+        if system_prompt != role.system_prompt:
+            role = role.model_copy(update={"system_prompt": system_prompt})
 
         contract = decision_contract(
             allowed=role.allowed_decisions,

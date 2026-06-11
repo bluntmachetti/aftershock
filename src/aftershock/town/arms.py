@@ -22,6 +22,7 @@ from aftershock.kernel.roles import RoleSpec, load_roles
 from aftershock.llm.agent import LLMAgent
 from aftershock.llm.contract import decision_contract
 from aftershock.town.decisions import register_all
+from aftershock.town.doctrine import doctrine_blocks, load_doctrine
 from aftershock.town.heuristics import (
     CommanderScripted,
     CommsScripted,
@@ -30,7 +31,7 @@ from aftershock.town.heuristics import (
     MedicalScripted,
     RescueScripted,
 )
-from aftershock.town.prompts import DECISION_DOCS_DIRECT, build_llm_agents
+from aftershock.town.prompts import DECISION_DOCS_DIRECT, build_llm_agents  # noqa: E402
 from aftershock.town.society import TownResolver, TownSociety
 from aftershock.town.state import TownState, new_town
 
@@ -161,7 +162,7 @@ def _build_society(
     _six = ("commander", "comms", "fire", "infrastructure", "medical", "rescue")
     roster = {aid: aid for aid in _six}
     society = TownSociety(roster=roster)
-    agents = build_llm_agents(roles, provider, lessons=lessons)
+    agents = build_llm_agents(roles, provider, lessons=lessons, arm="society")
     return ArmSetup(
         world=world,
         society=society,
@@ -183,8 +184,15 @@ def _build_swarm(
     # Roster: agent_id == role name for the five swarm roles
     roster = {name: name for name in roles}
     society = TownSociety(roster=roster)
+    # Load doctrine once; failure raises at build time
+    rules = load_doctrine()
     agents: dict[str, Agent] = {}
     for agent_id, role in roles.items():
+        blocks = doctrine_blocks(rules, role=agent_id, arm="swarm")
+        if blocks:
+            role = role.model_copy(
+                update={"system_prompt": role.system_prompt + "\n\n" + blocks}
+            )
         contract = decision_contract(
             allowed=role.allowed_decisions,
             decision_docs=DECISION_DOCS_DIRECT,
@@ -217,6 +225,13 @@ def _build_solo(
     solo_role = roles["solo"]
     roster = {"solo": "solo"}
     society = TownSociety(roster=roster)
+    # Load doctrine once; failure raises at build time
+    rules = load_doctrine()
+    blocks = doctrine_blocks(rules, role="solo", arm="solo")
+    if blocks:
+        solo_role = solo_role.model_copy(
+            update={"system_prompt": solo_role.system_prompt + "\n\n" + blocks}
+        )
     contract = decision_contract(
         allowed=solo_role.allowed_decisions,
         decision_docs=DECISION_DOCS_DIRECT,

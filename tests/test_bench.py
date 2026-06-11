@@ -548,3 +548,113 @@ def test_render_markdown_lives_per_dollar_formula_in_header() -> None:
     assert "mean lives / mean cost" in md, (
         "lives_per_dollar column header must disclose ratio-of-means formula"
     )
+
+
+# ---------------------------------------------------------------------------
+# team_alignment in cell summary, aggregate, and markdown table
+# ---------------------------------------------------------------------------
+
+
+def _make_cell_with_ta(
+    arm: str,
+    seed: int,
+    lives_saved: float,
+    team_alignment: float | None,
+) -> dict[str, Any]:
+    cell = _make_cell(arm, seed, lives_saved, 0.0, 1.0, 0.0, 0.0, 1.0)
+    if team_alignment is not None:
+        cell["team_alignment"] = team_alignment
+    return cell
+
+
+def test_aggregate_team_alignment_mean() -> None:
+    """aggregate must compute mean_team_alignment across cells that have the key."""
+    cells = [
+        _make_cell_with_ta("society", 1, 10.0, 0.8),
+        _make_cell_with_ta("society", 2, 12.0, 0.6),
+    ]
+    agg = aggregate(cells)
+    arm = agg["arms"]["society"]
+    assert "mean_team_alignment" in arm
+    assert math.isclose(arm["mean_team_alignment"], 0.7, rel_tol=1e-9)
+
+
+def test_aggregate_team_alignment_null_when_all_missing() -> None:
+    """aggregate must set mean_team_alignment=None when no cells have the key."""
+    cells = [
+        _make_cell_with_ta("scripted", 1, 5.0, None),
+        _make_cell_with_ta("scripted", 2, 7.0, None),
+    ]
+    agg = aggregate(cells)
+    arm = agg["arms"]["scripted"]
+    assert "mean_team_alignment" in arm
+    assert arm["mean_team_alignment"] is None
+
+
+def test_aggregate_team_alignment_partial_null_uses_present_cells() -> None:
+    """When only some cells have team_alignment, aggregate uses only those values.
+
+    An older cell without the key must not be treated as 0.
+    """
+    cells = [
+        _make_cell_with_ta("swarm", 1, 10.0, 0.9),
+        _make_cell_with_ta("swarm", 2, 12.0, None),  # older cell, key absent
+    ]
+    agg = aggregate(cells)
+    arm = agg["arms"]["swarm"]
+    # Only one value (0.9) contributes; result should be 0.9, not 0.45
+    assert arm["mean_team_alignment"] is not None
+    assert math.isclose(arm["mean_team_alignment"], 0.9, rel_tol=1e-9)
+
+
+def test_render_markdown_team_alignment_column_present() -> None:
+    """render_markdown must include 'mean_team_alignment' column header."""
+    cells = [_make_cell_with_ta("society", 1, 10.0, 0.85)]
+    agg = aggregate(cells)
+    md = render_markdown(agg)
+    assert "mean_team_alignment" in md, (
+        "'mean_team_alignment' column missing from benchmark table"
+    )
+
+
+def test_render_markdown_team_alignment_dash_when_null() -> None:
+    """Arms with no team_alignment data must show '—' in the table."""
+    cells = [_make_cell_with_ta("scripted", 1, 5.0, None)]
+    agg = aggregate(cells)
+    md = render_markdown(agg)
+    assert "—" in md
+
+
+def test_render_markdown_team_alignment_value_shown() -> None:
+    """render_markdown must show the numeric team_alignment value for arms that have it."""
+    cells = [_make_cell_with_ta("society", 1, 10.0, 0.920)]
+    agg = aggregate(cells)
+    md = render_markdown(agg)
+    # 0.920 formatted to 3 decimal places
+    assert "0.920" in md
+
+
+def test_end_to_end_scripted_cell_has_team_alignment() -> None:
+    """run_bench on a scripted cell must produce team_alignment in summary.json."""
+    with tempfile.TemporaryDirectory() as td:
+        out_dir = Path(td)
+        manifest: dict[str, Any] = {
+            "ticks": 8,
+            "seeds": [42],
+            "arms": ["scripted"],
+        }
+        cells = run_bench(manifest, provider=None, out_dir=out_dir)
+        assert len(cells) == 1
+        cell = cells[0]
+        assert "team_alignment" in cell, (
+            "summary.json must include 'team_alignment' after run_bench"
+        )
+        ta = cell["team_alignment"]
+        assert ta is None or isinstance(ta, float), (
+            f"team_alignment must be a float or None, got {ta!r}"
+        )
+
+        # Verify it is also in the written summary.json
+        summary_path = out_dir / "scripted-seed42" / "summary.json"
+        on_disk = json.loads(summary_path.read_text(encoding="utf-8"))
+        assert "team_alignment" in on_disk

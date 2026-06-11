@@ -170,6 +170,29 @@ export interface AarReport {
   coordination_failures: string[]
   key_moments: AarKeyMoment[]
   lessons: string[]
+  doctrine_notes?: string[]
+}
+
+// ---- Conformance report types (matching conformance.json shape from DESIGN.md) ----
+
+export interface ConformanceViolation {
+  tick: number
+  detail: string
+}
+
+export interface ConformanceAgentRule {
+  applicable: number
+  violations: ConformanceViolation[]
+  rate: number
+}
+
+export interface ConformanceReport {
+  arm: string
+  seed: number
+  rules: Record<string, Record<string, ConformanceAgentRule>>
+  role_conformance: Record<string, number>
+  team_alignment: number
+  notes: string[]
 }
 
 export interface LiveWsMessage {

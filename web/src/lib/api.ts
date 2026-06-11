@@ -4,6 +4,7 @@ import type {
   BenchResult,
   LiveStatus,
   AarReport,
+  ConformanceReport,
 } from '../types'
 
 const TOKEN_KEY = 'observatory-token'
@@ -76,6 +77,9 @@ export const api = {
   liveStatus: (): Promise<LiveStatus> => get('/api/live'),
 
   aar: (runId: string): Promise<AarReport> => get(`/api/runs/${runId}/aar`),
+
+  conformance: (runId: string): Promise<ConformanceReport> =>
+    get(`/api/runs/${runId}/conformance`),
 
   startLive: (
     arm: string,

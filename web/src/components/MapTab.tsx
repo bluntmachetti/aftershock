@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import type { TimelineState, RunSummary, AarReport } from '../types'
+import type { TimelineState, RunSummary, AarReport, ConformanceReport } from '../types'
 import type { TimelineAction } from '../lib/timeline'
 import {
   selectCurrentWorld,
@@ -37,6 +37,7 @@ export function MapTab({
   const [selectedMission, setSelectedMission] = useState<string | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
   const [aar, setAar] = useState<AarReport | null>(null)
+  const [conformance, setConformance] = useState<ConformanceReport | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const world = selectCurrentWorld(timeline)
@@ -61,9 +62,10 @@ export function MapTab({
     }
   }, [timeline.playing, timeline.speed, timeline.cursor, timeline.ticks.length, dispatch])
 
-  // Clear AAR when run changes
+  // Clear AAR and conformance when run changes
   useEffect(() => {
     setAar(null)
+    setConformance(null)
   }, [timeline.runId])
 
   // Fetch AAR whenever a run finishes loading (loading goes false and we have a runId)
@@ -73,6 +75,16 @@ export function MapTab({
     api.aar(timeline.runId)
       .then((report) => { if (!cancelled) setAar(report) })
       .catch(() => { /* 404 = no AAR — stay null */ })
+    return () => { cancelled = true }
+  }, [timeline.runId, timeline.loading])
+
+  // Fetch conformance alongside the AAR — 404 means no report yet, stay null
+  useEffect(() => {
+    if (!timeline.runId || timeline.loading) return
+    let cancelled = false
+    api.conformance(timeline.runId)
+      .then((report) => { if (!cancelled) setConformance(report) })
+      .catch(() => { /* 404 = no conformance report — stay null */ })
     return () => { cancelled = true }
   }, [timeline.runId, timeline.loading])
 
@@ -176,6 +188,7 @@ export function MapTab({
             <AgentInspector
               tick={tick}
               selectedAgent={selectedAgent}
+              conformance={conformance}
               onSelectAgent={setSelectedAgent}
             />
           </div>

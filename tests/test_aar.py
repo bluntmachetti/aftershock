@@ -549,3 +549,140 @@ def test_digest_per_mission_saved_sums_to_final_score() -> None:
         assert sum(per_mission) == int(final)
         # at least one resolved mission must have rescued someone
         assert any(s > 0 for s in per_mission)
+
+
+# ---------------------------------------------------------------------------
+# Doctrine section in digest + generate_aar runs check_run
+# ---------------------------------------------------------------------------
+
+
+def test_digest_doctrine_section_appears_after_check_run() -> None:
+    """After generate_aar (which calls check_run), the digest fed to the LLM
+    must contain the '=== DOCTRINE ===' section."""
+    from aftershock.llm.aar import _build_doctrine_section
+    from aftershock.town.conformance import check_run
+
+    with tempfile.TemporaryDirectory() as td:
+        run_dir = _run_scripted_20(Path(td))
+        check_run(run_dir)  # writes conformance.json
+        section = _build_doctrine_section(run_dir)
+
+    assert "=== DOCTRINE ===" in section
+    assert "team_alignment=" in section
+
+
+def test_digest_doctrine_section_absent_without_conformance_json() -> None:
+    """_build_doctrine_section returns '' when conformance.json is absent."""
+    from aftershock.llm.aar import _build_doctrine_section
+
+    with tempfile.TemporaryDirectory() as td:
+        run_dir = _run_scripted_20(Path(td))
+        # No check_run call — conformance.json is absent
+        section = _build_doctrine_section(run_dir)
+
+    assert section == ""
+
+
+def test_generate_aar_calls_check_run_and_digest_has_doctrine() -> None:
+    """generate_aar must run check_run first; the digest appended to the LLM
+    user prompt must include '=== DOCTRINE ===' when the run has world data."""
+    captured_user: list[str] = []
+
+    def _capturing_script(model: str, system: str, user: str) -> str:
+        captured_user.append(user)
+        return _valid_aar_json()
+
+    mock = MockProvider(script=_capturing_script)
+
+    with tempfile.TemporaryDirectory() as td:
+        run_dir = _run_scripted_20(Path(td))
+        asyncio.run(generate_aar(run_dir, mock))
+
+    assert captured_user, "MockProvider was not called"
+    user_prompt = captured_user[0]
+    assert "=== DOCTRINE ===" in user_prompt, (
+        "DOCTRINE section missing from AAR user prompt — check_run may not have run"
+    )
+    assert "team_alignment=" in user_prompt
+
+
+def test_generate_aar_conformance_json_written() -> None:
+    """generate_aar must write conformance.json into the run directory."""
+    mock = MockProvider(script=[_valid_aar_json()])
+
+    with tempfile.TemporaryDirectory() as td:
+        run_dir = _run_scripted_20(Path(td))
+        asyncio.run(generate_aar(run_dir, mock))
+        conf_path = run_dir / "conformance.json"
+        assert conf_path.exists(), "conformance.json was not written by generate_aar"
+
+
+# ---------------------------------------------------------------------------
+# doctrine_notes round-trips through AAR_SCHEMA
+# ---------------------------------------------------------------------------
+
+
+def _valid_aar_json_with_doctrine_notes() -> str:
+    return json.dumps({
+        "headline": "Test run completed adequately.",
+        "grade": "B",
+        "what_worked": ["Resource allocation was fast."],
+        "coordination_failures": ["Medical missed one surge."],
+        "key_moments": [{"tick": 5, "description": "Main quake resolved."}],
+        "lessons": [
+            "Prioritize medical surge missions early.",
+            "Dispatch rescue crews before fire spreads.",
+        ],
+        "doctrine_notes": [
+            "T5 violated 2 times — agents repeated rejected decisions.",
+            "C1 upheld — all missions prioritized within 2 ticks.",
+        ],
+    })
+
+
+def test_doctrine_notes_round_trips_through_schema() -> None:
+    """AAR_SCHEMA must accept and preserve doctrine_notes."""
+    raw = json.loads(_valid_aar_json_with_doctrine_notes())
+    obj = AAR_SCHEMA.model_validate(raw)
+    assert obj.doctrine_notes == [
+        "T5 violated 2 times — agents repeated rejected decisions.",
+        "C1 upheld — all missions prioritized within 2 ticks.",
+    ]
+
+
+def test_doctrine_notes_optional_defaults_to_empty_list() -> None:
+    """AAR_SCHEMA must accept payloads without doctrine_notes (defaults to [])."""
+    obj = AAR_SCHEMA.model_validate({
+        "headline": "x",
+        "grade": "A",
+        "what_worked": [],
+        "coordination_failures": [],
+        "key_moments": [],
+        "lessons": [],
+    })
+    assert obj.doctrine_notes == []
+
+
+def test_doctrine_notes_capped_at_3() -> None:
+    """AAR_SCHEMA must silently cap doctrine_notes at 3 entries."""
+    obj = AAR_SCHEMA.model_validate({
+        "headline": "x",
+        "grade": "A",
+        "what_worked": [],
+        "coordination_failures": [],
+        "key_moments": [],
+        "lessons": [],
+        "doctrine_notes": ["n1", "n2", "n3", "n4", "n5"],
+    })
+    assert len(obj.doctrine_notes) == 3
+
+
+def test_generate_aar_doctrine_notes_in_aar_json() -> None:
+    """generate_aar must write doctrine_notes field to aar.json (round-trip)."""
+    mock = MockProvider(script=[_valid_aar_json_with_doctrine_notes()])
+
+    with tempfile.TemporaryDirectory() as td:
+        run_dir = _run_scripted_20(Path(td))
+        aar = asyncio.run(generate_aar(run_dir, mock))
+        assert "doctrine_notes" in aar
+        assert isinstance(aar["doctrine_notes"], list)

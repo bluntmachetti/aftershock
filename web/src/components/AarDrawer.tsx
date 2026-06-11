@@ -124,6 +124,23 @@ export function AarDrawer({ report, onJumpToTick }: Props) {
             </div>
           )}
 
+          {/* Doctrine notes — amber list, only when present */}
+          {Array.isArray(report.doctrine_notes) && report.doctrine_notes.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <div className="text-[9px] font-mono uppercase tracking-widest text-amber-500 mb-1">
+                Doctrine
+              </div>
+              <ol className="flex flex-col gap-1 list-none">
+                {report.doctrine_notes.map((note, i) => (
+                  <li key={i} className="text-[10px] font-mono text-amber-400 flex gap-1.5 leading-snug">
+                    <span className="text-amber-600 tabular-nums shrink-0 w-4">{i + 1}.</span>
+                    <span>{note}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
           {/* Key moments — clickable tick-jump chips */}
           {report.key_moments.length > 0 && (
             <div className="flex flex-col gap-1.5">

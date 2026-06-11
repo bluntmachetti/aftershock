@@ -703,6 +703,126 @@ def append_lessons(memory_path: Path, run_id: str, lessons: list[str]) -> None
   AAR): headline + grade badge, lessons, key moments as clickable tick-jump chips.
   Live tab: aar/memory toggles on the start form, "[aar] generating…/done" log lines.
 
+## Doctrine and conformance (`src/aftershock/town/doctrine.yaml`, `town/conformance.py`)
+
+Two-tier doctrine, mirroring real incident command: one shared **team playbook**
+(coordination norms — the protocol written as doctrine) plus slim **role playbooks**
+(specialist duties). The rules are simultaneously the *instruction* (injected into
+system prompts) and the *yardstick* (checked deterministically against run records).
+No LLM judging: every check is reproducible from the NDJSON by hand.
+
+### doctrine.yaml
+
+```yaml
+team:
+  - id: T1
+    text: "Acquire resources only through auction requests — never attempt direct dispatch."
+    arms: [society]
+  - {id: T2, text: "Request only what a mission still needs — quantity at most required minus assigned.", arms: [society]}
+  - {id: T3, text: "State urgency honestly: urgency above 8 only when severity >= 4 or deadline within 4 ticks.", arms: [society]}
+  - {id: T4, text: "Answer every handoff or resource request addressed to you the tick it appears.", arms: [society]}
+  - {id: T5, text: "Never resubmit a rejected decision unchanged within the next 3 ticks.", arms: [society, swarm, solo]}
+  - {id: T6, text: "Do not duplicate a peer: never re-request a mission+resource granted this tick or last once requirements are met.", arms: [society]}
+roles:
+  commander:
+    - {id: C1, text: "Set a priority for every new mission within 2 ticks of its spawn.", arms: [society]}
+    - {id: C2, text: "Priorities set in the same tick must not invert severity-then-deadline order.", arms: [society]}
+    - {id: C3, text: "Answer every escalation the tick it arrives.", arms: [society]}
+  medical:
+    - {id: M1, text: "Serve medical_surge missions in priority-then-deadline order: never request for a lower-priority surge while a higher-priority one has unmet needs you ignored that tick.", arms: [society, swarm]}
+    - {id: M2, text: "Escalate any medical_surge under half-staffed with 4 or fewer ticks to deadline.", arms: [society]}
+  rescue:   # R1, R2 — same pattern for collapse_rescue
+  fire:     # F1, F2 — same pattern for fire
+  infrastructure:
+    - {id: I1, text: "Attempt road repairs only on actually blocked districts with a crew available.", arms: [society, swarm, solo]}
+    - {id: I2, text: "Clear blockages on districts with open missions before districts without.", arms: [society, swarm, solo]}
+  comms:
+    - {id: X1, text: "Broadcast within 2 ticks whenever panic crosses 0.4 upward.", arms: [society, swarm, solo]}
+    - {id: X2, text: "At most one broadcast per 3 ticks.", arms: [society, swarm, solo]}
+```
+
+(rescue/fire entries are spelled out in full in the file, mirroring medical.)
+
+### town/doctrine.py
+
+```python
+@dataclass(frozen=True)
+class Rule: id: str; text: str; arms: tuple[str, ...]; role: str | None  # None = team
+def load_doctrine(path: Path | None = None) -> list[Rule]   # validates unique ids
+def doctrine_blocks(rules: list[Rule], role: str, arm: str) -> str
+    # "TEAM DOCTRINE:\n  T1. ...\n..." + "YOUR ROLE DOCTRINE:\n  C1. ..." —
+    # filtered by arm; empty sections omitted.
+```
+
+`build_llm_agents` inserts the blocks between the role prompt and the contract;
+`build_arm` passes the arm name. Scripted agents are unaffected (the doctrine
+describes what they already do — that is the calibration premise).
+
+### town/conformance.py — deterministic checkers
+
+```python
+def check_run(run_dir: Path) -> dict   # writes + returns conformance.json
+def render_markdown(report: dict) -> str
+```
+
+Report shape: `{arm, seed, rules: {rule_id: {agent_id: {applicable, violations:
+[{tick, detail}], rate}}}, role_conformance: {agent_id: rate}, team_alignment: rate,
+notes: [...]}`. Rates = 1 − violations/applicable (1.0 when applicable == 0).
+Run-record conventions the checkers rely on: observations are reconstructed —
+`inbox(agent, t)` = proposals sent at t−1 with `recipient == agent` (plus broadcasts);
+state-dependent checks read `worlds[t−1]` (the state an agent observed at tick t);
+tick 0 is exempt from state-dependent applicability; runs without world.ndjson mark
+state-dependent rules `applicable: 0` with a note.
+
+Check definitions (violations; applicability is the natural event count):
+- **T1**: any agent-emitted `dispatch` decision (in `responses[].decisions`; kernel
+  grants are not agent-emitted).
+- **T2**: request qty > max(0, required − assigned) for that mission in worlds[t−1].
+- **T3**: urgency > 8 while severity < 4 and deadline_tick − t > 4.
+- **T4**: a handoff/resource_request addressed to the agent (reconstructed inbox)
+  with no matching ProposalResponse that tick. Escalations to the commander are
+  scored under C3 instead, never double-counted.
+- **T5**: a decision with identical (decision_type, params) re-emitted by the same
+  agent within 3 ticks of its rejection.
+- **T6**: re-request of a (mission, resource) pair within 1 tick of an accepted
+  auction grant that met the requirement (worlds check).
+- **C1**: mission spawned at t still has priority 0 and status open in worlds[t+2].
+- **C2**: among missions prioritized in one tick: pair where (severity, deadline
+  pressure) is strictly greater on both components yet priority is strictly lower.
+- **C3**: escalation in commander's reconstructed inbox with no response that tick.
+- **M1/R1/F1**: agent requested for mission X of its kind while mission Y (same
+  kind, strictly higher priority, unmet requirements in worlds[t−1]) got no request
+  from the agent that tick.
+- **M2/R2/F2**: first tick a mission of the kind is open, under half-staffed, with
+  deadline_in ≤ 4 (per worlds[t−1]): no escalation from the agent within [t, t+1].
+- **I1**: repair_road rejected for "not blocked" or "no repair_crew".
+- **I2**: accepted repair on a district with zero open missions while another
+  blocked district had open missions (worlds[t−1]).
+- **X1**: panic crosses 0.4 upward between worlds[t−1] and worlds[t]: no accepted
+  broadcast in [t+1, t+2].
+- **X2**: two accepted broadcasts fewer than 3 ticks apart.
+
+**Calibration invariant (the checker's own validity test):** scripted runs (seeds
+42 and 7, 60 ticks) must produce zero violations on every rule — the scripted agents
+*embody* the doctrine. A checker that flags them is mis-specified; the test suite
+enforces this, and any genuine scripted-agent doctrine breach found this way is
+fixed in heuristics.py, not waived.
+
+### Integrations
+
+- CLI: `aftershock conformance <run_dir> [--json]` — prints render_markdown (or raw
+  JSON), writes conformance.json into the run dir.
+- AAR: `generate_aar` runs `check_run` first and appends a `=== DOCTRINE ===` digest
+  section (team alignment, per-rule violation counts with rule text, top 5 concrete
+  violations) so lessons can cite rule ids; the AAR schema gains optional
+  `doctrine_notes: list[str]` (≤ 3).
+- Bench: each cell's summary.json gains `team_alignment` and `role_conformance`;
+  aggregate + tables gain a team-alignment column (memoryless as ever).
+- Web/UI: `GET /api/runs/{run_id}/conformance` (same validation; 404 when absent,
+  generated lazily is NOT done server-side — CLI/AAR produce it); agent chips in the
+  inspector show a conformance badge when data exists; the AAR drawer renders
+  doctrine_notes.
+
 ## CLI
 
 ```
