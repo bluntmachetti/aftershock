@@ -25,6 +25,9 @@ runs/
 *.swp
 .DS_Store
 
+# Browser-automation session artifacts (never commit)
+.playwright-mcp/
+
 # Orchestration/session state (never commit)
 .omc/
 .claude/

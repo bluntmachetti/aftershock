@@ -3,6 +3,8 @@
 @tailwind utilities;
 
 :root {
+  /* Legacy hex vars — kept for index.css's own rules + any component still
+     referencing them. Do NOT remove; the RGB-channel vars below are the new source. */
   --bg-ground: #0a0e1a;
   --bg-surface: #0f1624;
   --bg-raised: #1a2235;
@@ -17,6 +19,21 @@
   --text-primary: #e2e8f0;
   --text-secondary: #94a3b8;
   --text-dim: #475569;
+
+  /* Semantic palette as space-separated RGB channels so Tailwind can apply
+     <alpha-value> via rgb(var(--x) / <alpha-value>). Single source of truth
+     for the eoc, signal, and text-eoc token families in tailwind.config.js. */
+  --eoc-ground: 10 14 26;       /* #0a0e1a */
+  --eoc-surface: 15 22 36;      /* #0f1624 */
+  --eoc-raised: 26 34 53;       /* #1a2235 */
+  --eoc-border: 36 48 71;       /* #243047 */
+  --signal-amber: 245 158 11;   /* #f59e0b */
+  --signal-red: 239 68 68;      /* #ef4444 */
+  --signal-green: 74 222 128;   /* #4ade80 */
+  --signal-cyan: 34 211 238;    /* #22d3ee */
+  --text-eoc-primary: 226 232 240;   /* #e2e8f0 */
+  --text-eoc-secondary: 148 163 184; /* #94a3b8 */
+  --text-eoc-faint: 71 85 105;       /* #475569 — non-text decoration only */
 }
 
 html, body {

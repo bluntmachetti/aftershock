@@ -643,6 +643,135 @@ missions; distinctive and calm, not a generic dashboard. Vite dev proxies `/api`
 of vitest specs cover the timeline reducer/selectors. `web/node_modules` and `web/dist`
 are gitignored.
 
+## Demo polish + compare mode (task #3 — `web/` evolution)
+
+Refines the observatory for the submission video. **Pure `web/` work; zero engine or API
+change** — determinism and every backend contract above are untouched (compare mode is
+built entirely from data already served by `/api/runs/{id}/ticks`). Provenance: a Codex
+(architecture) + Gemini (visual) review, synthesized in the CCG assessment. Governing
+principle: the EOC concept stays; the *execution* moves from "AI UI-kit" to "mission-control
+tool" without inventing a new aesthetic. Non-negotiable invariant from the UI spec above is
+preserved: **all derived map state still comes from `worlds[cursor]` — no event-folding on
+the client**, applied per-side in compare mode.
+
+Decomposed into surfaces with **disjoint file ownership** for parallel execution. Phase A is
+a serial foundation (it touches shared config); Phases B–F fan out; one integration seam
+(`App.tsx`) is owned by the integration pass.
+
+| Surface | Phase | Owns (exclusive write) | Exports / seam |
+|---|---|---|---|
+| **A · Tokens** | A (serial, first) | `tailwind.config.js`, `src/index.css`, `src/lib/palette.ts` (NEW) | semantic classes + `palette.ts` |
+| **B · Compare core** | B | `src/components/CompareTab.tsx` (NEW), `src/lib/compare.ts` (NEW), `src/lib/usePlaybackClock.ts` (NEW) | `<CompareTab/>` |
+| **C · Timeline helpers** | B | `src/lib/timeline.ts` (**additive only**), `src/lib/__tests__/compare.test.ts` (NEW) | `indexForTick`, `maxComparableTick`, `selectRunningCost` |
+| **D · Scrubber** | B | `src/components/Scrubber.tsx` | event-marker props (additive, optional) |
+| **E · Map richness** | B | `src/components/TownMap.tsx`, `src/components/MapTab.tsx` | mission popover, inject-pulse, `effects` prop |
+| **F · Legend** | B | `src/components/Legend.tsx` (NEW) | `<Legend/>` |
+| **Integration** | C | `src/App.tsx`, `src/lib/deeplink.ts` (NEW), 4th nav tab | wires B/D/E/F + URL; final density sweep |
+
+### A — Design tokens (the foundation)
+
+Today the palette is defined **three times**: `:root` vars in `index.css`, duplicated in
+`tailwind.config.js`, then re-hardcoded as `bg-[#0a0e1a]` / `border-[#243047]` literals across
+14 components. Collapse to one source:
+
+- `index.css` keeps `:root` vars but as space-separated RGB channels
+  (`--eoc-ground: 10 14 26;`) so Tailwind can apply `<alpha-value>`.
+- `tailwind.config.js` maps semantic names onto them:
+  `eoc.{ground,surface,raised,border}`, `signal.{amber,red,green,cyan}`,
+  `text-eoc-{primary,secondary,dim}`.
+- `src/lib/palette.ts` (NEW) — the single JS/SVG color source (mission-kind, status, and
+  **arm** colors) so `TownMap`/`BenchTab`/`RunPicker`/`LiveTab`/`AgentInspector` stop
+  redefining them. **Arm coding fixed here and used everywhere: `society = cyan`, the
+  comparison baseline (swarm/solo) `= amber`** — drives compare mode's "good vs baseline".
+
+DoD: `grep -rE '#[0-9a-fA-F]{6}' src --include='*.tsx'` returns nothing (all hex lives in
+`palette.ts`).
+
+### A — Type, density & effects style contract (applied within each surface's owned files)
+
+Not a separate pass (would collide with every surface) — a **style contract** every executor
+honours in the files it owns; integration sweeps stragglers.
+
+- **Text floor for video (1080p capture):** DOM body/controls → `text-xs` (12px); labels →
+  `text-[11px]`; metadata chips → `text-[10px]` floor; **delete every `text-[8px]`** (e.g. the
+  `LiveTab` memory badge). 9px stays **only inside SVG** (`<text>` in `TownMap`).
+- **Hierarchy by weight, not shouting:** values are heavier/larger than their labels
+  (`text-sm font-semibold` value over a dim `text-[11px]` label). **Stop UPPERCASE +
+  `tracking-widest` on body and values** — reserve it for section headers and the logo only.
+- **Effects restraint:** `glow-*` and `animate-ping` only on **active/hovered** elements;
+  scanlines on the **map surface only**, never the rails. `TownMap` and mission markers take
+  an `effects: 'normal' | 'quiet'` prop; compare mode passes `quiet`.
+- **Contrast:** promote "dim" text from `#475569` → `text-eoc-secondary` (`#94a3b8`); the old
+  dim turns to mud under video compression.
+
+### B/C — Compare mode (the centerpiece)
+
+Side-by-side synced replay of two arms on the **same seed**. A 4th nav tab `COMPARE`
+(so the video has a clean shot and a stable deep link).
+
+- **State:** two independent `timelineReducer` instances (do **not** generalise the single-run
+  reducer) + one shared compare controller `{leftRunId, rightRunId, cursorTick, playing, speed}`.
+- **Shared *logical tick*, not array index** — arms differ in `total`/length. Additive
+  selectors in `timeline.ts` (surface C):
+  ```ts
+  indexForTick(ticks, tick)        // exact match, else last record with t.tick <= tick
+  maxComparableTick(a, b)          // min(last tick of each side)
+  selectRunningCost(ticks, cursor) // Σ ticks[≤cursor].responses[].usage?.cost_usd ?? 0
+  ```
+  On every shared-cursor change, mirror into both: `dispatch{Left,Right}(SET_CURSOR,
+  indexForTick(side.ticks, cursorTick))`.
+- **One clock:** extract `usePlaybackClock(playing, speed, onTick)` (surface B); both the
+  single-map `MapTab` timer and compare use it — **never two intervals**.
+- **Delta strip** (top-center, the hero readout): `Δ lives saved`, `Δ lost`, `Δ panic`,
+  `Δ open/resolved`, `Δ cost` — each `left − right`, large, colored by the winner; a single
+  big **LIVES-SAVED** pair is the dominant element. Lives/panic from `worlds[idx]`; cost from
+  `selectRunningCost`.
+- **Differing lengths:** play stops at `maxComparableTick`; the shorter side **holds its final
+  frame** (greyed "FINAL" chip) while the longer finishes. If a side is under-paged, pause and
+  auto-load its next page (page size 100 for compare to avoid mid-run stalls).
+- **Guard:** if either side `has_world === false`, refuse compare with a clear notice (two-map
+  replay is only meaningful with world data).
+- Compact run headers per side: `SOCIETY · seed 42 · T31` / `SWARM · seed 42 · T31`.
+
+### Integration — Deep links (no router; History API only)
+
+Wired in `App.tsx` via `src/lib/deeplink.ts` (NEW):
+
+- `?run=<run_id>&t=<tick>` — select run, page until that logical tick is loaded, set cursor.
+- `?compare=<arm|run_id>,<arm|run_id>&seed=<n>&t=<tick>` — resolve both (by arm+seed, or
+  exact run_ids), load both, set `cursorTick`.
+- Parse **after** `api.runs()` resolves. Reflect scrub/playback with **`history.replaceState`,
+  throttled** (≥250ms) so 8× playback doesn't spam history. Must **preserve existing non-secret
+  params** after the existing `token` scrub in `api.ts`.
+
+### E/D/F — Richness (each small, independent)
+
+- **Scrubber event markers** (D): colored ticks on the timeline from `TickRecord.events`
+  (spawn/inject) + mission status transitions between adjacent `worlds` (resolve/fail);
+  click → jump cursor.
+- **Mission popover** (E): click a `TownMap` marker → required vs assigned, deadline,
+  priority, requester (from `MissionState`).
+- **Inject pulse** (E): highlight the injected district for ~2s when a tick's `events` contains
+  an `injected`-provenance event.
+- **Legend overlay** (F): dismissible map legend (mission kinds, status colors, arm coding);
+  suppressed thereafter via `localStorage`. **No fake "booting…" animation** — it's the exact
+  gimmick this pass removes.
+
+### Performance
+
+Two SVG maps are cheap (6 districts, few markers); the cost at 8× is React re-rendering both
+every 125ms. `React.memo(TownMap)`, `useMemo` mission positions on `[world.missions]`,
+`effects='quiet'` in compare, throttled URL writes.
+
+### Definition of done
+
+`npm run build` and `npx tsc --noEmit` clean; existing vitest specs green **plus** new
+`compare.test.ts` (indexForTick/maxComparableTick/selectRunningCost across mismatched
+lengths). No `#rrggbb` literals outside `palette.ts`. Single-run Map/Bench/Live behaviour
+unchanged (compare is additive). Backend, determinism, and the `OBSERVATORY_TOKEN`/CORS
+behaviour untouched. **Deferred (explicit non-goals for the video):** full sans-serif font
+migration, mission-marker redesign, design-system migration of every last component.
+
 ## After-action reports and the memory loop (`src/aftershock/llm/aar.py`)
 
 At the end of a society run, the flagship model writes the analysis — completing the

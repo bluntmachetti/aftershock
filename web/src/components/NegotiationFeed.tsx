@@ -1,4 +1,21 @@
 import type { TickRecord, ProposalRuling, Proposal } from '../types'
+import { MISSION_KIND_COLORS, STATUS_COLORS, FALLBACK_COLOR } from '../lib/palette'
+
+// Role/agent color coding for senders in the feed. commander=amber,
+// rescue=red, medical=cyan, fire=red, infrastructure=violet, comms=green.
+// Drawn from the canonical palette so no raw hex lives here.
+const ROLE_COLORS: Record<string, string> = {
+  commander: STATUS_COLORS.open, // amber
+  rescue: STATUS_COLORS.failed, // signal-red
+  medical: MISSION_KIND_COLORS.medical_surge, // cyan
+  fire: MISSION_KIND_COLORS.fire, // signal-red
+  infrastructure: MISSION_KIND_COLORS.infra_repair, // violet
+  comms: STATUS_COLORS.resolved, // green
+}
+
+function roleColor(sender: string): string {
+  return ROLE_COLORS[sender] ?? FALLBACK_COLOR
+}
 
 interface FeedEntry {
   tick: number
@@ -37,53 +54,69 @@ export function NegotiationFeed({ ticks, cursor }: Props) {
 
   return (
     <div className="flex flex-col gap-0 overflow-y-auto h-full">
-      <h3 className="text-[10px] font-mono uppercase tracking-widest text-slate-500 px-2 py-1 sticky top-0 bg-[#0f1624] border-b border-[#243047]">
+      <h3 className="text-[10px] font-mono uppercase tracking-widest text-eoc-secondary px-2 py-1 sticky top-0 bg-eoc-surface border-b border-eoc-border">
         Negotiation Feed
       </h3>
       {entries.length === 0 && (
-        <div className="px-2 py-3 text-[11px] text-slate-600 font-mono">No rulings yet.</div>
+        <div className="px-2 py-3 text-[11px] text-eoc-secondary font-mono">No rulings yet.</div>
       )}
       {entries.map((e, i) => {
         const accepted = e.ruling.accepted
         const p = e.proposal
-
-        let summary = ''
-        if (p?.kind === 'resource_request') {
-          const body = p.body as { resource?: string; qty?: number; mission_id?: string }
-          summary = `${p.sender} → ${body.qty ?? '?'}× ${body.resource ?? '?'} for ${body.mission_id ?? '?'}`
-        } else if (p) {
-          summary = `${p.sender} [${p.kind}]`
-        } else {
-          summary = e.ruling.proposal_id
-        }
+        const sender = p?.sender ?? ''
+        const senderColor = roleColor(sender)
+        const statusColor = accepted ? STATUS_COLORS.resolved : STATUS_COLORS.failed
 
         return (
           <div
             key={i}
-            className="flex items-start gap-2 px-2 py-1.5 border-b border-[#1a2235] text-[11px]"
+            className="flex items-start gap-2 px-2 py-1 border-b border-eoc-raised text-[11px] leading-tight"
           >
-            <span className="font-mono text-[9px] text-slate-600 tabular-nums mt-0.5 w-5 shrink-0">
+            <span className="font-mono text-[10px] text-eoc-secondary tabular-nums mt-0.5 w-5 shrink-0">
               T{e.tick}
             </span>
             <span
               className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
               style={{
-                background: accepted ? '#4ade80' : '#ef4444',
-                boxShadow: accepted ? '0 0 4px #4ade8080' : '0 0 4px #ef444480',
+                background: statusColor,
+                boxShadow: `0 0 4px ${statusColor}80`,
               }}
             />
             <div className="flex flex-col min-w-0">
-              <span
-                className="font-mono truncate"
-                style={{ color: accepted ? '#4ade80' : '#ef4444' }}
-              >
-                {summary}
+              <span className="font-mono truncate text-eoc-primary">
+                {p?.kind === 'resource_request'
+                  ? (() => {
+                      const body = p.body as { resource?: string; qty?: number; mission_id?: string }
+                      return (
+                        <>
+                          <span style={{ color: senderColor }} className="font-semibold">
+                            {sender}
+                          </span>
+                          {` → ${body.qty ?? '?'}× ${body.resource ?? '?'} for ${body.mission_id ?? '?'}`}
+                        </>
+                      )
+                    })()
+                  : p ? (
+                      <>
+                        <span style={{ color: senderColor }} className="font-semibold">
+                          {sender}
+                        </span>
+                        {` [${p.kind}]`}
+                      </>
+                    ) : (
+                      e.ruling.proposal_id
+                    )}
               </span>
               {!accepted && e.ruling.reason && (
-                <span className="text-[10px] text-slate-500 truncate">{e.ruling.reason}</span>
+                <span className="text-[10px] text-eoc-secondary truncate">{e.ruling.reason}</span>
               )}
               {accepted && (
-                <span className="text-[10px] text-slate-500">GRANTED</span>
+                <span
+                  className="text-[10px] font-mono font-semibold"
+                  style={{ color: STATUS_COLORS.resolved }}
+                >
+                  GRANTED
+                </span>
               )}
             </div>
           </div>

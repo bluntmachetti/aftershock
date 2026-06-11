@@ -1,4 +1,5 @@
 import type { ResourcePoolState } from '../types'
+import { MISSION_KIND_COLORS, STATUS_COLORS, FALLBACK_COLOR } from '../lib/palette'
 
 const RESOURCE_LABELS: Record<string, string> = {
   ambulance: 'AMB',
@@ -8,12 +9,15 @@ const RESOURCE_LABELS: Record<string, string> = {
   supply_truck: 'SUP',
 }
 
+// Resource hues reuse the canonical mission-kind / status palette entries so no
+// raw hex lives here: ambulance=cyan, rescue=amber, fire=red, repair=violet,
+// supply=green.
 const RESOURCE_COLORS: Record<string, string> = {
-  ambulance: '#22d3ee',
-  rescue_crew: '#f59e0b',
-  fire_engine: '#ef4444',
-  repair_crew: '#a78bfa',
-  supply_truck: '#4ade80',
+  ambulance: MISSION_KIND_COLORS.medical_surge,
+  rescue_crew: MISSION_KIND_COLORS.collapse_rescue,
+  fire_engine: MISSION_KIND_COLORS.fire,
+  repair_crew: MISSION_KIND_COLORS.infra_repair,
+  supply_truck: STATUS_COLORS.resolved,
 }
 
 interface PoolRowProps {
@@ -21,7 +25,7 @@ interface PoolRowProps {
 }
 
 function PoolRow({ pool }: PoolRowProps) {
-  const color = RESOURCE_COLORS[pool.kind] ?? '#94a3b8'
+  const color = RESOURCE_COLORS[pool.kind] ?? FALLBACK_COLOR
   const label = RESOURCE_LABELS[pool.kind] ?? pool.kind.toUpperCase().slice(0, 3)
   const pct = pool.total > 0 ? pool.available / pool.total : 0
   const depleted = pool.available === 0
@@ -30,24 +34,24 @@ function PoolRow({ pool }: PoolRowProps) {
     <div className="flex flex-col gap-0.5">
       <div className="flex items-center justify-between">
         <span
-          className="text-[10px] font-mono tracking-wider"
-          style={{ color: depleted ? '#ef4444' : color }}
+          className="text-[11px] font-mono"
+          style={{ color: depleted ? STATUS_COLORS.failed : color }}
         >
           {label}
         </span>
         <span
-          className="text-[10px] font-mono tabular-nums"
-          style={{ color: depleted ? '#ef4444' : '#94a3b8' }}
+          className="text-[11px] font-mono tabular-nums"
+          style={{ color: depleted ? STATUS_COLORS.failed : FALLBACK_COLOR }}
         >
           {pool.available}/{pool.total}
         </span>
       </div>
-      <div className="h-1 bg-[#1a2235] rounded-full overflow-hidden">
+      <div className="h-1 bg-eoc-raised rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-300"
           style={{
             width: `${pct * 100}%`,
-            background: depleted ? '#ef4444' : color,
+            background: depleted ? STATUS_COLORS.failed : color,
             boxShadow: depleted ? undefined : `0 0 3px ${color}60`,
           }}
         />
@@ -57,9 +61,9 @@ function PoolRow({ pool }: PoolRowProps) {
         {Array.from({ length: pool.total }).map((_, i) => (
           <div
             key={i}
-            className="w-3 h-3 rounded-sm border"
+            className="w-3 h-3 rounded-sm border border-eoc-border"
             style={{
-              borderColor: i < pool.available ? color : '#243047',
+              borderColor: i < pool.available ? color : undefined,
               background: i < pool.available ? `${color}30` : 'transparent',
             }}
           />
@@ -77,8 +81,8 @@ export function ResourcePoolSidebar({ pools }: Props) {
   const ordered = ['ambulance', 'rescue_crew', 'fire_engine', 'repair_crew', 'supply_truck']
 
   return (
-    <div className="flex flex-col gap-3 p-3 bg-[#0f1624] border border-[#243047] rounded-lg">
-      <h3 className="text-[10px] font-mono uppercase tracking-widest text-slate-500">
+    <div className="flex flex-col gap-3 p-3 bg-eoc-surface border border-eoc-border rounded-lg">
+      <h3 className="text-[10px] font-mono uppercase tracking-widest text-eoc-secondary">
         Resource Pools
       </h3>
       {ordered.map((k) => {

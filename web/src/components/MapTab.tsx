@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import type { TimelineState, RunSummary, AarReport, ConformanceReport } from '../types'
 import type { TimelineAction } from '../lib/timeline'
 import {
@@ -6,7 +6,9 @@ import {
   selectCurrentTick,
   selectAtEnd,
   selectNextCursor,
+  deriveScrubberEvents,
 } from '../lib/timeline'
+import { usePlaybackClock } from '../lib/usePlaybackClock'
 import { api } from '../lib/api'
 import { TownMap } from './TownMap'
 import { PanicGauge } from './PanicGauge'
@@ -16,6 +18,7 @@ import { AgentInspector } from './AgentInspector'
 import { Scrubber } from './Scrubber'
 import { RunPicker } from './RunPicker'
 import { AarDrawer } from './AarDrawer'
+import { Legend } from './Legend'
 
 interface Props {
   timeline: TimelineState
@@ -38,29 +41,24 @@ export function MapTab({
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
   const [aar, setAar] = useState<AarReport | null>(null)
   const [conformance, setConformance] = useState<ConformanceReport | null>(null)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const world = selectCurrentWorld(timeline)
   const tick = selectCurrentTick(timeline)
 
-  // Playback interval
-  useEffect(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current)
-    if (!timeline.playing) return
-
-    const ms = 1000 / timeline.speed
-    intervalRef.current = setInterval(() => {
-      if (selectAtEnd(timeline)) {
-        dispatch({ type: 'PAUSE' })
-        return
-      }
-      dispatch({ type: 'SET_CURSOR', cursor: selectNextCursor(timeline) })
-    }, ms)
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
+  // Playback — driven by the single shared clock (never two intervals). The
+  // tick callback reads the latest timeline via a ref so the clock is not
+  // re-armed (and its phase reset) on every cursor change.
+  const timelineRef = useRef(timeline)
+  timelineRef.current = timeline
+  const onPlaybackTick = useCallback(() => {
+    const t = timelineRef.current
+    if (selectAtEnd(t)) {
+      dispatch({ type: 'PAUSE' })
+      return
     }
-  }, [timeline.playing, timeline.speed, timeline.cursor, timeline.ticks.length, dispatch])
+    dispatch({ type: 'SET_CURSOR', cursor: selectNextCursor(t) })
+  }, [dispatch])
+  usePlaybackClock(timeline.playing, timeline.speed, onPlaybackTick)
 
   // Clear AAR and conformance when run changes
   useEffect(() => {
@@ -88,6 +86,47 @@ export function MapTab({
     return () => { cancelled = true }
   }, [timeline.runId, timeline.loading])
 
+  // Scrubber event markers — derived from the loaded timeline (no event-folding;
+  // provenance from tick events, outcomes from world transitions).
+  const scrubberEvents = useMemo(
+    () => deriveScrubberEvents(timeline.ticks, timeline.worlds),
+    [timeline.ticks, timeline.worlds],
+  )
+
+  // Inject pulse: districts touched by an injected-provenance event on the
+  // current tick. Cleared automatically when the cursor moves off the tick.
+  const pulseDistricts = useMemo(() => {
+    if (!tick) return []
+    const ids: string[] = []
+    for (const event of tick.events) {
+      if (event.payload?.injected !== true) continue
+      const districtId =
+        typeof event.payload?.district_id === 'string'
+          ? (event.payload.district_id as string)
+          : ''
+      if (districtId) ids.push(districtId)
+    }
+    return ids
+  }, [tick])
+
+  // Per-mission resource requesters this tick — read from resource_request
+  // proposals so the popover can name who is asking for a mission's resources.
+  const missionRequesters = useMemo(() => {
+    if (!tick) return {}
+    const out: Record<string, string> = {}
+    for (const response of tick.responses) {
+      for (const proposal of response.proposals) {
+        if (proposal.kind !== 'resource_request') continue
+        const missionId =
+          typeof proposal.body?.mission_id === 'string'
+            ? (proposal.body.mission_id as string)
+            : ''
+        if (missionId) out[missionId] = proposal.sender
+      }
+    }
+    return out
+  }, [tick])
+
   // Jump scrubber to the tick index whose tick record matches the given tick number
   function handleJumpToTick(tickNumber: number) {
     const idx = timeline.ticks.findIndex((t) => t.tick === tickNumber)
@@ -111,7 +150,7 @@ export function MapTab({
       {/* Main area */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left sidebar: run picker + resource pools */}
-        <div className="w-52 shrink-0 flex flex-col gap-3 p-3 border-r border-[#243047] overflow-y-auto bg-[#0a0e1a]">
+        <div className="w-52 shrink-0 flex flex-col gap-3 p-3 border-r border-eoc-border overflow-y-auto bg-eoc-ground">
           <RunPicker
             runs={runs}
             selectedRunId={timeline.runId}
@@ -121,22 +160,22 @@ export function MapTab({
           />
           {world && (
             <>
-              <div className="border-t border-[#243047]" />
+              <div className="border-t border-eoc-border" />
               <PanicGauge panic={world.panic} />
-              <div className="border-t border-[#243047]" />
+              <div className="border-t border-eoc-border" />
               <ResourcePoolSidebar pools={world.pools} />
-              <div className="border-t border-[#243047]" />
+              <div className="border-t border-eoc-border" />
               <div className="flex flex-col gap-1">
-                <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500">
+                <div className="text-[11px] font-mono uppercase tracking-widest text-eoc-secondary">
                   Totals
                 </div>
-                <div className="flex justify-between text-[11px] font-mono tabular-nums">
-                  <span className="text-green-400">Saved</span>
-                  <span className="text-green-400">{world.lives_saved}</span>
+                <div className="flex justify-between text-xs font-mono tabular-nums">
+                  <span className="text-eoc-secondary">Saved</span>
+                  <span className="text-signal-green font-semibold">{world.lives_saved}</span>
                 </div>
-                <div className="flex justify-between text-[11px] font-mono tabular-nums">
-                  <span className="text-red-400">Lost</span>
-                  <span className="text-red-400">{world.lives_lost}</span>
+                <div className="flex justify-between text-xs font-mono tabular-nums">
+                  <span className="text-eoc-secondary">Lost</span>
+                  <span className="text-signal-red font-semibold">{world.lives_lost}</span>
                 </div>
               </div>
             </>
@@ -146,17 +185,17 @@ export function MapTab({
         {/* Center: map */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {timeline.error && (
-            <div className="px-3 py-2 text-[11px] font-mono text-red-400 bg-red-950/20 border-b border-red-900">
+            <div className="px-3 py-2 text-xs font-mono text-signal-red bg-red-950/20 border-b border-red-900">
               {timeline.error}
             </div>
           )}
           {!world && !timeline.loading && (
-            <div className="flex-1 flex items-center justify-center text-slate-600 font-mono text-sm">
+            <div className="flex-1 flex items-center justify-center text-eoc-secondary font-mono text-xs">
               Select a run to load the map.
             </div>
           )}
           {timeline.loading && (
-            <div className="flex-1 flex items-center justify-center text-amber-400 font-mono text-sm">
+            <div className="flex-1 flex items-center justify-center text-signal-amber font-mono text-xs">
               <span className="animate-pulse">Loading…</span>
             </div>
           )}
@@ -166,23 +205,27 @@ export function MapTab({
                 world={world}
                 selectedMissionId={selectedMission}
                 onSelectMission={setSelectedMission}
+                pulseDistricts={pulseDistricts}
+                missionRequesters={missionRequesters}
               />
+              {/* Dismissible legend overlay (self-suppresses via localStorage) */}
+              <Legend />
             </div>
           )}
           {!timeline.hasWorld && timeline.runId && !timeline.loading && (
-            <div className="px-3 py-1 text-[10px] font-mono text-slate-500 border-t border-[#243047] bg-[#0f1624]">
+            <div className="px-3 py-1 text-[10px] font-mono text-eoc-secondary border-t border-eoc-border bg-eoc-surface">
               No world data — showing feeds only.
             </div>
           )}
         </div>
 
         {/* Right rail: negotiation feed + agent inspector */}
-        <div className="w-64 shrink-0 flex flex-col border-l border-[#243047] bg-[#0a0e1a] overflow-hidden">
-          <div className="flex-1 overflow-hidden border-b border-[#243047]">
+        <div className="w-64 shrink-0 flex flex-col border-l border-eoc-border bg-eoc-ground overflow-hidden">
+          <div className="flex-1 overflow-hidden border-b border-eoc-border">
             <NegotiationFeed ticks={timeline.ticks} cursor={timeline.cursor} />
           </div>
           <div className="h-48 overflow-y-auto">
-            <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 px-2 py-1 sticky top-0 bg-[#0f1624] border-b border-[#243047]">
+            <div className="text-[11px] font-mono uppercase tracking-widest text-eoc-secondary px-2 py-1 sticky top-0 bg-eoc-surface border-b border-eoc-border">
               Agent Inspector · T{tick?.tick ?? '—'}
             </div>
             <AgentInspector
@@ -196,7 +239,13 @@ export function MapTab({
       </div>
 
       {/* Scrubber */}
-      <Scrubber timeline={timeline} dispatch={dispatch} onLoadMore={onLoadMore} />
+      <Scrubber
+        timeline={timeline}
+        dispatch={dispatch}
+        onLoadMore={onLoadMore}
+        events={scrubberEvents}
+        onJump={handleJumpToTick}
+      />
 
       {/* AAR Drawer — visible only when the loaded run has an AAR */}
       {aar && (

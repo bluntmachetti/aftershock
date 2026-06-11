@@ -206,7 +206,7 @@ export interface LiveWsMessage {
 
 // ---- UI state ----
 
-export type TabId = 'map' | 'bench' | 'live'
+export type TabId = 'map' | 'bench' | 'live' | 'compare'
 
 export interface TimelineState {
   runId: string | null
