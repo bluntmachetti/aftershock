@@ -24,3 +24,7 @@ runs/
 .vscode/
 *.swp
 .DS_Store
+
+# Orchestration/session state (never commit)
+.omc/
+.claude/
