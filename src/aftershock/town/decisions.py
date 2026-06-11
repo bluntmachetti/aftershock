@@ -109,6 +109,11 @@ class DispatchHandler(DecisionHandler):
         district = state.districts.get(mission.district_id)
         pool = state.pools[params.resource]
 
+        # Apply-time guard: re-check pool availability in case another decision
+        # (e.g. repair_road) already consumed units since auction validation.
+        if pool.available < params.qty:
+            return []
+
         if district is not None and district.road_blocked:
             # Queue as pending arrival
             due_tick = tick + BLOCKED_DISPATCH_DELAY
@@ -190,7 +195,7 @@ class RecallHandler(DecisionHandler):
         pool = state.pools[params.resource]
 
         mission.assigned[params.resource] -= params.qty
-        pool.available = min(pool.total, pool.available + params.qty)
+        pool.available += params.qty
 
         return [
             WorldEvent(
@@ -286,6 +291,14 @@ class RepairRoadHandler(DecisionHandler):
             resource="road_unblock",
             qty=1,
             district_id=params.district_id,
+        ))
+        # Return the repair_crew unit to the pool when the road is unblocked
+        state.pending.append(PendingArrival(
+            due_tick=due_tick,
+            mission_id="",
+            resource=ResourceKind.repair_crew,
+            qty=1,
+            district_id="",
         ))
 
         return [

@@ -29,6 +29,9 @@ _AGENT_IDS = ("commander", "comms", "fire", "infrastructure", "medical", "rescue
 class TownSociety:
     """Society implementation for the disaster-response town."""
 
+    def __init__(self, max_ticks: int | None = None) -> None:
+        self._max_ticks = max_ticks
+
     def agent_ids(self) -> tuple[str, ...]:
         return _AGENT_IDS
 
@@ -102,6 +105,9 @@ class TownSociety:
 
     def is_over(self, world: Any, tick: int) -> bool:
         state: TownState = world
+        # Short-circuit: tick budget exhausted (matches DESIGN.md:298 second disjunct)
+        if self._max_ticks is not None and tick >= self._max_ticks:
+            return True
         # Timeline exhausted and no open missions
         timeline_ticks = {e.tick for e in state.timeline}
         timeline_exhausted = all(t <= tick for t in timeline_ticks) if timeline_ticks else True
@@ -179,14 +185,38 @@ class TownResolver:
 
             sorted_props = sorted(proposals, key=sort_key)
             remaining = pool.available
+            # Track how much has already been granted to each mission this tick
+            # to avoid over-committing the same mission.
+            granted_to_mission: dict[str, int] = {}
 
             for prop in sorted_props:
                 mission_id = prop.body.get("mission_id", "")
                 qty = prop.body.get("qty", 1)
 
-                if remaining >= qty:
+                # Cap qty by how much the mission still needs beyond already-granted
+                mission = state.missions.get(mission_id)
+                already_assigned = (
+                    mission.assigned.get(resource, 0) if mission else 0
+                )
+                already_granted = granted_to_mission.get(mission_id, 0)
+                required = mission.required.get(resource, 0) if mission else 0
+                still_needed = max(0, required - already_assigned - already_granted)
+                effective_qty = min(qty, still_needed)
+
+                if effective_qty <= 0:
+                    # Mission already satisfied — decline as redundant
+                    rulings.append(ProposalRuling(
+                        proposal_id=prop.proposal_id,
+                        accepted=False,
+                        decided_by="kernel:auction",
+                        reason=f"mission {mission_id!r} already has sufficient {resource!r}",
+                    ))
+                    continue
+
+                if remaining >= effective_qty:
                     # Winner
-                    remaining -= qty
+                    remaining -= effective_qty
+                    granted_to_mission[mission_id] = already_granted + effective_qty
                     rulings.append(ProposalRuling(
                         proposal_id=prop.proposal_id,
                         accepted=True,
@@ -200,7 +230,7 @@ class TownResolver:
                         params={
                             "mission_id": mission_id,
                             "resource": resource,
-                            "qty": qty,
+                            "qty": effective_qty,
                         },
                     ))
                 else:

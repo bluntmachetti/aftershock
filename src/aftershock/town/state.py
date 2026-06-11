@@ -42,13 +42,18 @@ class MissionStatus(StrEnum):
 # Constants (module-level UPPERCASE)
 # ---------------------------------------------------------------------------
 
-# Starting pool sizes
+# Starting pool sizes — tightened so the auction genuinely arbitrates scarcity.
+# ambulance 6->4: collapse_rescue + medical_surge + sev>=3 fire all compete for it.
+# rescue_crew 5->3: collapse_rescue alone; keeps infra_repair contested too.
+# fire_engine 4->3: enough pressure to starve a fire past spread threshold.
+# supply_truck 4->3: medical_surge competition.
+# repair_crew stays at 3 (already the binding constraint).
 POOL_SIZES: dict[str, int] = {
-    ResourceKind.ambulance: 6,
-    ResourceKind.rescue_crew: 5,
-    ResourceKind.fire_engine: 4,
+    ResourceKind.ambulance: 4,
+    ResourceKind.rescue_crew: 3,
+    ResourceKind.fire_engine: 3,
     ResourceKind.repair_crew: 3,
-    ResourceKind.supply_truck: 4,
+    ResourceKind.supply_truck: 3,
 }
 
 # Required resources per mission kind (base, scaled by severity)
@@ -130,6 +135,7 @@ class Mission:
     status: str  # MissionStatus value
     priority: int = 0
     resolved_tick: int | None = None
+    spread_applied: bool = False  # True once fire spread has triggered (once per mission)
 
 
 @dataclass
@@ -207,6 +213,7 @@ class TownState:
                     "status": m.status,
                     "priority": m.priority,
                     "resolved_tick": m.resolved_tick,
+                    "spread_applied": m.spread_applied,
                 }
                 for mid, m in sorted(self.missions.items())
             },

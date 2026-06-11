@@ -345,8 +345,8 @@ def test_deadline_failure_loses_lives_and_returns_resources():
 # ---------------------------------------------------------------------------
 
 
-def test_fire_spread_after_6_ticks():
-    """A fire mission open for 6 ticks gets severity+1 and lives_at_risk+5."""
+def test_fire_spread_after_5_ticks():
+    """A fire mission open for 5 ticks (>= FIRE_SPREAD_TICKS=5) gets severity+1."""
     from aftershock.town.state import Mission
 
     state = make_minimal_state()
@@ -366,17 +366,18 @@ def test_fire_spread_after_6_ticks():
     )
 
     rng = dummy_rng()
-    # At tick 6: open_ticks = 6 - 0 = 6 >= 6 -> should spread
-    events = scheduled_events(state, 6, rng)
+    # At tick 5: open_ticks = 5 - 0 = 5 >= FIRE_SPREAD_TICKS(5) -> should spread
+    events = scheduled_events(state, 5, rng)
 
     spread_events = [e for e in events if e.kind == "fire_spread"]
     assert len(spread_events) == 1
     assert state.missions["m1"].severity == 3
     assert state.missions["m1"].lives_at_risk >= 15  # was 10, added 5 (minus casualties)
+    assert state.missions["m1"].spread_applied is True
 
 
 def test_fire_spread_only_once():
-    """Fire spread only triggers once per mission (severity must be < 5)."""
+    """Fire spread only triggers once per mission (guarded by spread_applied flag)."""
     from aftershock.town.state import Mission
 
     state = make_minimal_state()
@@ -384,7 +385,7 @@ def test_fire_spread_only_once():
         id="m1",
         kind=MissionKind.fire,
         district_id="old_town",
-        severity=4,
+        severity=3,
         lives_at_risk=20,
         spawned_tick=0,
         deadline_tick=30,
@@ -395,15 +396,16 @@ def test_fire_spread_only_once():
     )
 
     rng = dummy_rng()
-    events = scheduled_events(state, 6, rng)
+    # First eligible tick: spread fires
+    events = scheduled_events(state, 5, rng)
     spread_events = [e for e in events if e.kind == "fire_spread"]
     assert len(spread_events) == 1
-    assert state.missions["m1"].severity == 5
+    assert state.missions["m1"].spread_applied is True
 
-    # Second run at tick 7 — severity already at max (5), no more spread
-    events2 = scheduled_events(state, 7, rng)
+    # Second tick: spread_applied is set, so no second spread even though still open
+    events2 = scheduled_events(state, 6, rng)
     spread_events2 = [e for e in events2 if e.kind == "fire_spread"]
-    assert len(spread_events2) == 0
+    assert len(spread_events2) == 0, "Fire spread must not trigger twice for the same mission"
 
 
 # ---------------------------------------------------------------------------
@@ -421,7 +423,7 @@ async def test_scripted_society_saves_lives(tmp_path: Path):
     registry = make_registry()
     state = new_town(42)
 
-    society = TownSociety()
+    society = TownSociety(max_ticks=40)
     resolver = TownResolver()
 
     agents = {
@@ -535,3 +537,211 @@ def test_roles_load():
         assert "dispatch" not in role_spec.allowed_decisions, (
             f"dispatch must not be in role envelope: {role_name}"
         )
+
+
+# ---------------------------------------------------------------------------
+# K1: Commander answers escalations
+# ---------------------------------------------------------------------------
+
+
+def test_commander_responds_to_escalation_in_inbox():
+    """CommanderScripted emits a ProposalResponse(accept=True) for an ESCALATION in its inbox."""
+    from aftershock.kernel.protocol import Observation, Proposal, ProposalKind
+
+    state = make_minimal_state()
+    _add_open_mission(state, "m1", MissionKind.fire, severity=3, lives=12)
+
+    prop = Proposal(
+        proposal_id="fire-t5-p1",
+        sender="fire",
+        recipient="commander",
+        kind=ProposalKind.ESCALATION,
+        body={"mission_id": "m1", "reason": "deadline_near_understaffed"},
+    )
+
+    obs = Observation(
+        tick=5,
+        agent_id="commander",
+        role="commander",
+        view={
+            "tick": 5,
+            "panic": 0.1,
+            "open_missions": [
+                {
+                    "id": "m1", "kind": "fire", "district": "old_town",
+                    "severity": 3, "lives_at_risk": 12, "deadline_in": 3,
+                    "required": {"fire_engine": 1}, "assigned": {},
+                    "progress": 0.0, "priority": 0,
+                }
+            ],
+            "pool_availability": {"fire_engine": 2},
+            "blocked_districts": [],
+            "totals": {},
+        },
+        inbox=(prop,),
+    )
+
+    commander = CommanderScripted("commander", "commander")
+    resp = commander.act_sync(obs)
+
+    # Must emit at least one ProposalResponse accepting the escalation
+    accepting = [r for r in resp.responses if r.proposal_id == "fire-t5-p1" and r.accept]
+    assert accepting, (
+        f"Commander did not accept escalation; responses={resp.responses}"
+    )
+    # Must also bump priority of the escalated mission
+    priority_decisions = [
+        d for d in resp.decisions
+        if d.decision_type == "set_priority" and d.params.get("mission_id") == "m1"
+    ]
+    assert priority_decisions, "Commander should emit set_priority for escalated mission"
+
+
+# ---------------------------------------------------------------------------
+# K2: Unique cross-tick proposal IDs
+# ---------------------------------------------------------------------------
+
+
+def test_proposal_ids_unique_across_ticks():
+    """Proposal IDs from heuristic agents include the tick, making them cross-tick unique."""
+    from aftershock.kernel.protocol import Observation
+
+    state = make_minimal_state()
+    _add_open_mission(
+        state, "m1", MissionKind.fire,
+        required={"fire_engine": 1},
+        deadline_tick=4,  # close deadline to trigger escalation
+    )
+
+    def _make_obs(tick: int) -> Observation:
+        return Observation(
+            tick=tick,
+            agent_id="fire",
+            role="fire",
+            view={
+                "tick": tick,
+                "panic": 0.0,
+                "open_missions": [
+                    {
+                        "id": "m1", "kind": "fire", "district": "old_town",
+                        "severity": 2, "lives_at_risk": 10,
+                        "deadline_in": max(0, 4 - tick),
+                        "required": {"fire_engine": 1}, "assigned": {},
+                        "progress": 0.0, "priority": 0,
+                    }
+                ],
+                "pool_availability": {"fire_engine": 2},
+                "blocked_districts": [],
+                "totals": {},
+            },
+        )
+
+    fire_agent = FireScripted("fire", "fire")
+    all_proposal_ids: list[str] = []
+    for tick in range(3):
+        resp = fire_agent.act_sync(_make_obs(tick))
+        for prop in resp.proposals:
+            all_proposal_ids.append(prop.proposal_id)
+
+    # All IDs must be globally unique across ticks
+    assert len(all_proposal_ids) == len(set(all_proposal_ids)), (
+        f"Duplicate proposal IDs across ticks: {all_proposal_ids}"
+    )
+    # IDs must encode the tick (format f"{agent_id}-t{tick}-p{n}")
+    for pid in all_proposal_ids:
+        assert "-t" in pid, f"Proposal ID missing tick component: {pid!r}"
+
+
+# ---------------------------------------------------------------------------
+# Repair crew pool conservation
+# ---------------------------------------------------------------------------
+
+
+def test_repair_crew_returns_after_road_unblock():
+    """repair_crew pool unit is returned to pool after ROAD_REPAIR_TICKS ticks."""
+    import random
+
+    from aftershock.town.decisions import RepairRoadHandler, RepairRoadParams
+    from aftershock.town.state import ROAD_REPAIR_TICKS, District
+
+    state = make_minimal_state()
+    state.districts["old_town"] = District(id="old_town", name="Old Town", road_blocked=True)
+    initial_available = state.pools["repair_crew"].available
+
+    handler = RepairRoadHandler()
+    params = RepairRoadParams(district_id="old_town")
+    handler.apply(state, params, tick=0, rng=random.Random(0))
+
+    # Pool decremented immediately
+    assert state.pools["repair_crew"].available == initial_available - 1
+
+    # Process arrivals at due_tick
+    scheduled_events(state, ROAD_REPAIR_TICKS, dummy_rng())
+
+    # Road should be unblocked
+    assert not state.districts["old_town"].road_blocked
+
+    # Crew should be returned
+    assert state.pools["repair_crew"].available == initial_available, (
+        f"repair_crew not returned: expected {initial_available}, "
+        f"got {state.pools['repair_crew'].available}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# K3: Contention — at least one pool_exhausted decline in seed 42 full run
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_seed42_has_pool_exhausted_decline(tmp_path: Path):
+    """Full seed 42, 60-tick run must have >= 1 declined resource_request with pool exhaustion
+    AND >= 1 accepted escalation decided by the commander."""
+    from aftershock.kernel.engine import Engine
+    from aftershock.kernel.recorder import Recorder, load_run
+
+    roles = load_roles(ROLES_DIR)
+    registry = make_registry()
+    state = new_town(42)
+    society = TownSociety(max_ticks=60)
+    resolver = TownResolver()
+
+    agents = {
+        "commander": CommanderScripted("commander", "commander"),
+        "medical": MedicalScripted("medical", "medical"),
+        "rescue": RescueScripted("rescue", "rescue"),
+        "fire": FireScripted("fire", "fire"),
+        "infrastructure": InfraScripted("infrastructure", "infrastructure"),
+        "comms": CommsScripted("comms", "comms"),
+    }
+
+    recorder = Recorder(tmp_path, "test-contention", {"seed": 42})
+    engine = Engine(
+        world=state, society=society, agents=agents, registry=registry,
+        roles=roles, resolver=resolver, recorder=recorder,
+        seed=42, max_ticks=60, agent_timeout_s=10.0,
+    )
+    summary = await engine.run()
+
+    # Must save a positive number of lives
+    assert summary.final_scores["lives_saved"] > 0, (
+        f"Expected lives_saved > 0, got {summary.final_scores['lives_saved']}"
+    )
+
+    # Parse NDJSON for rulings
+    _, records = load_run(tmp_path / "test-contention")
+    pool_exhausted_declines = []
+    commander_accepted_escalations = []
+    for record in records:
+        for ruling in record.rulings:
+            if not ruling.accepted and "pool exhausted" in ruling.reason:
+                pool_exhausted_declines.append(ruling)
+            if ruling.accepted and ruling.decided_by == "commander":
+                commander_accepted_escalations.append(ruling)
+
+    assert len(pool_exhausted_declines) >= 1, (
+        f"Expected >= 1 pool_exhausted decline, got {len(pool_exhausted_declines)}"
+    )
+    assert len(commander_accepted_escalations) >= 1, (
+        f"Expected >= 1 commander-accepted escalation, got {len(commander_accepted_escalations)}"
+    )

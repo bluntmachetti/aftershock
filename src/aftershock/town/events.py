@@ -28,8 +28,10 @@ from aftershock.town.state import (
     _make_required,
 )
 
-# Fire spread triggers after this many open ticks
-FIRE_SPREAD_TICKS = 6
+# Fire spread triggers after this many open ticks.
+# Set to 5: a fully-staffed fire resolves in 4 ticks (PROGRESS_PER_TICK=0.25),
+# so spread is unreachable for fast response but activates for neglected fires.
+FIRE_SPREAD_TICKS = 5
 
 
 def _next_event_id(state: TownState, events: list[WorldEvent]) -> str:
@@ -60,10 +62,28 @@ def scheduled_events(state: TownState, tick: int, rng: random.Random) -> list[Wo
                     kind="road_unblocked",
                     payload={"district_id": pa.district_id},
                 ))
+        elif pa.mission_id == "" and pa.resource != "road_unblock":
+            # Pool-return arrival: a consumed resource (e.g. repair_crew) returning
+            # after its job is done.  mission_id is empty — credit the pool directly.
+            pool = state.pools.get(pa.resource)
+            if pool is not None:
+                pool.available += pa.qty
+                events.append(WorldEvent(
+                    event_id=_next_event_id(state, events),
+                    tick=tick,
+                    kind="arrival",
+                    payload={
+                        "resource": pa.resource,
+                        "qty": pa.qty,
+                        "direction": "pool_return",
+                    },
+                ))
         else:
             # Dispatch arrival: assign resources to mission.
             # Pool was already decremented at dispatch time (resources are "in transit"),
             # so we just assign to the mission here.
+            # If the mission is no longer open (resolved or failed before arrival landed),
+            # return the reserved qty to the pool instead of dropping it.
             mission = state.missions.get(pa.mission_id)
             if mission is not None and mission.status == MissionStatus.open:
                 mission.assigned[pa.resource] = (
@@ -79,6 +99,22 @@ def scheduled_events(state: TownState, tick: int, rng: random.Random) -> list[Wo
                         "qty": pa.qty,
                     },
                 ))
+            else:
+                # Mission gone — return reserved units to pool (prevents leak)
+                pool = state.pools.get(pa.resource)
+                if pool is not None:
+                    pool.available += pa.qty
+                    events.append(WorldEvent(
+                        event_id=_next_event_id(state, events),
+                        tick=tick,
+                        kind="arrival",
+                        payload={
+                            "mission_id": pa.mission_id,
+                            "resource": pa.resource,
+                            "qty": pa.qty,
+                            "direction": "pool_return_mission_closed",
+                        },
+                    ))
 
     # Keep entries that are not yet due
     for pa in state.pending:
@@ -116,8 +152,10 @@ def scheduled_events(state: TownState, tick: int, rng: random.Random) -> list[Wo
                 },
             ))
 
-        # Casualties: each open mission loses lives per tick
-        casualty_count = round(0.1 * mission.severity * (1 + state.panic))
+        # Casualties: each open mission loses lives per tick.
+        # Rate 0.25 ensures severity>=2 missions drip ~1 life/tick, making
+        # slow response visibly costly rather than zero for most seeds.
+        casualty_count = round(0.25 * mission.severity * (1 + state.panic))
         casualty_count = max(0, min(casualty_count, mission.lives_at_risk))
         if casualty_count > 0:
             mission.lives_at_risk -= casualty_count
@@ -137,6 +175,7 @@ def scheduled_events(state: TownState, tick: int, rng: random.Random) -> list[Wo
             mission.lives_at_risk = 0
             mission.status = MissionStatus.resolved
             mission.resolved_tick = tick
+            _reclaim_pending_for_mission(state, mission)
             _return_resources(state, mission)
             events.append(WorldEvent(
                 event_id=_next_event_id(state, events),
@@ -150,6 +189,7 @@ def scheduled_events(state: TownState, tick: int, rng: random.Random) -> list[Wo
             mission.lives_at_risk = 0
             mission.status = MissionStatus.failed
             state.panic = min(1.0, state.panic + PANIC_PER_FAILURE)
+            _reclaim_pending_for_mission(state, mission)
             _return_resources(state, mission)
             events.append(WorldEvent(
                 event_id=_next_event_id(state, events),
@@ -228,7 +268,8 @@ def scheduled_events(state: TownState, tick: int, rng: random.Random) -> list[Wo
                 ))
 
     # ------------------------------------------------------------------
-    # Step 4: Fire spread — fire open >= 6 ticks gets severity+1 (max 5)
+    # Step 4: Fire spread — fire open >= FIRE_SPREAD_TICKS gets severity+1
+    #         once per mission (spread_applied guards the one-shot)
     # ------------------------------------------------------------------
     for mid in sorted(state.missions):
         mission = state.missions[mid]
@@ -236,10 +277,13 @@ def scheduled_events(state: TownState, tick: int, rng: random.Random) -> list[Wo
             continue
         if mission.kind != MissionKind.fire:
             continue
+        if mission.spread_applied:
+            continue
         open_ticks = tick - mission.spawned_tick
         if open_ticks >= FIRE_SPREAD_TICKS and mission.severity < 5:
             mission.severity = min(5, mission.severity + 1)
             mission.lives_at_risk += 5
+            mission.spread_applied = True
             events.append(WorldEvent(
                 event_id=_next_event_id(state, events),
                 tick=tick,
@@ -272,5 +316,19 @@ def _return_resources(state: TownState, mission: Mission) -> None:
     for resource, qty in mission.assigned.items():
         pool = state.pools.get(resource)
         if pool is not None and qty > 0:
-            pool.available = min(pool.total, pool.available + qty)
+            pool.available += qty
     mission.assigned = {}
+
+
+def _reclaim_pending_for_mission(state: TownState, mission: Mission) -> None:
+    """Return any still-pending (in-transit) reserved units for a closed mission."""
+    kept: list[PendingArrival] = []
+    for pa in state.pending:
+        if pa.mission_id == mission.id and pa.resource != "road_unblock":
+            # Units were reserved at dispatch time; return them now
+            pool = state.pools.get(pa.resource)
+            if pool is not None:
+                pool.available += pa.qty
+        else:
+            kept.append(pa)
+    state.pending = kept

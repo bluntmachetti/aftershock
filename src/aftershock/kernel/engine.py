@@ -408,9 +408,9 @@ class Engine:
         # Phase 8: RECORD — ledger, TickRecord, refill feedback buffers
         # ---------------------------------------------------------------
         for agent_id in sorted_ids:
-            resp = cleaned_responses[agent_id]
-            if resp.usage is not None:
-                self._ledger.record(tick, agent_id, resp.usage)
+            agent_resp = cleaned_responses[agent_id]
+            if agent_resp.usage is not None:
+                self._ledger.record(tick, agent_id, agent_resp.usage)
 
         world_dig = digest(self._society.world_state(self._world))
 

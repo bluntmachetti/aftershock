@@ -46,7 +46,7 @@ def _build_scripted_agents(roles: dict) -> dict:
 
 def _build_engine(seed: int, ticks: int, out_dir: Path, run_id: str) -> Engine:
     world = new_town(seed)
-    society = TownSociety()
+    society = TownSociety(max_ticks=ticks)
     registry = DecisionRegistry()
     register_all(registry)
     roles = load_roles(_ROLES_DIR)

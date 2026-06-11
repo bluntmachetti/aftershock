@@ -22,6 +22,7 @@ from aftershock.kernel.protocol import (
     Observation,
     Proposal,
     ProposalKind,
+    ProposalResponse,
 )
 
 # Threshold: missions with deadline within this many ticks are "urgent"
@@ -78,9 +79,36 @@ class CommanderScripted(ScriptedAgent):
     def act_sync(self, observation: Observation) -> AgentResponse:
         view = observation.view
         open_missions = view.get("open_missions", [])
+        # Build a lookup of open missions by id for escalation handling
+        open_mission_map = {m["id"]: m for m in open_missions}
 
         decisions: list[Decision] = []
+        responses: list[ProposalResponse] = []
         n = 0
+
+        # Handle escalations in inbox: accept each and bump mission priority
+        for prop in observation.inbox:
+            if prop.kind != ProposalKind.ESCALATION:
+                continue
+            responses.append(ProposalResponse(
+                proposal_id=prop.proposal_id,
+                responder=self.agent_id,
+                accept=True,
+                note="commander acknowledges escalation",
+            ))
+            # Bump priority of the escalated mission
+            mission_id = prop.body.get("mission_id", "")
+            mission = open_mission_map.get(mission_id)
+            if mission is not None:
+                severity = mission.get("severity", 1)
+                new_priority = min(10, severity * SEVERITY_PRIORITY_MULT + URGENCY_BONUS + 2)
+                decisions.append(Decision(
+                    decision_id=f"{self.agent_id}-{n}",
+                    agent_id=self.agent_id,
+                    decision_type="set_priority",
+                    params={"mission_id": mission_id, "priority": new_priority},
+                ))
+                n += 1
 
         for mission in sorted(open_missions, key=lambda m: m["id"]):
             # Assign priority to missions that have none (priority == 0)
@@ -97,7 +125,11 @@ class CommanderScripted(ScriptedAgent):
                 ))
                 n += 1
 
-        return AgentResponse(agent_id=self.agent_id, decisions=tuple(decisions))
+        return AgentResponse(
+            agent_id=self.agent_id,
+            decisions=tuple(decisions),
+            responses=tuple(responses),
+        )
 
 
 class MedicalScripted(ScriptedAgent):
@@ -135,6 +167,7 @@ class InfraScripted(ScriptedAgent):
         pn = 0
         dn = 0
 
+        tick = observation.tick
         # Resource requests for infra missions
         my_missions = sorted(
             [m for m in open_missions if m.get("kind") in _INFRA_KINDS],
@@ -149,7 +182,7 @@ class InfraScripted(ScriptedAgent):
                     qty = min(shortfall, available)
                     urgency = _mission_urgency(mission)
                     proposals.append(Proposal(
-                        proposal_id=f"{self.agent_id}-p{pn}",
+                        proposal_id=f"{self.agent_id}-t{tick}-p{pn}",
                         sender=self.agent_id,
                         recipient=None,
                         kind=ProposalKind.RESOURCE_REQUEST,
@@ -168,7 +201,7 @@ class InfraScripted(ScriptedAgent):
                 and _staffing_ratio(mission) < ESCALATION_STAFFING_THRESHOLD
             ):
                 proposals.append(Proposal(
-                    proposal_id=f"{self.agent_id}-p{pn}",
+                    proposal_id=f"{self.agent_id}-t{tick}-p{pn}",
                     sender=self.agent_id,
                     recipient="commander",
                     kind=ProposalKind.ESCALATION,
@@ -229,6 +262,7 @@ def _specialist_act(
     view = observation.view
     open_missions = view.get("open_missions", [])
     pool_availability = view.get("pool_availability", {})
+    tick = observation.tick
 
     proposals: list[Proposal] = []
     pn = 0
@@ -246,7 +280,7 @@ def _specialist_act(
                 qty = min(shortfall, available)
                 urgency = _mission_urgency(mission)
                 proposals.append(Proposal(
-                    proposal_id=f"{agent_id}-p{pn}",
+                    proposal_id=f"{agent_id}-t{tick}-p{pn}",
                     sender=agent_id,
                     recipient=None,
                     kind=ProposalKind.RESOURCE_REQUEST,
@@ -265,7 +299,7 @@ def _specialist_act(
             and _staffing_ratio(mission) < ESCALATION_STAFFING_THRESHOLD
         ):
             proposals.append(Proposal(
-                proposal_id=f"{agent_id}-p{pn}",
+                proposal_id=f"{agent_id}-t{tick}-p{pn}",
                 sender=agent_id,
                 recipient="commander",
                 kind=ProposalKind.ESCALATION,
