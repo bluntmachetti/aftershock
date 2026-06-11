@@ -1,0 +1,154 @@
+# NYC Hurricane Ida scenario config (adapter: nyc) — the HEADLINE disaster pack.
+#
+# Sources (joined on the same 12h window — no shared incident key, time/borough
+# alignment only):
+#   * EMS Incident Dispatch Data  (76xm-jjuj) — per-incident, ordinal severity
+#     1-8, precomputed response seconds + validity flag, held_indicator, borough.
+#     NO unit counts (ambulance pool is CALIBRATED against held saturation).
+#   * Fire Incident Dispatch Data (8m42-w767) — per-incident, classification
+#     groups, per-incident apparatus counts (engines/ladders/other), response
+#     seconds + validity flag, incident_borough. Fire apparatus counts ARE
+#     observed (fire_engine pool = engines-assigned p75).
+#
+# All counts adversarially verified live 2026-06-11 against the Ida window
+# 2021-09-01T18:00..09-02T06:00 (EDT): 2,003 EMS incidents (16.5% held, avg 948s
+# valid response), 2,022 Fire incidents. See
+# .omc/research/open-datasets-compare-mode.md §2 + Appendix.
+#
+# This config is the AUTHORITATIVE record of the semantic mapping decisions
+# (borough->slot, EMS severity rebin, Fire classification->kind, Fire severity by
+# engines quantiles, lives lookup). Its sha256 is stamped into scenario.json
+# (config_sha256). Edit = new pack hash.
+#
+# The engine vocabulary is FROZEN: real EMS/Fire incident types are mapped onto
+# the four MissionKinds HERE, in the offline compiler.
+
+id: nyc-ida-2021
+name: "Hurricane Ida — NYC, night of 2021-09-01"
+hazard: hurricane_flood
+adapter: nyc
+
+# ---------------------------------------------------------------------------
+# Extract: two SODA queries (EMS + Fire) over the Ida overnight window. Keyless
+# anonymous SODA. A 12h window is ~2k incidents per dataset — one request each.
+# ---------------------------------------------------------------------------
+extract:
+  ems_resource: 76xm-jjuj
+  ems_base_url: "https://data.cityofnewyork.us/resource/76xm-jjuj.json"
+  fire_resource: 8m42-w767
+  fire_base_url: "https://data.cityofnewyork.us/resource/8m42-w767.json"
+  # incident_datetime window [start, end). 12h = 60 ticks at 12 min/tick.
+  window_start: "2021-09-01T18:00:00"
+  window_end: "2021-09-02T06:00:00"
+  limit: 50000
+
+# ---------------------------------------------------------------------------
+# Discretize
+# ---------------------------------------------------------------------------
+tick_minutes: 12
+
+# Borough -> canonical district slot. The six canonical ids are POSITIONAL SLOTS
+# (the SVG map keys off them); display names below override the labels. NYC has
+# five boroughs; Brooklyn is split across two slots (West/East), see brooklyn_split.
+borough_slot:
+  MANHATTAN: old_town
+  "RICHMOND / STATEN ISLAND": harbor
+  BRONX: hospital_district
+  QUEENS: residential_north
+  # BROOKLYN handled by brooklyn_split (-> market / industrial)
+
+# Brooklyn split into Brooklyn West (market) and Brooklyn East (industrial).
+# Deterministic, documented, consistent across the two datasets:
+#   * EMS  -> incident_dispatch_area (K1-K7): K1-K4 West, K5-K7 East.
+#   * Fire -> communitydistrict (3xx): brownstone/north-west CDs West, else East.
+brooklyn_split:
+  west_slot: market
+  east_slot: industrial
+  ems_west_areas: ["K1", "K2", "K3", "K4"]
+  fire_west_community_districts:
+    [301, 302, 303, 306, 308, 310, 311, 313, 315, 316]
+
+# District display names (override the canonical slot labels). members documents
+# the real borough/sub-area backing each slot.
+districts:
+  old_town:          { name: "Manhattan",       members: ["MN"] }
+  harbor:            { name: "Staten Island",    members: ["SI"] }
+  hospital_district: { name: "Bronx",            members: ["BX"] }
+  market:            { name: "Brooklyn West",    members: ["BK-W"] }
+  residential_north: { name: "Queens",           members: ["QN"] }
+  industrial:        { name: "Brooklyn East",    members: ["BK-E"] }
+
+# ---- EMS mapping ----------------------------------------------------------
+# EMS feeds medical_surge only. Severity code 1-8 is a caller-information
+# dispatch priority (1 = most severe; verified ARREST = code 1 at 99.98%).
+# Rebin 1-8 -> 1-5: codes 1-2 -> 5, code 3 -> 4. Codes 4-8 are LOW-ACUITY noise
+# excluded by keep_severity_codes (only the high-acuity tail becomes a mission).
+ems:
+  keep_severity_codes: [1, 2, 3]
+  severity_rebin:
+    1: 5
+    2: 5
+    3: 4
+  severity_default: 4
+
+# ---- Fire mapping ---------------------------------------------------------
+# Fire classification_group -> MissionKind. Structural Fires -> fire;
+# NonStructural Fires -> fire; NonMedical Emergencies -> infra_repair (utility/
+# downed-tree/flood non-fire). Medical groups are dropped (EMS owns medical).
+# MFAs (malicious false alarms / mutual aid) dropped.
+fire:
+  keep_classification_groups:
+    ["Structural Fires", "NonStructural Fires", "NonMedical Emergencies"]
+  group_kind:
+    "Structural Fires": fire
+    "NonStructural Fires": fire
+    "NonMedical Emergencies": infra_repair
+  default_kind: fire
+  # Severity from engines-assigned quantiles (NEVER highest_alarm_level).
+  # engines==0 (utility/assist) -> 2; <=p50 -> 2; <=p75 -> 3; <=p90 -> 4; else 5.
+  severity_zero_engines: 2
+
+# lives_at_risk lookup: LIVES[mission_kind][severity] (severity 1..5). Inferred
+# field (no per-incident casualty ground truth exists). Values clamp to [1, 64].
+lives:
+  collapse_rescue: [2, 4, 8, 12, 20]
+  fire:            [1, 2, 4, 8, 16]
+  medical_surge:   [1, 1, 2, 3, 5]
+  infra_repair:    [1, 1, 2, 3, 4]
+
+# Deterministic stratified downsample to target_missions, via
+# random.Random(sample_seed). Strata = (tick-bucket of size stratum_ticks,
+# mission_kind). Recorded verbatim in the pack (kept/total/sample_seed).
+sampling:
+  target_missions: 16
+  sample_seed: 4636
+  stratum_ticks: 12
+
+# Pools. fire_engine is OBSERVED (engines-assigned p75 in the window). ambulance
+# is CALIBRATED against held saturation (no EMS unit counts exist). rescue_crew/
+# repair_crew/supply_truck have NO NYC analog -> calibrated default. Clamp [1,12]
+# but practically [2,6] for the society model.
+pools:
+  clamp_min: 2
+  clamp_max: 6
+  calibrated:
+    ambulance: 4
+    rescue_crew: 3
+    repair_crew: 3
+    supply_truck: 3
+
+# Reference baseline window: an Ida-ADJACENT CALM window (same weekday band, two
+# weeks prior, 2021-08-18 Wed 18:00 -> 08-19 06:00 EDT). Figures below are the
+# adapter-computed values for that window, verified live 2026-06-11:
+#   mean 524s · median 451s · held 4.1% (vs Ida mean 948s · median 540s · 16.5%).
+# These are NOT the 538s/6.9% pre-Sandy figures (2012-10-15/16) — a named,
+# Ida-adjacent baseline as required.
+reference:
+  baseline_window_start: "2021-08-18T18:00:00"
+  baseline_window_end: "2021-08-19T06:00:00"
+  baseline_note: "Ida-adjacent calm window: 2021-08-18 (Wed) 18:00 -> 08-19 06:00 EDT (two weeks prior)."
+  baseline_mean_latency_s: 524
+  baseline_median_latency_s: 451
+  baseline_held_rate: 0.0415
+
+mapping_version: nyc-v1

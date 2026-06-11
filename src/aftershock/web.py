@@ -6,8 +6,15 @@ Provides:
   - Live run lifecycle: POST /api/live, WS /ws/live, POST /api/live/inject
   - Static serving of web/dist when present
 
+Scenario packs (additive, task #4):
+  - GET /api/scenarios            list (compact, ungated)
+  - GET /api/scenarios/{id}       full pack incl. reference (ungated)
+  - POST /api/live                gains optional scenario id; ticks becomes optional
+  - run.json manifest carries a scenario block; /api/runs and /api/runs/{id} expose it
+
 Security:
   - run_id validated against ^[A-Za-z0-9._-]+$ and resolved().is_relative_to(runs_root)
+  - scenario id validated against ^[a-z0-9][a-z0-9-]*$ via the same traversal-guard pattern
   - Never formats exceptions into responses
   - limit parameters capped at 200
   - OBSERVATORY_TOKEN env var gates mutating POST endpoints (required when --host != 127.0.0.1)
@@ -37,6 +44,11 @@ from pydantic import BaseModel
 from aftershock.kernel.engine import Engine
 from aftershock.kernel.recorder import Recorder, load_run
 from aftershock.town.arms import build_arm
+from aftershock.town.scenario import (
+    ScenarioPack,
+    load_scenario,
+    scenario_tick_budget,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +57,22 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+# Scenario id grammar (matches the dir name; same as town/scenario.py loader).
+_SCENARIO_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _MAX_TICKS_LIVE = 120
 _MAX_LIMIT = 200
+_DEFAULT_SYNTHETIC_TICKS = 30
+# Scenario tick budget (default + under-budget floor) comes from the shared
+# town.scenario.scenario_tick_budget helper so the CLI and the live API agree.
 _VALID_INJECT_KINDS = frozenset({"fire", "aftershock", "road_block"})
 _MAX_PENDING_INJECTIONS = 50
+
+# Per-pack caveat lines (DESIGN.md task #4, invariant 4 — chosen per pack so it never
+# claims a category the pack's field_provenance does not support). A pack with a
+# populated reference.missions carries a real latency baseline (dispatch pack); a pack
+# without one is hazard-timing-only.
+_CAVEAT_DISPATCH = "Demand: real · Latency baseline: real · Lives & outcomes: simulated model."
+_CAVEAT_HAZARD_ONLY = "Hazard timing: real · Demand & outcomes: simulated model."
 
 
 # ---------------------------------------------------------------------------
@@ -59,9 +83,13 @@ _MAX_PENDING_INJECTIONS = 50
 class LiveRunRequest(BaseModel):
     arm: str
     seed: int
-    ticks: int = 30
+    # ticks is optional so the server can distinguish "omitted" (default 30 synthetic,
+    # min(last timeline tick + 20, 120) for a scenario run) from an explicit 30.
+    ticks: int | None = None
     aar: bool = False
     memory: bool = False
+    # Optional scenario id; when set the world is built from the committed pack.
+    scenario: str | None = None
 
 
 class InjectRequest(BaseModel):
@@ -120,6 +148,106 @@ def _validate_run_id(run_id: str, runs_root: Path) -> Path:
     return candidate
 
 
+def _validate_scenario_id(scenario_id: str, scenarios_root: Path) -> Path:
+    """Validate a scenario id and return the resolved scenario directory.
+
+    Mirrors ``_validate_run_id``: the id must match ``^[a-z0-9][a-z0-9-]*$`` and the
+    resolved candidate must stay within ``scenarios_root`` (defeats ``..``/encoded
+    traversal). Raises HTTPException(404) for any invalid or path-traversal input, and
+    for a directory without a ``scenario.json``.
+    """
+    if not _SCENARIO_ID_RE.match(scenario_id) or scenario_id in {".", ".."}:
+        raise HTTPException(status_code=404, detail="not found")
+    resolved_root = scenarios_root.resolve()
+    candidate = (scenarios_root / scenario_id).resolve()
+    try:
+        candidate.relative_to(resolved_root)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="not found") from None
+    if not candidate.exists() or not candidate.is_dir():
+        raise HTTPException(status_code=404, detail="not found")
+    if not (candidate / "scenario.json").is_file():
+        raise HTTPException(status_code=404, detail="not found")
+    return candidate
+
+
+def _load_pack_or_404(scenario_id: str, scenarios_root: Path) -> ScenarioPack:
+    """Validate the id, then load + validate the pack. 404 on any problem."""
+    scenario_dir = _validate_scenario_id(scenario_id, scenarios_root)
+    try:
+        return load_scenario(scenario_dir / "scenario.json")
+    except Exception:  # noqa: BLE001  — never leak validation/IO internals
+        raise HTTPException(status_code=404, detail="not found") from None
+
+
+def _caveat_line_for_pack(pack: ScenarioPack) -> str:
+    """The honest per-pack caveat line (invariant 4).
+
+    A pack with real first-on-scene baselines (populated ``reference.missions``) is a
+    dispatch pack; one without is hazard-timing-only. Chosen so the line never claims a
+    category the pack's data does not support.
+    """
+    if pack.reference.missions:
+        return _CAVEAT_DISPATCH
+    return _CAVEAT_HAZARD_ONLY
+
+
+def _scenario_list_entry(pack: ScenarioPack) -> dict[str, Any]:
+    """Compact list view for GET /api/scenarios."""
+    return {
+        "id": pack.id,
+        "name": pack.name,
+        "hazard": pack.hazard,
+        "tick_minutes": pack.tick_minutes,
+        "window": pack.window.model_dump(),
+        "missions": sum(1 for e in pack.timeline if e.kind == "mission"),
+        "sampling": {"kept": pack.sampling.kept, "total": pack.sampling.total},
+        "source": [
+            {
+                "dataset": s.dataset,
+                "provider": s.provider,
+                "license": s.license,
+                "attribution": s.attribution,
+            }
+            for s in pack.source
+        ],
+    }
+
+
+def _scenario_compact(pack: ScenarioPack) -> dict[str, Any]:
+    """Compact scenario summary for /api/runs list rows: {id, name, hazard}."""
+    return {"id": pack.id, "name": pack.name, "hazard": pack.hazard}
+
+
+def _scenario_manifest_block(pack: ScenarioPack) -> dict[str, Any]:
+    """The run.json scenario block — enough for the UI to render provenance without a
+    second fetch (DESIGN.md engine integration)."""
+    return {
+        "id": pack.id,
+        "name": pack.name,
+        "hazard": pack.hazard,
+        "tick_minutes": pack.tick_minutes,
+        "pack_digest": pack.pack_digest,
+        "config_sha256": pack.config_sha256,
+        "source": [s.model_dump() for s in pack.source],
+        "field_provenance": pack.field_provenance.model_dump(),
+        "caveat_line": _caveat_line_for_pack(pack),
+        "reference_aggregates": dict(pack.reference.aggregates),
+    }
+
+
+def _scenario_compact_from_manifest(manifest: dict[str, Any]) -> dict[str, Any] | None:
+    """Pull the compact {id,name,hazard} from a stored run manifest, or None."""
+    block = manifest.get("scenario")
+    if not isinstance(block, dict):
+        return None
+    return {
+        "id": block.get("id"),
+        "name": block.get("name"),
+        "hazard": block.get("hazard"),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Run scanning helpers
 # ---------------------------------------------------------------------------
@@ -155,6 +283,7 @@ def _scan_runs(runs_root: Path) -> list[dict[str, Any]]:
                 "final_scores": manifest.get("final_scores", {}),
                 "cost": manifest.get("cost", {}),
                 "has_world": has_world,
+                "scenario": _scenario_compact_from_manifest(manifest),
             }
             mtime = entry.stat().st_mtime
             results.append((mtime, result))
@@ -189,6 +318,7 @@ async def _run_live(
     runs_root: Path,
     do_aar: bool = False,
     do_memory: bool = False,
+    pack: ScenarioPack | None = None,
 ) -> None:
     """Run one live arm in a background task, streaming tick records to WS clients."""
     global _live
@@ -212,7 +342,7 @@ async def _run_live(
             memory_path = runs_root / "memory.json"
             lessons = load_lessons(memory_path) or None
 
-        setup = build_arm(arm, seed, provider, lessons=lessons)
+        setup = build_arm(arm, seed, provider, lessons=lessons, scenario=pack)
     except Exception:  # noqa: BLE001
         async with _live_lock:
             if _live is state:
@@ -227,6 +357,8 @@ async def _run_live(
         "run_id": run_id,
         "live_id": state.live_id,
     }
+    if pack is not None:
+        manifest_rec["scenario"] = _scenario_manifest_block(pack)
     runs_root.mkdir(parents=True, exist_ok=True)
     recorder = Recorder(runs_root, run_id, manifest_rec)
 
@@ -311,17 +443,22 @@ def create_app(
     runs_root: Path,
     bench_root: Path | None = None,
     host: str = "127.0.0.1",
+    scenarios_root: Path | None = None,
 ) -> FastAPI:
     """Create and return the FastAPI application.
 
     Args:
-        runs_root:  Directory where run directories are stored.
-        bench_root: Directory where benchmark results.json files live.
-                    Defaults to bench/results/ relative to cwd.
-        host:       The bind host (passed from CLI). Used for startup safety check.
+        runs_root:      Directory where run directories are stored.
+        bench_root:     Directory where benchmark results.json files live.
+                        Defaults to bench/results/ relative to cwd.
+        host:           The bind host (passed from CLI). Used for startup safety check.
+        scenarios_root: Directory holding committed scenario packs
+                        (``<id>/scenario.json``). Defaults to scenarios/ relative to cwd.
     """
     if bench_root is None:
         bench_root = Path("bench") / "results"
+    if scenarios_root is None:
+        scenarios_root = Path("scenarios")
 
     # ------------------------------------------------------------------
     # Auth token + CORS setup
@@ -374,12 +511,14 @@ def create_app(
             manifest, ticks, worlds = load_run(run_dir)
         except Exception:  # noqa: BLE001
             raise HTTPException(status_code=404, detail="not found") from None
+        scenario_block = manifest.get("scenario")
         return JSONResponse({
             "run_id": run_id,
             "manifest": manifest,
             "final_scores": manifest.get("final_scores", {}),
             "n_ticks": len(ticks),
             "has_world": worlds is not None,
+            "scenario": scenario_block if isinstance(scenario_block, dict) else None,
         })
 
     # ------------------------------------------------------------------
@@ -489,6 +628,41 @@ def create_app(
         return JSONResponse([r for _, r in results])
 
     # ------------------------------------------------------------------
+    # GET /api/scenarios  (ungated, like every other GET)
+    # ------------------------------------------------------------------
+
+    @app.get("/api/scenarios")
+    async def list_scenarios() -> JSONResponse:
+        if not scenarios_root.exists() or not scenarios_root.is_dir():
+            return JSONResponse([])
+        entries: list[dict[str, Any]] = []
+        for entry in sorted(scenarios_root.iterdir()):
+            if not entry.is_dir():
+                continue
+            scenario_id = entry.name
+            # Apply the same id grammar as the detail endpoint; skip non-conforming dirs.
+            if not _SCENARIO_ID_RE.match(scenario_id):
+                continue
+            scenario_json = entry / "scenario.json"
+            if not scenario_json.is_file():
+                continue
+            try:
+                pack = load_scenario(scenario_json)
+            except Exception:  # noqa: BLE001 — skip malformed packs, never 500
+                continue
+            entries.append(_scenario_list_entry(pack))
+        return JSONResponse(entries)
+
+    # ------------------------------------------------------------------
+    # GET /api/scenarios/{scenario_id}  (full pack incl. reference, ungated)
+    # ------------------------------------------------------------------
+
+    @app.get("/api/scenarios/{scenario_id}")
+    async def scenario_detail(scenario_id: str) -> JSONResponse:
+        pack = _load_pack_or_404(scenario_id, scenarios_root)
+        return JSONResponse(pack.model_dump())
+
+    # ------------------------------------------------------------------
     # GET /api/live
     # ------------------------------------------------------------------
 
@@ -526,8 +700,36 @@ def create_app(
                     status_code=409, detail="a live run is already in progress"
                 )
 
-        # ticks cap
-        if req.ticks > _MAX_TICKS_LIVE:
+        # Resolve the scenario pack (unknown/invalid id -> 404) before computing ticks:
+        # the omitted-ticks default depends on the pack's timeline.
+        pack: ScenarioPack | None = None
+        if req.scenario is not None:
+            pack = _load_pack_or_404(req.scenario, scenarios_root)
+
+        # Effective ticks: omitted ("None") -> server default
+        #   synthetic: 30; scenario: min(last timeline tick + 20, 120) via the
+        #   shared scenario_tick_budget helper (same logic the CLI uses).
+        # An explicit value is honored (capped above and floored below for scenarios).
+        if req.ticks is None:
+            ticks = scenario_tick_budget(pack) if pack is not None else _DEFAULT_SYNTHETIC_TICKS
+        else:
+            ticks = req.ticks
+
+        # For a scenario run, an explicit under-budget ticks value would silently
+        # truncate the real timeline — refuse it (mirrors the CLI's hard error).
+        if pack is not None and req.ticks is not None:
+            budget = scenario_tick_budget(pack)
+            if req.ticks < budget:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"ticks {req.ticks} is under the scenario budget ({budget}); "
+                        f"omit ticks or pass >= {budget}"
+                    ),
+                )
+
+        # ticks cap (applies to explicit values; the scenario default is pre-capped)
+        if ticks > _MAX_TICKS_LIVE:
             raise HTTPException(
                 status_code=422, detail=f"ticks must be <= {_MAX_TICKS_LIVE}"
             )
@@ -555,10 +757,11 @@ def create_app(
             _run_live(
                 req.arm,
                 req.seed,
-                req.ticks,
+                ticks,
                 runs_root,
                 do_aar=req.aar,
                 do_memory=req.memory,
+                pack=pack,
             )
         )
         _live._task = task  # type: ignore[attr-defined]  # retain strong ref to prevent GC

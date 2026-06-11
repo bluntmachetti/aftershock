@@ -1,0 +1,8 @@
+{
+  "fetched_at": "2026-06-11",
+  "query_url": "https://data.sfgov.org/resource/nuek-vuh3.json?$where=received_dttm between '2018-07-04T06:00:00' and '2018-07-04T18:00:00'&$order=received_dttm,call_number,unit_id&$limit=50000",
+  "resource": "nuek-vuh3",
+  "rows_fetched": 26,
+  "window_end": "2018-07-04T18:00:00",
+  "window_start": "2018-07-04T06:00:00"
+}

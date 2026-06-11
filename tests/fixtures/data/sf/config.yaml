@@ -1,0 +1,170 @@
+# SF routine-emergency scenario config (adapter: sf).
+#
+# Source: DataSF "Fire Department and Emergency Medical Services Dispatched Calls
+# for Service" (nuek-vuh3), SODA, keyless, PDDL public domain. 7,340,535 rows
+# verified 2026-06-11. One row per dispatched unit; group by call_number.
+#
+# This config is the AUTHORITATIVE record of the semantic mapping decisions
+# (battalion->district, call_type->mission_kind, severity rule, lives lookup).
+# Its sha256 is stamped into scenario.json (config_sha256). Edit = new pack hash.
+#
+# Mappings drawn from .omc/research/open-datasets-compare-mode.md (shortlist #1 +
+# architecture section 3). The engine vocabulary is FROZEN: real incident types
+# are mapped onto the four MissionKinds HERE, in the offline compiler.
+
+id: sf-fixture
+name: "SF fixture (test slice)"
+hazard: routine
+adapter: sf
+
+# ---------------------------------------------------------------------------
+# Extract: one SODA query over a post-2011 ~12h window with clean
+# call_type_group population (99.4% non-null in this window).
+# ---------------------------------------------------------------------------
+extract:
+  resource: nuek-vuh3
+  base_url: "https://data.sfgov.org/resource/nuek-vuh3.json"
+  # received_dttm window [start, end). 12h = 60 ticks at 12 min/tick.
+  window_start: "2018-07-04T06:00:00"
+  window_end: "2018-07-04T18:00:00"
+  limit: 50000
+
+# ---------------------------------------------------------------------------
+# Discretize
+# ---------------------------------------------------------------------------
+tick_minutes: 12
+
+# Battalion -> canonical district id. The six canonical ids are POSITIONAL SLOTS
+# (the SVG map keys off them); display names below override the labels.
+# Lookup from research section 3: {B01,B02}->D1, {B03}->D2, {B04}->D3,
+# {B05,B06}->D4, {B07,B08}->D5, {B09,B10}->D6.
+# Junk battalion codes (B99, AMB, XXX, 3E, B100) are dropped in Aggregate.
+battalion_district:
+  B01: old_town
+  B02: old_town
+  B03: harbor
+  B04: hospital_district
+  B05: market
+  B06: market
+  B07: residential_north
+  B08: residential_north
+  B09: industrial
+  B10: industrial
+
+# District display names (override the canonical slot labels). members documents
+# the real SF battalions backing each slot.
+districts:
+  old_town:          { name: "Downtown / North Beach",  members: ["B01", "B02"] }
+  harbor:            { name: "Mission",                  members: ["B03"] }
+  hospital_district: { name: "Western Addition",         members: ["B04"] }
+  market:            { name: "Richmond / Sunset",        members: ["B05", "B06"] }
+  residential_north: { name: "Outer Sunset / Park",      members: ["B07", "B08"] }
+  industrial:        { name: "Bayview / Hunters Point",  members: ["B09", "B10"] }
+
+# Battalion junk codes to drop in Aggregate (non-geographic / admin).
+junk_battalions: ["B99", "AMB", "XXX", "3E", "B100"]
+
+# call_type -> MissionKind. Unmapped call_types fall back to default_mission_kind.
+# Structure/Outside Fire + Smoke -> fire; Medical -> medical_surge;
+# Water Rescue/Extrication/Traffic Collision/Elevator Rescue -> collapse_rescue;
+# Gas Leak/Electrical/HazMat -> infra_repair.
+mission_kind:
+  "Medical Incident": medical_surge
+  "Structure Fire / Smoke in Building": fire
+  "Structure Fire": fire
+  "Outside Fire": fire
+  "Smoke Investigation (Outside)": fire
+  "Vehicle Fire": fire
+  "Traffic Collision": collapse_rescue
+  "Water Rescue": collapse_rescue
+  "Extrication / Entrapped (Machinery, Vehicle)": collapse_rescue
+  "Elevator / Escalator Rescue": collapse_rescue
+  "High Angle Rescue": collapse_rescue
+  "Industrial Accidents": collapse_rescue
+  "Gas Leak (Natural and LP Gases)": infra_repair
+  "Electrical Hazard": infra_repair
+  "HazMat": infra_repair
+  "Explosion": infra_repair
+# "Alarms" / "Citizen Assist" / "Other" -> default (mapped to fire severity-low
+# only when call_type_group == Fire; otherwise dropped — see drop_call_types).
+default_mission_kind: fire
+# call_types dropped entirely (no clean MissionKind, non-emergency, or noise).
+drop_call_types:
+  - "Alarms"
+  - "Citizen Assist / Service Call"
+  - "Other"
+  - "Administrative"
+  - "Mutual Aid / Move Up"
+  - "Lightning Strike (Investigation)"
+  - "Train / Rail Incident"
+  - "Marine Fire"
+  - "Aircraft Emergency"
+  - "Assist Police"
+  - "Confined Space / Structure Collapse"
+  - "Oil Spill"
+  - "Watercraft in Distress"
+
+# Severity 1-5 rule (research section 3):
+#   base 3 if call_type_group in {Potentially Life-Threatening, Fire} else 2
+#   +1 if original_priority in {E, 3}
+#   +1 per alarm above 1 (number_of_alarms)
+#   clamp [1, 5]
+severity:
+  base_high: 3            # call_type_group in high_groups
+  base_low: 2             # otherwise
+  high_groups: ["Potentially Life-Threatening", "Fire"]
+  priority_bump: ["E", "3"]   # original_priority that bumps +1
+  alarm_bump: true            # +1 per alarm above 1
+  min: 1
+  max: 5
+
+# lives_at_risk lookup: LIVES[mission_kind][severity] (severity 1..5). Inferred
+# field (no per-incident casualty ground truth exists). Values clamp to [1, 64].
+lives:
+  collapse_rescue: [2, 4, 8, 12, 20]
+  fire:            [1, 2, 4, 8, 16]
+  medical_surge:   [1, 1, 2, 3, 5]
+  infra_repair:    [1, 1, 2, 3, 4]
+
+# Blockages: SF has no damage data. None synthesized for the routine pack
+# (field_provenance.blockage stays "synthetic" but no entries emitted).
+blockages:
+  enabled: false
+
+# Deterministic stratified downsample to target_missions, via
+# random.Random(sample_seed). Strata = (tick-bucket of size stratum_ticks,
+# mission_kind). Recorded verbatim in the pack (kept/total/sample_seed).
+sampling:
+  target_missions: 8
+  sample_seed: 1844
+  stratum_ticks: 12      # tick-bucket width for stratification
+
+# Pools from the observed unit roster, scaled by the sampling ratio
+# (kept/total incidents), clamped [2, 6]. unit_type -> ResourceKind:
+#   ENGINE/TRUCK -> fire_engine; MEDIC/PRIVATE -> ambulance;
+#   RESCUE SQUAD/RESCUE CAPTAIN -> rescue_crew.
+# repair_crew/supply_truck have NO SF analog -> calibrated default, not observed.
+pools:
+  unit_kind:
+    ENGINE: fire_engine
+    TRUCK: fire_engine
+    MEDIC: ambulance
+    PRIVATE: ambulance
+    "RESCUE SQUAD": rescue_crew
+    "RESCUE CAPTAIN": rescue_crew
+  observed_kinds: ["fire_engine", "ambulance", "rescue_crew"]
+  calibrated_defaults:
+    repair_crew: 3
+    supply_truck: 3
+  clamp_min: 2
+  clamp_max: 6
+
+# Reference baseline window for the "normal-period" comparison. Same calendar
+# weekday band, prior week (2018-06-27 Wed 06:00-18:00) — a routine non-holiday
+# comparison the adapter computes explicitly and names.
+reference:
+  baseline_window_start: "2018-06-27T06:00:00"
+  baseline_window_end: "2018-06-27T18:00:00"
+  baseline_note: "Routine prior-week comparison: 2018-06-27 (Wed) 06:00-18:00 local."
+
+mapping_version: sf-v1

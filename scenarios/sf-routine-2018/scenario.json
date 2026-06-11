@@ -1,0 +1,364 @@
+{
+  "adapter": "sf",
+  "compiler_version": "s2-sf-v1",
+  "config_sha256": "9ceae46a742950856996774fb75597b0715a163a8f916d9a71fd789ff209a75b",
+  "districts": [
+    {
+      "id": "harbor",
+      "members": [
+        "B03"
+      ],
+      "name": "Mission"
+    },
+    {
+      "id": "hospital_district",
+      "members": [
+        "B04"
+      ],
+      "name": "Western Addition"
+    },
+    {
+      "id": "industrial",
+      "members": [
+        "B09",
+        "B10"
+      ],
+      "name": "Bayview / Hunters Point"
+    },
+    {
+      "id": "market",
+      "members": [
+        "B05",
+        "B06"
+      ],
+      "name": "Richmond / Sunset"
+    },
+    {
+      "id": "old_town",
+      "members": [
+        "B01",
+        "B02"
+      ],
+      "name": "Downtown / North Beach"
+    },
+    {
+      "id": "residential_north",
+      "members": [
+        "B07",
+        "B08"
+      ],
+      "name": "Outer Sunset / Park"
+    }
+  ],
+  "field_provenance": {
+    "blockage": "synthetic",
+    "district_id": "real",
+    "lives_at_risk": "inferred",
+    "mission_kind": "mapped",
+    "severity": "mapped",
+    "tick": "real"
+  },
+  "format_version": 1,
+  "hazard": "routine",
+  "id": "sf-routine-2018",
+  "mapping": {
+    "lives_rule": "LIVES[mission_kind][severity] lookup table sf-v1 (inferred field); clamp [1,64]",
+    "mission_kind": {
+      "Electrical Hazard": "infra_repair",
+      "Elevator / Escalator Rescue": "collapse_rescue",
+      "Explosion": "infra_repair",
+      "Extrication / Entrapped (Machinery, Vehicle)": "collapse_rescue",
+      "Gas Leak (Natural and LP Gases)": "infra_repair",
+      "HazMat": "infra_repair",
+      "High Angle Rescue": "collapse_rescue",
+      "Industrial Accidents": "collapse_rescue",
+      "Medical Incident": "medical_surge",
+      "Outside Fire": "fire",
+      "Smoke Investigation (Outside)": "fire",
+      "Structure Fire": "fire",
+      "Structure Fire / Smoke in Building": "fire",
+      "Traffic Collision": "collapse_rescue",
+      "Vehicle Fire": "fire",
+      "Water Rescue": "collapse_rescue"
+    },
+    "severity_rule": "base 3 if call_type_group in {Potentially Life-Threatening, Fire} else 2; +1 if original_priority in {E,3}; +1 per alarm above 1; clamp [1,5]",
+    "version": "sf-v1"
+  },
+  "name": "Routine emergency demand — San Francisco, Independence Day 2018",
+  "pools": {
+    "ambulance": {
+      "basis": "calibrated",
+      "note": "2 distinct unit_type(s) mapped to ambulance in the window, but the size collapses to a clamped default (3) within [2,6] — not a real observed unit count, so calibrated",
+      "size": 3
+    },
+    "fire_engine": {
+      "basis": "calibrated",
+      "note": "2 distinct unit_type(s) mapped to fire_engine in the window, but the size collapses to a clamped default (3) within [2,6] — not a real observed unit count, so calibrated",
+      "size": 3
+    },
+    "repair_crew": {
+      "basis": "calibrated",
+      "note": "no SF analog for repair_crew; calibrated default 3",
+      "size": 3
+    },
+    "rescue_crew": {
+      "basis": "calibrated",
+      "note": "2 distinct unit_type(s) mapped to rescue_crew in the window, but the size collapses to a clamped default (3) within [2,6] — not a real observed unit count, so calibrated",
+      "size": 3
+    },
+    "supply_truck": {
+      "basis": "calibrated",
+      "note": "no SF analog for supply_truck; calibrated default 3",
+      "size": 3
+    }
+  },
+  "reference": {
+    "aggregates": {
+      "baseline_held_rate": null,
+      "baseline_mean_latency_s": null,
+      "baseline_median_latency_s": null,
+      "held_rate": null,
+      "mean_latency_s": 481,
+      "median_latency_s": 379,
+      "n_arrived": 185,
+      "n_incidents": 193
+    },
+    "missions": {
+      "0": {
+        "first_on_scene": "2018-07-04T06:56:29-07:00",
+        "latency_s": 480,
+        "received": "2018-07-04T06:48:29-07:00"
+      },
+      "1": {
+        "first_on_scene": "2018-07-04T07:12:47-07:00",
+        "latency_s": 310,
+        "received": "2018-07-04T07:07:37-07:00"
+      },
+      "10": {
+        "first_on_scene": "2018-07-04T15:01:31-07:00",
+        "latency_s": 166,
+        "received": "2018-07-04T14:58:45-07:00"
+      },
+      "11": {
+        "first_on_scene": "2018-07-04T15:37:12-07:00",
+        "latency_s": 1317,
+        "received": "2018-07-04T15:15:15-07:00"
+      },
+      "12": {
+        "first_on_scene": "2018-07-04T15:37:19-07:00",
+        "latency_s": 203,
+        "received": "2018-07-04T15:33:56-07:00"
+      },
+      "13": {
+        "first_on_scene": "2018-07-04T15:51:31-07:00",
+        "latency_s": 629,
+        "received": "2018-07-04T15:41:02-07:00"
+      },
+      "14": {
+        "first_on_scene": "2018-07-04T17:13:05-07:00",
+        "latency_s": 345,
+        "received": "2018-07-04T17:07:20-07:00"
+      },
+      "15": {
+        "first_on_scene": "2018-07-04T17:38:57-07:00",
+        "latency_s": 277,
+        "received": "2018-07-04T17:34:20-07:00"
+      },
+      "2": {
+        "first_on_scene": "2018-07-04T07:15:34-07:00",
+        "latency_s": 302,
+        "received": "2018-07-04T07:10:32-07:00"
+      },
+      "3": {
+        "first_on_scene": "2018-07-04T08:30:52-07:00",
+        "latency_s": 352,
+        "received": "2018-07-04T08:25:00-07:00"
+      },
+      "4": {
+        "first_on_scene": "2018-07-04T09:31:48-07:00",
+        "latency_s": 377,
+        "received": "2018-07-04T09:25:31-07:00"
+      },
+      "5": {
+        "first_on_scene": "2018-07-04T10:21:52-07:00",
+        "latency_s": 257,
+        "received": "2018-07-04T10:17:35-07:00"
+      },
+      "6": {
+        "first_on_scene": "2018-07-04T11:12:50-07:00",
+        "latency_s": 230,
+        "received": "2018-07-04T11:09:00-07:00"
+      },
+      "7": {
+        "first_on_scene": "2018-07-04T11:54:31-07:00",
+        "latency_s": 374,
+        "received": "2018-07-04T11:48:17-07:00"
+      },
+      "8": {
+        "first_on_scene": null,
+        "latency_s": null,
+        "received": "2018-07-04T13:05:33-07:00"
+      },
+      "9": {
+        "first_on_scene": "2018-07-04T13:13:59-07:00",
+        "latency_s": 368,
+        "received": "2018-07-04T13:07:51-07:00"
+      }
+    }
+  },
+  "sampling": {
+    "filter": "battalion in B01-B10 (junk B99/AMB/XXX dropped); call_type mapped to a MissionKind (Alarms/Citizen Assist/Other dropped)",
+    "kept": 16,
+    "method": "stratified by (tick-bucket, mission_kind)",
+    "sample_seed": 1844,
+    "total": 193
+  },
+  "source": [
+    {
+      "attribution": "DataSF",
+      "dataset": "Fire Department and Emergency Medical Services Dispatched Calls for Service",
+      "dataset_id": "nuek-vuh3",
+      "fetched_at": "2026-06-11",
+      "license": "PDDL 1.0 (Public Domain Dedication and License)",
+      "license_url": "http://opendatacommons.org/licenses/pddl/1.0/",
+      "provider": "DataSF (San Francisco Open Data)",
+      "query_url": "https://data.sfgov.org/resource/nuek-vuh3.json?%24where=received_dttm+between+%272018-07-04T06%3A00%3A00%27+and+%272018-07-04T18%3A00%3A00%27&%24order=received_dttm%2Ccall_number%2Cunit_id&%24limit=50000",
+      "rows_fetched": 510
+    }
+  ],
+  "tick_minutes": 12,
+  "timeline": [
+    {
+      "district_id": "residential_north",
+      "kind": "mission",
+      "lives_at_risk": 2,
+      "mission_kind": "infra_repair",
+      "severity": 3,
+      "tick": 4
+    },
+    {
+      "district_id": "hospital_district",
+      "kind": "mission",
+      "lives_at_risk": 4,
+      "mission_kind": "fire",
+      "severity": 3,
+      "tick": 5
+    },
+    {
+      "district_id": "industrial",
+      "kind": "mission",
+      "lives_at_risk": 3,
+      "mission_kind": "medical_surge",
+      "severity": 4,
+      "tick": 5
+    },
+    {
+      "district_id": "old_town",
+      "kind": "mission",
+      "lives_at_risk": 4,
+      "mission_kind": "collapse_rescue",
+      "severity": 2,
+      "tick": 12
+    },
+    {
+      "district_id": "harbor",
+      "kind": "mission",
+      "lives_at_risk": 3,
+      "mission_kind": "medical_surge",
+      "severity": 4,
+      "tick": 17
+    },
+    {
+      "district_id": "hospital_district",
+      "kind": "mission",
+      "lives_at_risk": 8,
+      "mission_kind": "fire",
+      "severity": 4,
+      "tick": 21
+    },
+    {
+      "district_id": "residential_north",
+      "kind": "mission",
+      "lives_at_risk": 2,
+      "mission_kind": "infra_repair",
+      "severity": 3,
+      "tick": 25
+    },
+    {
+      "district_id": "old_town",
+      "kind": "mission",
+      "lives_at_risk": 8,
+      "mission_kind": "collapse_rescue",
+      "severity": 3,
+      "tick": 29
+    },
+    {
+      "district_id": "market",
+      "kind": "mission",
+      "lives_at_risk": 1,
+      "mission_kind": "medical_surge",
+      "severity": 2,
+      "tick": 35
+    },
+    {
+      "district_id": "industrial",
+      "kind": "mission",
+      "lives_at_risk": 4,
+      "mission_kind": "fire",
+      "severity": 3,
+      "tick": 35
+    },
+    {
+      "district_id": "hospital_district",
+      "kind": "mission",
+      "lives_at_risk": 12,
+      "mission_kind": "collapse_rescue",
+      "severity": 4,
+      "tick": 44
+    },
+    {
+      "district_id": "market",
+      "kind": "mission",
+      "lives_at_risk": 1,
+      "mission_kind": "medical_surge",
+      "severity": 2,
+      "tick": 46
+    },
+    {
+      "district_id": "old_town",
+      "kind": "mission",
+      "lives_at_risk": 4,
+      "mission_kind": "fire",
+      "severity": 3,
+      "tick": 47
+    },
+    {
+      "district_id": "industrial",
+      "kind": "mission",
+      "lives_at_risk": 4,
+      "mission_kind": "collapse_rescue",
+      "severity": 2,
+      "tick": 48
+    },
+    {
+      "district_id": "industrial",
+      "kind": "mission",
+      "lives_at_risk": 8,
+      "mission_kind": "fire",
+      "severity": 4,
+      "tick": 55
+    },
+    {
+      "district_id": "harbor",
+      "kind": "mission",
+      "lives_at_risk": 3,
+      "mission_kind": "medical_surge",
+      "severity": 4,
+      "tick": 57
+    }
+  ],
+  "window": {
+    "end": "2018-07-04T18:00:00-07:00",
+    "start": "2018-07-04T06:00:00-07:00"
+  }
+}

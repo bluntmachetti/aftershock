@@ -32,6 +32,7 @@ from aftershock.town.heuristics import (
     RescueScripted,
 )
 from aftershock.town.prompts import DECISION_DOCS_DIRECT, build_llm_agents  # noqa: E402
+from aftershock.town.scenario import ScenarioPack, town_from_scenario
 from aftershock.town.society import TownResolver, TownSociety
 from aftershock.town.state import TownState, new_town
 
@@ -66,6 +67,7 @@ def build_arm(
     seed: int,
     provider: Any | None,
     lessons: list[str] | None = None,
+    scenario: ScenarioPack | None = None,
 ) -> ArmSetup:
     """Build all components for one (arm, seed) benchmark cell.
 
@@ -79,6 +81,10 @@ def build_arm(
                   ValueError to enforce the bench fairness invariant (benchmark
                   arms must run memory-free so comparisons measure architecture,
                   not accumulated hints).
+        scenario: optional validated ScenarioPack. When given, the world is built
+                  from the pack (districts/pools/timeline from real data) via
+                  town_from_scenario(scenario, seed); otherwise new_town(seed).
+                  `seed` keeps its meaning for every other rng_for stream + replay.
 
     Returns:
         ArmSetup with fully wired world, society, agents, registry, roles,
@@ -98,7 +104,7 @@ def build_arm(
             f"arm {arm!r} requires a Provider — set DASHSCOPE_API_KEY and pass a provider"
         )
 
-    world = new_town(seed)
+    world = town_from_scenario(scenario, seed) if scenario else new_town(seed)
     registry = DecisionRegistry()
     register_all(registry)
 

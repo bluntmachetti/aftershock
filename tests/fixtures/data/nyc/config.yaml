@@ -1,0 +1,129 @@
+id: nyc-fixture
+name: NYC Ida fixture (test slice)
+hazard: hurricane_flood
+adapter: nyc
+extract:
+  ems_resource: 76xm-jjuj
+  ems_base_url: https://data.cityofnewyork.us/resource/76xm-jjuj.json
+  fire_resource: 8m42-w767
+  fire_base_url: https://data.cityofnewyork.us/resource/8m42-w767.json
+  window_start: '2021-09-01T18:00:00'
+  window_end: '2021-09-02T06:00:00'
+  limit: 50000
+tick_minutes: 12
+borough_slot:
+  MANHATTAN: old_town
+  RICHMOND / STATEN ISLAND: harbor
+  BRONX: hospital_district
+  QUEENS: residential_north
+brooklyn_split:
+  west_slot: market
+  east_slot: industrial
+  ems_west_areas:
+  - K1
+  - K2
+  - K3
+  - K4
+  fire_west_community_districts:
+  - 301
+  - 302
+  - 303
+  - 306
+  - 308
+  - 310
+  - 311
+  - 313
+  - 315
+  - 316
+districts:
+  old_town:
+    name: Manhattan
+    members:
+    - MN
+  harbor:
+    name: Staten Island
+    members:
+    - SI
+  hospital_district:
+    name: Bronx
+    members:
+    - BX
+  market:
+    name: Brooklyn West
+    members:
+    - BK-W
+  residential_north:
+    name: Queens
+    members:
+    - QN
+  industrial:
+    name: Brooklyn East
+    members:
+    - BK-E
+ems:
+  keep_severity_codes:
+  - 1
+  - 2
+  - 3
+  severity_rebin:
+    1: 5
+    2: 5
+    3: 4
+  severity_default: 4
+fire:
+  keep_classification_groups:
+  - Structural Fires
+  - NonStructural Fires
+  - NonMedical Emergencies
+  group_kind:
+    Structural Fires: fire
+    NonStructural Fires: fire
+    NonMedical Emergencies: infra_repair
+  default_kind: fire
+  severity_zero_engines: 2
+lives:
+  collapse_rescue:
+  - 2
+  - 4
+  - 8
+  - 12
+  - 20
+  fire:
+  - 1
+  - 2
+  - 4
+  - 8
+  - 16
+  medical_surge:
+  - 1
+  - 1
+  - 2
+  - 3
+  - 5
+  infra_repair:
+  - 1
+  - 1
+  - 2
+  - 3
+  - 4
+sampling:
+  target_missions: 8
+  sample_seed: 4636
+  stratum_ticks: 12
+pools:
+  clamp_min: 2
+  clamp_max: 6
+  calibrated:
+    ambulance: 4
+    rescue_crew: 3
+    repair_crew: 3
+    supply_truck: 3
+reference:
+  baseline_window_start: '2021-08-18T18:00:00'
+  baseline_window_end: '2021-08-19T06:00:00'
+  baseline_note: 'Ida-adjacent calm window: 2021-08-18 (Wed) 18:00 -> 08-19 06:00
+    EDT (two weeks prior).'
+  baseline_mean_latency_s: 524
+  baseline_median_latency_s: 451
+  baseline_held_rate: 0.0415
+mapping_version: nyc-v1

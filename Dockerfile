@@ -14,6 +14,10 @@ COPY pyproject.toml uv.lock README.md LICENSE ./
 COPY src/ src/
 RUN uv sync --frozen --no-dev
 COPY bench/ bench/
+# Committed scenario packs (real-data compiled artifacts). No runtime network/env: the
+# engine never fetches; packs are validated + digested at load. create_app resolves
+# scenarios/ relative to the WORKDIR (/app), so this COPY is the production source.
+COPY scenarios/ scenarios/
 COPY --from=web /build/dist web/dist
 RUN mkdir -p /data/runs
 

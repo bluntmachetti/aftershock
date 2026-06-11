@@ -1,0 +1,12 @@
+{
+  "ems_query_url": "https://data.cityofnewyork.us/resource/76xm-jjuj.json?$where=incident_datetime between '2021-09-01T18:00:00' and '2021-09-02T06:00:00'&$order=incident_datetime,incident_id&$limit=50000",
+  "ems_resource": "76xm-jjuj",
+  "ems_rows_fetched": 11,
+  "fetched_at": "2026-06-11",
+  "fire_query_url": "https://data.cityofnewyork.us/resource/8m42-w767.json?$where=incident_datetime between '2021-09-01T18:00:00' and '2021-09-02T06:00:00'&$order=incident_datetime,starfire_incident_id&$limit=50000",
+  "fire_resource": "8m42-w767",
+  "fire_rows_fetched": 10,
+  "rows_fetched": 21,
+  "window_end": "2021-09-02T06:00:00",
+  "window_start": "2021-09-01T18:00:00"
+}

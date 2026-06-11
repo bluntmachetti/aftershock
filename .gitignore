@@ -19,6 +19,9 @@ build/
 # Simulation outputs
 runs/
 
+# Scenario pack raw caches (gitignored; license requirement for some adapters)
+scenarios/*/raw/
+
 # Editors / OS
 .idea/
 .vscode/

@@ -1,0 +1,365 @@
+{
+  "adapter": "nyc",
+  "compiler_version": "48fce31",
+  "config_sha256": "5d7485f3d9dad82359f183412e5b6071287adcb2c2cb2aa479b070154b4784bb",
+  "districts": [
+    {
+      "id": "harbor",
+      "members": [
+        "SI"
+      ],
+      "name": "Staten Island"
+    },
+    {
+      "id": "hospital_district",
+      "members": [
+        "BX"
+      ],
+      "name": "Bronx"
+    },
+    {
+      "id": "industrial",
+      "members": [
+        "BK-E"
+      ],
+      "name": "Brooklyn East"
+    },
+    {
+      "id": "market",
+      "members": [
+        "BK-W"
+      ],
+      "name": "Brooklyn West"
+    },
+    {
+      "id": "old_town",
+      "members": [
+        "MN"
+      ],
+      "name": "Manhattan"
+    },
+    {
+      "id": "residential_north",
+      "members": [
+        "QN"
+      ],
+      "name": "Queens"
+    }
+  ],
+  "field_provenance": {
+    "blockage": "synthetic",
+    "district_id": "real",
+    "lives_at_risk": "inferred",
+    "mission_kind": "mapped",
+    "severity": "mapped",
+    "tick": "real"
+  },
+  "format_version": 1,
+  "hazard": "hurricane_flood",
+  "id": "nyc-ida-2021",
+  "mapping": {
+    "lives_rule": "LIVES[mission_kind][severity] lookup table nyc-v1 (inferred field); clamp [1,64]",
+    "mission_kind": {
+      "EMS severity 1-3 (medical)": "medical_surge",
+      "NonMedical Emergencies": "infra_repair",
+      "NonStructural Fires": "fire",
+      "Structural Fires": "fire"
+    },
+    "severity_rule": "EMS code 1-2->5, 3->4 (codes 4-8 excluded by filter); Fire from engines-assigned quantiles (p50=1, p75=1, p90=3); NEVER highest_alarm_level",
+    "version": "nyc-v1"
+  },
+  "name": "Hurricane Ida — NYC, night of 2021-09-01",
+  "pools": {
+    "ambulance": {
+      "basis": "calibrated",
+      "note": "no EMS unit counts in 76xm-jjuj; calibrated against held_indicator saturation (16.5% held in window)",
+      "size": 4
+    },
+    "fire_engine": {
+      "basis": "observed",
+      "note": "engines_assigned p75 = 1 in the window (8m42-w767); clamped [2,6]",
+      "size": 2
+    },
+    "repair_crew": {
+      "basis": "calibrated",
+      "note": "no NYC analog for repair_crew; calibrated default",
+      "size": 3
+    },
+    "rescue_crew": {
+      "basis": "calibrated",
+      "note": "no NYC analog for rescue_crew; calibrated default",
+      "size": 3
+    },
+    "supply_truck": {
+      "basis": "calibrated",
+      "note": "no NYC analog for supply_truck; calibrated default",
+      "size": 3
+    }
+  },
+  "reference": {
+    "aggregates": {
+      "baseline_held_rate": 0.0415,
+      "baseline_mean_latency_s": 524,
+      "baseline_median_latency_s": 451,
+      "baseline_note": "Ida-adjacent calm window: 2021-08-18 (Wed) 18:00 -> 08-19 06:00 EDT (two weeks prior).",
+      "baseline_window": {
+        "end": "2021-08-19T06:00:00-04:00",
+        "start": "2021-08-18T18:00:00-04:00"
+      },
+      "held_rate": 0.1648,
+      "mean_latency_s": 948,
+      "median_latency_s": 540,
+      "n_arrived": 1829,
+      "n_ems_window": 2003,
+      "n_incidents": 2212
+    },
+    "missions": {
+      "0": {
+        "first_on_scene": "2021-09-01T18:42:00-04:00",
+        "latency_s": 420,
+        "received": "2021-09-01T18:35:00-04:00"
+      },
+      "1": {
+        "first_on_scene": "2021-09-01T19:04:48-04:00",
+        "latency_s": 625,
+        "received": "2021-09-01T18:54:23-04:00"
+      },
+      "10": {
+        "first_on_scene": "2021-09-02T03:26:00-04:00",
+        "latency_s": 360,
+        "received": "2021-09-02T03:20:00-04:00"
+      },
+      "11": {
+        "first_on_scene": null,
+        "latency_s": null,
+        "received": "2021-09-02T03:26:00-04:00"
+      },
+      "12": {
+        "first_on_scene": "2021-09-02T03:53:00-04:00",
+        "latency_s": 300,
+        "received": "2021-09-02T03:48:00-04:00"
+      },
+      "13": {
+        "first_on_scene": "2021-09-02T04:26:02-04:00",
+        "latency_s": 303,
+        "received": "2021-09-02T04:20:59-04:00"
+      },
+      "14": {
+        "first_on_scene": "2021-09-02T05:09:00-04:00",
+        "latency_s": 420,
+        "received": "2021-09-02T05:02:00-04:00"
+      },
+      "15": {
+        "first_on_scene": "2021-09-02T06:08:00-04:00",
+        "latency_s": 480,
+        "received": "2021-09-02T06:00:00-04:00"
+      },
+      "2": {
+        "first_on_scene": "2021-09-01T19:23:00-04:00",
+        "latency_s": 240,
+        "received": "2021-09-01T19:19:00-04:00"
+      },
+      "3": {
+        "first_on_scene": "2021-09-01T20:45:00-04:00",
+        "latency_s": 240,
+        "received": "2021-09-01T20:41:00-04:00"
+      },
+      "4": {
+        "first_on_scene": "2021-09-01T21:03:10-04:00",
+        "latency_s": 386,
+        "received": "2021-09-01T20:56:44-04:00"
+      },
+      "5": {
+        "first_on_scene": "2021-09-01T21:38:00-04:00",
+        "latency_s": 420,
+        "received": "2021-09-01T21:31:00-04:00"
+      },
+      "6": {
+        "first_on_scene": "2021-09-01T23:32:05-04:00",
+        "latency_s": 347,
+        "received": "2021-09-01T23:26:18-04:00"
+      },
+      "7": {
+        "first_on_scene": "2021-09-02T00:26:00-04:00",
+        "latency_s": 360,
+        "received": "2021-09-02T00:20:00-04:00"
+      },
+      "8": {
+        "first_on_scene": "2021-09-02T00:57:00-04:00",
+        "latency_s": 240,
+        "received": "2021-09-02T00:53:00-04:00"
+      },
+      "9": {
+        "first_on_scene": "2021-09-02T03:16:06-04:00",
+        "latency_s": 183,
+        "received": "2021-09-02T03:13:03-04:00"
+      }
+    }
+  },
+  "sampling": {
+    "filter": "EMS initial_severity_level_code in {1,2,3} (codes 4-8 dropped); Fire incident_classification_group in {Structural,NonStructural Fires,NonMedical Emergencies}; boroughs only (no CW/X1 noise); response times filtered by valid_incident_rspns_time_indc=Y",
+    "kept": 16,
+    "method": "stratified by (tick-bucket, mission_kind)",
+    "sample_seed": 4636,
+    "total": 2212
+  },
+  "source": [
+    {
+      "attribution": "FDNY via NYC Open Data",
+      "dataset": "EMS Incident Dispatch Data",
+      "dataset_id": "76xm-jjuj",
+      "fetched_at": "2026-06-11",
+      "license": "NYC Open Data terms (no formal license)",
+      "license_url": "https://opendata.cityofnewyork.us/overview/",
+      "provider": "FDNY via NYC Open Data",
+      "query_url": "https://data.cityofnewyork.us/resource/76xm-jjuj.json?%24where=incident_datetime+between+%272021-09-01T18%3A00%3A00%27+and+%272021-09-02T06%3A00%3A00%27&%24order=incident_datetime%2Cincident_id&%24limit=50000",
+      "rows_fetched": 2003
+    },
+    {
+      "attribution": "FDNY via NYC Open Data",
+      "dataset": "Fire Incident Dispatch Data",
+      "dataset_id": "8m42-w767",
+      "fetched_at": "2026-06-11",
+      "license": "NYC Open Data terms (no formal license)",
+      "license_url": "https://opendata.cityofnewyork.us/overview/",
+      "provider": "FDNY via NYC Open Data",
+      "query_url": "https://data.cityofnewyork.us/resource/8m42-w767.json?%24where=incident_datetime+between+%272021-09-01T18%3A00%3A00%27+and+%272021-09-02T06%3A00%3A00%27&%24order=incident_datetime%2Cstarfire_incident_id&%24limit=50000",
+      "rows_fetched": 2022
+    }
+  ],
+  "tick_minutes": 12,
+  "timeline": [
+    {
+      "district_id": "old_town",
+      "kind": "mission",
+      "lives_at_risk": 1,
+      "mission_kind": "infra_repair",
+      "severity": 2,
+      "tick": 2
+    },
+    {
+      "district_id": "market",
+      "kind": "mission",
+      "lives_at_risk": 3,
+      "mission_kind": "medical_surge",
+      "severity": 4,
+      "tick": 4
+    },
+    {
+      "district_id": "residential_north",
+      "kind": "mission",
+      "lives_at_risk": 2,
+      "mission_kind": "fire",
+      "severity": 2,
+      "tick": 6
+    },
+    {
+      "district_id": "residential_north",
+      "kind": "mission",
+      "lives_at_risk": 16,
+      "mission_kind": "fire",
+      "severity": 5,
+      "tick": 13
+    },
+    {
+      "district_id": "old_town",
+      "kind": "mission",
+      "lives_at_risk": 5,
+      "mission_kind": "medical_surge",
+      "severity": 5,
+      "tick": 14
+    },
+    {
+      "district_id": "old_town",
+      "kind": "mission",
+      "lives_at_risk": 3,
+      "mission_kind": "infra_repair",
+      "severity": 4,
+      "tick": 17
+    },
+    {
+      "district_id": "old_town",
+      "kind": "mission",
+      "lives_at_risk": 5,
+      "mission_kind": "medical_surge",
+      "severity": 5,
+      "tick": 27
+    },
+    {
+      "district_id": "old_town",
+      "kind": "mission",
+      "lives_at_risk": 16,
+      "mission_kind": "fire",
+      "severity": 5,
+      "tick": 31
+    },
+    {
+      "district_id": "market",
+      "kind": "mission",
+      "lives_at_risk": 4,
+      "mission_kind": "infra_repair",
+      "severity": 5,
+      "tick": 34
+    },
+    {
+      "district_id": "industrial",
+      "kind": "mission",
+      "lives_at_risk": 5,
+      "mission_kind": "medical_surge",
+      "severity": 5,
+      "tick": 46
+    },
+    {
+      "district_id": "industrial",
+      "kind": "mission",
+      "lives_at_risk": 1,
+      "mission_kind": "infra_repair",
+      "severity": 2,
+      "tick": 46
+    },
+    {
+      "district_id": "hospital_district",
+      "kind": "mission",
+      "lives_at_risk": 8,
+      "mission_kind": "fire",
+      "severity": 4,
+      "tick": 47
+    },
+    {
+      "district_id": "residential_north",
+      "kind": "mission",
+      "lives_at_risk": 2,
+      "mission_kind": "fire",
+      "severity": 2,
+      "tick": 49
+    },
+    {
+      "district_id": "old_town",
+      "kind": "mission",
+      "lives_at_risk": 5,
+      "mission_kind": "medical_surge",
+      "severity": 5,
+      "tick": 51
+    },
+    {
+      "district_id": "market",
+      "kind": "mission",
+      "lives_at_risk": 1,
+      "mission_kind": "infra_repair",
+      "severity": 2,
+      "tick": 55
+    },
+    {
+      "district_id": "industrial",
+      "kind": "mission",
+      "lives_at_risk": 3,
+      "mission_kind": "infra_repair",
+      "severity": 4,
+      "tick": 60
+    }
+  ],
+  "window": {
+    "end": "2021-09-02T06:00:00-04:00",
+    "start": "2021-09-01T18:00:00-04:00"
+  }
+}

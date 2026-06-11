@@ -958,7 +958,7 @@ Offline CLI pipeline, one adapter per upstream dataset. Never imported by the en
 
 ```
 aftershock compile-scenario --adapter sf --config src/aftershock/data/configs/sf-routine.yaml \
-    --out scenarios/sf-routine-2026
+    --out scenarios/sf-routine-2018
 ```
 
 Stages (shared skeleton, per the verified research mappings):
@@ -1048,7 +1048,7 @@ already folds in the 8 UX deltas above.
 
 | Pack | Source (verified 2026-06-11) | Role | Ground truth |
 |---|---|---|---|
-| `sf-routine-2026` | DataSF `nuek-vuh3` (SODA, keyless, **PDDL**), 7.34 M rows | **MVP** — cleanest single source, builds the compiler | Real demand + real per-unit latency |
+| `sf-routine-2018` | DataSF `nuek-vuh3` (SODA, keyless, **PDDL**), 7.34 M rows | **MVP** — cleanest single source, builds the compiler | Real demand + real per-unit latency |
 | `nyc-ida-2021` | NYC Open Data `76xm-jjuj` + `8m42-w767` (keyless); Ida window: 2,003 EMS incidents, 16.5 % held, **avg** 948 s (vs avg 538 s in 2012-10-15/16 normal window; adapter computes an Ida-adjacent baseline) | **Headline** — real disaster surge | Real demand + latency + held-rate |
 | `tur-2023` *(optional, deferred)* | AFAD `apiv2/event/filter` + USGS ComCat/ShakeMap/PAGER for `us6000jllz` | On-theme showpiece — real M7.7→M7.6 doublet | Hazard only — demand/response synthesized; no `reference`, so RealityStrip does not render; caveat *"Hazard timing: real · Demand & outcomes: simulated model"* |
 
@@ -1064,7 +1064,7 @@ rules, null-handling) are in §2 of the research report — implemented as confi
   determinism (same `sample_seed` → same `kept` set).
 - **Pack loading:** pydantic rejection tests (bad district id, severity 0/6, unsorted timeline,
   unknown pool kind, reference key out of range, last-mission-tick + 16 > 120).
-- **Engine:** `aftershock verify --scenario sf-routine-2026` passes (two runs, identical digests);
+- **Engine:** `aftershock verify --scenario sf-routine-2018` passes (two runs, identical digests);
   scripted-arm e2e on a fixture pack resolves/fails missions and spawned count == `sampling.kept`;
   under-budget explicit `--ticks` errors; `bench --scenario` errors.
 - **API:** `/api/scenarios` list + detail; `POST /api/live` unknown scenario → 404, valid →
@@ -1085,7 +1085,7 @@ All phases unblocked (task #3 merged). S1–S3 and S4 share no files.
 | Phase | Scope | Files | Est. |
 |---|---|---|---|
 | **S1** | `town/scenario.py`, `town/arms.py`, `cli.py`, tests | engine-side only | 0.5–1 d |
-| **S2** | compiler package + SF adapter + `sf-routine-2026` pack + fixtures | `src/aftershock/data/`, `scenarios/`, `.gitignore` | 1–2 d |
+| **S2** | compiler package + SF adapter + `sf-routine-2018` pack + fixtures | `src/aftershock/data/`, `scenarios/`, `.gitignore` | 1–2 d |
 | **S3** | API endpoints + manifest plumbing + Dockerfile COPY | `web.py`, `Dockerfile` | 0.5–1 d |
 | **S4** | UI per surface table (UX-contract-applied) | `web/src/**` | 1.5–2 d |
 | **S5** | `nyc-ida-2021` (EMS+Fire join, computed baseline window) | adapter + pack | 1–2 d |

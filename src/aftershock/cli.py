@@ -57,13 +57,99 @@ def _run_id(seed: int, arm: str) -> str:
     return f"seed{seed}-{arm}"
 
 
+# Default extra ticks past the last timeline tick, and the engine ceiling.
+_SCENARIO_TICK_PADDING = 20
+_SCENARIO_TICK_CEILING = 120
+
+# Scenario id grammar (dir name == id; same traversal guard as the web layer).
+import re as _re  # noqa: E402
+
+_SCENARIO_ID_RE = _re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+_SCENARIOS_DIR = Path(__file__).parent.parent.parent / "scenarios"
+
+
+def _resolve_scenario(scenario_id: str) -> Any:
+    """Resolve and load scenarios/<id>/scenario.json.
+
+    Returns the validated ScenarioPack, or prints a friendly error and raises
+    SystemExit(1) when the id is malformed or the pack is missing/invalid.
+    """
+    from aftershock.town.scenario import load_scenario
+
+    if not _SCENARIO_ID_RE.match(scenario_id):
+        print(
+            f"error: invalid scenario id {scenario_id!r} "
+            "(must match ^[a-z0-9][a-z0-9-]*$)",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    pack_path = _SCENARIOS_DIR / scenario_id / "scenario.json"
+    if not pack_path.is_file():
+        print(f"error: scenario not found: {pack_path}", file=sys.stderr)
+        raise SystemExit(1)
+    try:
+        return load_scenario(pack_path)
+    except Exception as exc:  # noqa: BLE001 — surface a friendly one-liner
+        print(f"error: failed to load scenario {scenario_id!r}: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+
+def _scenario_ticks(pack: Any, requested_ticks: int | None) -> int:
+    """Compute the tick budget for a scenario run.
+
+    Default (ticks omitted): min(last timeline tick + 20, 120). An explicit
+    under-budget --ticks is a HARD ERROR (never silent truncation). The budget
+    itself comes from the shared ``scenario_tick_budget`` helper so the CLI and
+    the live API (web.py) never disagree.
+    """
+    from aftershock.town.scenario import scenario_tick_budget
+
+    default_ticks = scenario_tick_budget(pack)
+    if requested_ticks is None:
+        return default_ticks
+    if requested_ticks < default_ticks:
+        print(
+            f"error: --ticks {requested_ticks} is under the scenario budget "
+            f"({default_ticks} = min(last timeline tick + {_SCENARIO_TICK_PADDING}, "
+            f"{_SCENARIO_TICK_CEILING})); refusing to silently truncate. "
+            f"Omit --ticks or pass >= {default_ticks}.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    return requested_ticks
+
+
 def cmd_run(args: argparse.Namespace) -> int:
-    seed: int = args.seed
-    ticks: int = args.ticks
     arm: str = args.arm
     out_dir = Path(args.out)
     quiet: bool = args.quiet
     memory: bool = getattr(args, "memory", False)
+    scenario_id: str | None = getattr(args, "scenario", None)
+    requested_ticks: int | None = args.ticks
+    requested_seed: int | None = args.seed
+
+    # Resolve scenario pack (if any) and compute the tick budget.
+    scenario = None
+    if scenario_id is not None:
+        # Scenario mode: the pack drives the timeline; seed defaults to a fixed
+        # value so a presenter can `run --scenario <id>` with no extra flags. The
+        # seed still governs every other rng_for stream and replay.
+        seed: int = requested_seed if requested_seed is not None else 42
+        scenario = _resolve_scenario(scenario_id)
+        ticks: int = _scenario_ticks(scenario, requested_ticks)
+    else:
+        if requested_seed is None:
+            print(
+                "error: --seed is required for synthetic runs (or use --scenario)",
+                file=sys.stderr,
+            )
+            return 1
+        seed = requested_seed
+        if requested_ticks is None:
+            print("error: --ticks is required (or use --scenario)", file=sys.stderr)
+            return 1
+        ticks = requested_ticks
 
     # --memory is only meaningful for society arm; require provider
     if memory and arm != "society":
@@ -90,7 +176,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         lessons = load_lessons(memory_path) or None  # keep None when empty
 
     run_id = _run_id(seed, arm)
-    setup = build_arm(arm, seed, provider, lessons=lessons)
+    setup = build_arm(arm, seed, provider, lessons=lessons, scenario=scenario)
 
     manifest: dict[str, Any] = {
         "run_id": run_id,
@@ -98,6 +184,14 @@ def cmd_run(args: argparse.Namespace) -> int:
         "ticks": ticks,
         "arm": arm,
     }
+    if scenario is not None:
+        # Emit the full provenance block (source, field_provenance, caveat_line,
+        # reference_aggregates) so the UI can render provenance from run.json
+        # without a second fetch (DESIGN.md engine integration). Reuse the single
+        # web serializer so the CLI and live-run manifests never drift.
+        from aftershock.web import _scenario_manifest_block
+
+        manifest["scenario"] = _scenario_manifest_block(scenario)
     recorder = Recorder(out_dir, run_id, manifest)
     engine = Engine(
         world=setup.world,
@@ -146,6 +240,17 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 def cmd_bench(args: argparse.Namespace) -> int:
     """Run the benchmark suite from a manifest with optional flag overrides."""
+    # Invariant 3 (bench fairness): scenario packs are demo/observatory surfaces
+    # only. Published benchmark results stay synthetic-seed.
+    if getattr(args, "scenario", None) is not None:
+        print(
+            "error: bench does not accept --scenario. Scenario packs are "
+            "demo/observatory surfaces only; benchmark results stay synthetic-seed "
+            "(invariant 3). Use 'aftershock run --scenario' or 'verify --scenario'.",
+            file=sys.stderr,
+        )
+        return 1
+
     import yaml  # type: ignore[import-untyped]
 
     from aftershock.bench import aggregate, render_markdown, run_bench
@@ -221,12 +326,36 @@ def cmd_bench(args: argparse.Namespace) -> int:
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
-    seed: int = args.seed
-    ticks: int = args.ticks
+    scenario_id: str | None = getattr(args, "scenario", None)
+    requested_ticks: int | None = args.ticks
+    requested_seed: int | None = args.seed
+
+    scenario = None
+    if scenario_id is not None:
+        # Scenario mode: the pack drives the timeline. A seed is still part of
+        # the determinism contract (same pack + same seed = byte-identical), but
+        # it is optional on the CLI and defaults to a fixed value so a presenter
+        # can run `verify --scenario <id>` with no extra flags.
+        seed: int = requested_seed if requested_seed is not None else 42
+        scenario = _resolve_scenario(scenario_id)
+        ticks: int = _scenario_ticks(scenario, requested_ticks)
+    else:
+        if requested_seed is None:
+            print(
+                "error: --seed is required for synthetic verification "
+                "(or use --scenario)",
+                file=sys.stderr,
+            )
+            return 1
+        seed = requested_seed
+        if requested_ticks is None:
+            print("error: --ticks is required (or use --scenario)", file=sys.stderr)
+            return 1
+        ticks = requested_ticks
 
     async def _run_into(tmp: Path, tag: str) -> list[str]:
         run_id = f"verify-{tag}"
-        setup = build_arm("scripted", seed, None)
+        setup = build_arm("scripted", seed, None, scenario=scenario)
         manifest: dict[str, Any] = {
             "run_id": run_id, "seed": seed, "ticks": ticks, "arm": "scripted",
         }
@@ -540,14 +669,82 @@ def cmd_episodes(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_compile_scenario(args: argparse.Namespace) -> int:
+    """OFFLINE compiler: real open incident dataset -> committed scenario.json.
+
+    Runs Extract (live fetch, unless --no-fetch uses the cached raw/) ->
+    Aggregate -> Discretize -> Emit. Writes scenarios/<id>/scenario.json (sorted
+    keys) + README.md + raw/ cache. The engine never imports this path.
+    """
+    from aftershock.data import compile_scenario
+
+    adapter: str = args.adapter
+    config_path = Path(args.config)
+    out_dir = Path(args.out)
+    do_fetch: bool = not args.no_fetch
+
+    if not config_path.is_file():
+        print(f"error: config not found: {config_path}", file=sys.stderr)
+        return 1
+
+    try:
+        result = compile_scenario(
+            adapter_name=adapter,
+            config_path=config_path,
+            out_dir=out_dir,
+            fetch=do_fetch,
+            compiler_version_override=args.compiler_version,
+        )
+    except Exception as exc:  # noqa: BLE001 — surface a friendly one-liner
+        print(f"error: compile failed: {exc}", file=sys.stderr)
+        return 1
+
+    # Re-load the emitted pack through the engine-side loader to prove validity.
+    from aftershock.town.scenario import last_timeline_tick, load_scenario
+
+    pack = load_scenario(out_dir / "scenario.json")
+    fm = result.fetch_manifest
+    n_missions = sum(1 for e in pack.timeline if e.kind == "mission")
+    print(f"Compiled scenario {pack.id!r}")
+    print(f"  adapter:        {pack.adapter}")
+    print(f"  window:         {pack.window.start} -> {pack.window.end}")
+    print(f"  fetched:        {fm.get('rows_fetched')} unit rows ({fm.get('fetched_at')})")
+    print(f"  sampling:       {pack.sampling.kept} of {pack.sampling.total} incidents "
+          f"(seed {pack.sampling.sample_seed})")
+    print(f"  missions:       {n_missions}  ·  last tick {last_timeline_tick(pack)}")
+    print(f"  config_sha256:  {pack.config_sha256[:16]}…")
+    print(f"  pack_digest:    {pack.pack_digest[:16]}…")
+    print(f"  written:        {out_dir / 'scenario.json'}")
+    print(f"                  {out_dir / 'README.md'}")
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="aftershock")
     sub = parser.add_subparsers(dest="command", required=True)
 
     # run
     p_run = sub.add_parser("run", help="Run a simulation")
-    p_run.add_argument("--seed", type=int, required=True)
-    p_run.add_argument("--ticks", type=int, required=True)
+    p_run.add_argument(
+        "--seed", type=int, default=None,
+        help=(
+            "Engine seed. Required for synthetic runs; with --scenario it "
+            "defaults to a fixed seed (the pack drives the timeline; seed still "
+            "governs every other rng_for stream and replay)."
+        ),
+    )
+    p_run.add_argument(
+        "--ticks", type=int, default=None,
+        help=(
+            "Tick budget. Required for synthetic runs; with --scenario it defaults "
+            "to min(last timeline tick + 20, 120). An explicit under-budget value "
+            "with --scenario is a hard error."
+        ),
+    )
+    p_run.add_argument(
+        "--scenario", default=None,
+        help="Run a real-data scenario pack (resolves scenarios/<id>/scenario.json)",
+    )
     p_run.add_argument("--arm", default="scripted", choices=list(ARMS))
     p_run.add_argument("--out", default="runs")
     p_run.add_argument("--quiet", action="store_true")
@@ -576,11 +773,33 @@ def main() -> None:
                          help="Output directory override")
     p_bench.add_argument("--fresh", action="store_true",
                          help="Wipe cell dirs before running (force re-run)")
+    p_bench.add_argument(
+        "--scenario", default=None,
+        help="REJECTED — bench refuses scenario packs (invariant 3)",
+    )
 
     # verify
     p_verify = sub.add_parser("verify", help="Verify determinism")
-    p_verify.add_argument("--seed", type=int, required=True)
-    p_verify.add_argument("--ticks", type=int, required=True)
+    p_verify.add_argument(
+        "--seed", type=int, default=None,
+        help=(
+            "Engine seed. Required for synthetic verification; with --scenario "
+            "it defaults to a fixed seed (the pack drives the timeline, and a "
+            "scenario digest must be byte-identical for the same pack + seed)."
+        ),
+    )
+    p_verify.add_argument(
+        "--ticks", type=int, default=None,
+        help=(
+            "Tick budget. Required for synthetic runs; with --scenario it defaults "
+            "to min(last timeline tick + 20, 120). An explicit under-budget value "
+            "with --scenario is a hard error."
+        ),
+    )
+    p_verify.add_argument(
+        "--scenario", default=None,
+        help="Verify a real-data scenario pack (two-run digest check)",
+    )
 
     # replay
     p_replay = sub.add_parser("replay", help="Print scoreboard from a run dir")
@@ -666,6 +885,32 @@ def main() -> None:
         help="Output directory for episode run dirs and summary files (default: runs/episodes)",
     )
 
+    # compile-scenario (OFFLINE compiler — appended subcommand, S2)
+    p_compile = sub.add_parser(
+        "compile-scenario",
+        help="OFFLINE: compile a real open dataset into scenarios/<id>/scenario.json",
+    )
+    p_compile.add_argument(
+        "--adapter", required=True,
+        help="Compiler adapter id (e.g. sf)",
+    )
+    p_compile.add_argument(
+        "--config", required=True,
+        help="Path to the adapter config YAML (its sha256 is stamped into the pack)",
+    )
+    p_compile.add_argument(
+        "--out", required=True,
+        help="Output directory for the pack (e.g. scenarios/sf-routine-2018)",
+    )
+    p_compile.add_argument(
+        "--no-fetch", action="store_true",
+        help="Skip the live fetch; recompile from the cached raw/ (offline, deterministic)",
+    )
+    p_compile.add_argument(
+        "--compiler-version", default=None,
+        help="Override the compiler_version field (default: git short rev at emit time)",
+    )
+
     args = parser.parse_args()
 
     if args.command == "run":
@@ -688,3 +933,5 @@ def main() -> None:
         sys.exit(cmd_episodes(args))
     elif args.command == "conformance":
         sys.exit(cmd_conformance(args))
+    elif args.command == "compile-scenario":
+        sys.exit(cmd_compile_scenario(args))
