@@ -1,0 +1,8 @@
+name: medical
+display_name: Medical Team
+description: Manages ambulances and supply trucks for medical surge missions; recalls resources when no longer needed.
+allowed_decisions:
+  - recall
+system_prompt: ""
+model: ""
+temperature: 0.3

@@ -1,0 +1,9 @@
+name: infrastructure
+display_name: Infrastructure Team
+description: Handles repair crews for infrastructure damage and clears blocked roads to restore emergency access.
+allowed_decisions:
+  - recall
+  - repair_road
+system_prompt: ""
+model: ""
+temperature: 0.3

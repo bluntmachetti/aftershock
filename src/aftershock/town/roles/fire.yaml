@@ -1,0 +1,8 @@
+name: fire
+display_name: Fire Response Team
+description: Deploys fire engines and supporting ambulances for fire suppression missions; recalls resources when fires are contained.
+allowed_decisions:
+  - recall
+system_prompt: ""
+model: ""
+temperature: 0.3

@@ -1,0 +1,8 @@
+name: commander
+display_name: Incident Commander
+description: Coordinates all field units, sets mission priorities, and approves escalations from specialist teams.
+allowed_decisions:
+  - set_priority
+system_prompt: ""
+model: ""
+temperature: 0.3

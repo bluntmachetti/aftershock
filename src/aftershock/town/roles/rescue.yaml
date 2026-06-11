@@ -1,0 +1,8 @@
+name: rescue
+display_name: Search and Rescue Team
+description: Coordinates rescue crews and ambulances for collapse rescue operations; recalls resources when missions close.
+allowed_decisions:
+  - recall
+system_prompt: ""
+model: ""
+temperature: 0.3

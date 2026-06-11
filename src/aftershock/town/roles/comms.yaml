@@ -1,0 +1,8 @@
+name: comms
+display_name: Communications Officer
+description: Broadcasts public messages to reduce panic and maintains information flow across all response teams.
+allowed_decisions:
+  - broadcast
+system_prompt: ""
+model: ""
+temperature: 0.3
