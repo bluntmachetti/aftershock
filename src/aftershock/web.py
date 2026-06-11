@@ -387,14 +387,15 @@ def create_app(
         if not bench_root.exists():
             return JSONResponse([])
         results: list[tuple[float, Any]] = []
-        for entry in bench_root.iterdir():
-            if entry.name == "results.json" or entry.suffix == ".json":
-                try:
-                    data = json.loads(entry.read_text(encoding="utf-8"))
-                    mtime = entry.stat().st_mtime
-                    results.append((mtime, data))
-                except Exception:  # noqa: BLE001
-                    continue
+        # results.json files live in dated subdirectories (bench/results/<date>/),
+        # or directly under bench_root — scan recursively for the canonical name.
+        for entry in sorted(bench_root.rglob("results.json")):
+            try:
+                data = json.loads(entry.read_text(encoding="utf-8"))
+                mtime = entry.stat().st_mtime
+                results.append((mtime, data))
+            except Exception:  # noqa: BLE001
+                continue
         results.sort(key=lambda x: x[0], reverse=True)
         return JSONResponse([r for _, r in results])
 

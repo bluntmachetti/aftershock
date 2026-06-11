@@ -84,6 +84,14 @@ def bench_root(tmp_path: Path) -> Path:
         "paired": {"scripted": {7: 10.0}},
     }
     (br / "results.json").write_text(json.dumps(results), encoding="utf-8")
+    # The real layout: results.json inside a dated subdirectory (bench/results/<date>/).
+    dated = br / "2026-06-11"
+    dated.mkdir()
+    dated_results = {
+        "arms": {"society": {"n": 5, "mean_lives_saved": 103.2}},
+        "paired": {"society": {11: 140.0}},
+    }
+    (dated / "results.json").write_text(json.dumps(dated_results), encoding="utf-8")
     return br
 
 
@@ -264,9 +272,10 @@ def test_bench_reads_fixture(runs_root: Path, bench_root: Path) -> None:
         resp = client.get("/api/bench")
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data) == 1
-    assert "arms" in data[0]
-    assert "scripted" in data[0]["arms"]
+    # Both the top-level results.json and the dated-subdirectory one must be found.
+    assert len(data) == 2
+    arms_seen = {arm for result in data for arm in result["arms"]}
+    assert arms_seen == {"scripted", "society"}
 
 
 # ---------------------------------------------------------------------------
