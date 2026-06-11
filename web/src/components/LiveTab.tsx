@@ -120,6 +120,19 @@ export function LiveTab({ onTickReceived }: Props) {
     }
   }, [running])
 
+  // 401 means this browser never presented the server's OBSERVATORY_TOKEN —
+  // explain the one-time ?token= step instead of echoing the raw response.
+  function friendlyError(e: Error): string {
+    if (e.message.includes('401')) {
+      return (
+        'Unauthorized: this browser has no access token. Open the observatory once ' +
+        'via ?token=<OBSERVATORY_TOKEN> (the server operator has it) — it is stored ' +
+        'locally and scrubbed from the URL, then Start/Inject work from this browser.'
+      )
+    }
+    return e.message
+  }
+
   async function handleStart() {
     setStartError(null)
     setStarting(true)
@@ -128,7 +141,7 @@ export function LiveTab({ onTickReceived }: Props) {
       await api.startLive(arm, seed, ticks)
       appendLog(`[start] arm=${arm} seed=${seed} ticks=${ticks}`)
     } catch (e) {
-      setStartError((e as Error).message)
+      setStartError(friendlyError(e as Error))
     } finally {
       setStarting(false)
     }
@@ -143,7 +156,7 @@ export function LiveTab({ onTickReceived }: Props) {
       appendLog(`[inject] ${injectKind} → ${injectDistrict}`)
       setTimeout(() => setInjectOk(false), 2000)
     } catch (e) {
-      setInjectError((e as Error).message)
+      setInjectError(friendlyError(e as Error))
     }
   }
 
