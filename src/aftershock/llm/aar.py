@@ -136,9 +136,8 @@ def build_run_digest(manifest: dict[str, Any], ticks: list[TickRecord]) -> str:
                 )
             elif kind == "mission_resolved":
                 mission_data[mid]["resolved_tick"] = record.tick
-                # lives_saved is tracked on state; resolved event carries the remaining lives
-                # via lives_at_risk snapshot — events.py does not add lives_saved to payload,
-                # so we cannot populate this here. Leave at 0 unless payload provides it.
+                # events.py emits lives_saved on mission_resolved; recordings made
+                # before 2026-06-11 lack the key and fall back to 0.
                 mission_data[mid]["lives_saved"] += payload.get("lives_saved", 0)
             elif kind == "mission_failed":
                 mission_data[mid]["failed_tick"] = record.tick

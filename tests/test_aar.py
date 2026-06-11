@@ -527,3 +527,25 @@ def test_digest_negotiation_stats_no_double_count() -> None:
     )
 
 
+
+
+def test_digest_per_mission_saved_sums_to_final_score() -> None:
+    """mission_resolved events carry lives_saved; per-mission saved in the digest
+    must reconcile with the final lives_saved score (guards the payload contract
+    between town/events.py and the digest — a mismatch silently feeds the AAR
+    model wrong numbers)."""
+    import re as _re
+    import tempfile
+
+    from aftershock.kernel.recorder import load_run
+
+    with tempfile.TemporaryDirectory() as td:
+        run_dir = _run_scripted_20(Path(td))
+        manifest, ticks, _ = load_run(run_dir)
+        digest = build_run_digest(manifest, ticks)
+
+        final = ticks[-1].scores["lives_saved"]
+        per_mission = [int(s) for s in _re.findall(r" saved=(\d+)", digest)]
+        assert sum(per_mission) == int(final)
+        # at least one resolved mission must have rescued someone
+        assert any(s > 0 for s in per_mission)

@@ -176,7 +176,8 @@ def scheduled_events(
         # Check resolution — must re-read after possible casualty update
         if mission.progress >= 1.0:
             # Resolved: save remaining lives, return resources
-            state.lives_saved += mission.lives_at_risk
+            saved = mission.lives_at_risk
+            state.lives_saved += saved
             mission.lives_at_risk = 0
             mission.status = MissionStatus.resolved
             mission.resolved_tick = tick
@@ -186,11 +187,12 @@ def scheduled_events(
                 event_id=_next_event_id(state, events),
                 tick=tick,
                 kind="mission_resolved",
-                payload={"mission_id": mid, "resolved_tick": tick},
+                payload={"mission_id": mid, "resolved_tick": tick, "lives_saved": saved},
             ))
         elif tick >= mission.deadline_tick:
             # Failed: lose remaining lives, return resources
-            state.lives_lost += mission.lives_at_risk
+            lost_at_failure = mission.lives_at_risk
+            state.lives_lost += lost_at_failure
             mission.lives_at_risk = 0
             mission.status = MissionStatus.failed
             state.panic = min(1.0, state.panic + PANIC_PER_FAILURE)
@@ -200,7 +202,7 @@ def scheduled_events(
                 event_id=_next_event_id(state, events),
                 tick=tick,
                 kind="mission_failed",
-                payload={"mission_id": mid},
+                payload={"mission_id": mid, "lives_lost": lost_at_failure},
             ))
             events.append(WorldEvent(
                 event_id=_next_event_id(state, events),
