@@ -52,6 +52,9 @@ Honest caveat: well-tuned scripted heuristics using the same protocol remain com
 with all LLM arms on this scenario — the protocol, not raw model intelligence, carries
 most of the outcome. That is the point of the project.
 
+Everything we've learned about agent behavior along the way — including the negative
+results — is logged with evidence in [docs/FIELD-NOTES.md](docs/FIELD-NOTES.md).
+
 ## Status
 
 In active development for the Qwen Cloud Global AI Hackathon. Done: deterministic kernel,
