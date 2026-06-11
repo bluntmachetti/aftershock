@@ -66,9 +66,21 @@ export function LiveTab({ onTickReceived }: Props) {
     }
   }, [log])
 
-  // WebSocket lifecycle
+  // Latest callbacks via refs: message handlers must never appear in the WS
+  // effect's dependencies — tick messages update parent state, which recreates
+  // these callbacks, and a dependency on them tears down and reopens the
+  // socket on every message (infinite reconnect loop, each replaying T0).
+  const appendLogRef = useRef(appendLog)
+  const onTickRef = useRef(onTickReceived)
   useEffect(() => {
-    if (!status?.running) {
+    appendLogRef.current = appendLog
+    onTickRef.current = onTickReceived
+  })
+
+  // WebSocket lifecycle — keyed ONLY on whether a run is active.
+  const running = status?.running ?? false
+  useEffect(() => {
+    if (!running) {
       wsRef.current?.close()
       wsRef.current = null
       return
@@ -79,28 +91,34 @@ export function LiveTab({ onTickReceived }: Props) {
     const ws = new WebSocket(`${proto}//${window.location.host}/ws/live`)
     wsRef.current = ws
 
-    ws.onopen = () => appendLog('[ws] connected')
-    ws.onclose = () => { appendLog('[ws] disconnected'); wsRef.current = null }
-    ws.onerror = () => appendLog('[ws] error')
+    ws.onopen = () => appendLogRef.current('[ws] connected')
+    ws.onclose = () => {
+      appendLogRef.current('[ws] disconnected')
+      if (wsRef.current === ws) wsRef.current = null
+    }
+    ws.onerror = () => appendLogRef.current('[ws] error')
     ws.onmessage = (ev) => {
       try {
         const msg = JSON.parse(ev.data as string) as LiveWsMessage
         if (msg.type === 'tick' && msg.record) {
-          appendLog(
+          appendLogRef.current(
             `T${msg.record.tick} — saved:${msg.record.scores['lives_saved'] ?? 0} ` +
             `panic:${((msg.record.scores['panic'] ?? 0) * 100).toFixed(0)}%`,
           )
-          onTickReceived(msg.record, msg.world ?? null)
+          onTickRef.current(msg.record, msg.world ?? null)
         } else if (msg.type === 'done') {
-          appendLog('[done] run finished')
+          appendLogRef.current('[done] run finished')
         }
       } catch {
-        appendLog('[ws] parse error')
+        appendLogRef.current('[ws] parse error')
       }
     }
 
-    return () => { ws.close(); wsRef.current = null }
-  }, [status?.running, appendLog, onTickReceived])
+    return () => {
+      ws.close()
+      if (wsRef.current === ws) wsRef.current = null
+    }
+  }, [running])
 
   async function handleStart() {
     setStartError(null)

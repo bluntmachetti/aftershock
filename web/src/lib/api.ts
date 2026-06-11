@@ -32,6 +32,10 @@ function authHeaders(): Record<string, string> {
   return token ? { 'X-Observatory-Token': token } : {}
 }
 
+// Consume ?token= eagerly at app load — not lazily on the first mutating call —
+// so the secret never lingers in the address bar (or in a screen recording).
+resolveToken()
+
 async function get<T>(url: string): Promise<T> {
   const res = await fetch(url)
   if (!res.ok) {
