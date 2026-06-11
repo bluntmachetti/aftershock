@@ -1,14 +1,17 @@
-"""Aftershock CLI: run | verify | replay.
+"""Aftershock CLI: run | verify | replay | smoke-llm.
 
-aftershock run    --seed 42 --ticks 60 --arm scripted [--out runs] [--quiet]
+aftershock run    --seed 42 --ticks 60 --arm scripted|society [--out runs] [--quiet]
+                  [--timeout S]
 aftershock verify --seed 42 --ticks 60
 aftershock replay <run_dir>
+aftershock smoke-llm [--model qwen3.5-flash]
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -32,6 +35,10 @@ from aftershock.town.state import new_town
 
 _ROLES_DIR = Path(__file__).parent / "town" / "roles"
 
+# Default timeouts per arm
+_DEFAULT_TIMEOUT_SCRIPTED = 5.0
+_DEFAULT_TIMEOUT_SOCIETY = 45.0
+
 
 def _build_scripted_agents(roles: dict) -> dict:
     return {
@@ -44,19 +51,34 @@ def _build_scripted_agents(roles: dict) -> dict:
     }
 
 
-def _build_engine(seed: int, ticks: int, out_dir: Path, run_id: str) -> Engine:
+def _build_engine(
+    seed: int,
+    ticks: int,
+    out_dir: Path,
+    run_id: str,
+    arm: str = "scripted",
+    timeout_s: float = _DEFAULT_TIMEOUT_SCRIPTED,
+    provider: Any = None,
+) -> Engine:
     world = new_town(seed)
     society = TownSociety(max_ticks=ticks)
     registry = DecisionRegistry()
     register_all(registry)
     roles = load_roles(_ROLES_DIR)
-    agents = _build_scripted_agents(roles)
+
+    if arm == "society":
+        from aftershock.town.prompts import build_llm_agents
+        assert provider is not None, "provider required for society arm"
+        agents = build_llm_agents(roles, provider)
+    else:
+        agents = _build_scripted_agents(roles)
+
     resolver = TownResolver()
     manifest: dict[str, Any] = {
         "run_id": run_id,
         "seed": seed,
         "ticks": ticks,
-        "arm": "scripted",
+        "arm": arm,
     }
     recorder = Recorder(out_dir, run_id, manifest)
     return Engine(
@@ -69,6 +91,7 @@ def _build_engine(seed: int, ticks: int, out_dir: Path, run_id: str) -> Engine:
         recorder=recorder,
         seed=seed,
         max_ticks=ticks,
+        agent_timeout_s=timeout_s,
     )
 
 
@@ -83,8 +106,25 @@ def cmd_run(args: argparse.Namespace) -> int:
     out_dir = Path(args.out)
     quiet: bool = args.quiet
 
+    # Determine timeout
+    timeout_s: float = args.timeout if args.timeout is not None else (
+        _DEFAULT_TIMEOUT_SOCIETY if arm == "society" else _DEFAULT_TIMEOUT_SCRIPTED
+    )
+
+    provider = None
+    if arm == "society":
+        api_key = os.environ.get("DASHSCOPE_API_KEY", "")
+        if not api_key:
+            print("No DASHSCOPE_API_KEY set. Please export DASHSCOPE_API_KEY=<your-key>")
+            print("Get a key at https://dashscope.aliyuncs.com — then re-run this command.")
+            return 2
+        from aftershock.llm.provider import QwenProvider
+        provider = QwenProvider(api_key=api_key, timeout_s=timeout_s)
+
     run_id = _run_id(seed, arm)
-    engine = _build_engine(seed, ticks, out_dir, run_id)
+    engine = _build_engine(
+        seed, ticks, out_dir, run_id, arm=arm, timeout_s=timeout_s, provider=provider
+    )
 
     async def _run() -> Any:
         return await engine.run()
@@ -171,6 +211,47 @@ def cmd_replay(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_smoke_llm(args: argparse.Namespace) -> int:
+    """Make one tiny JSON-mode call and print reply, token counts, and cost."""
+    api_key = os.environ.get("DASHSCOPE_API_KEY", "")
+    if not api_key:
+        print("No DASHSCOPE_API_KEY set. Please export DASHSCOPE_API_KEY=<your-key>")
+        print("Get a key at https://dashscope.aliyuncs.com — then re-run this command.")
+        return 2
+
+    model: str = args.model
+
+    from aftershock.llm.provider import QwenProvider
+
+    provider = QwenProvider(api_key=api_key)
+
+    system = (
+        "You are a test assistant. Respond with ONLY a JSON object. "
+        'Example: {"status": "ok", "message": "hello"}'
+    )
+    user = (
+        'Respond with a tiny JSON object containing exactly two fields: '
+        '"status" (value "ok") and "tick" (value 1). '
+        "Output only valid JSON, no markdown."
+    )
+
+    async def _call() -> None:
+        result = await provider.chat(
+            model=model,
+            system=system,
+            user=user,
+            temperature=0.0,
+            json_mode=True,
+        )
+        print(f"Reply:             {result.text}")
+        print(f"Prompt tokens:     {result.usage.prompt_tokens}")
+        print(f"Completion tokens: {result.usage.completion_tokens}")
+        print(f"Cost USD:          {result.usage.cost_usd:.6f}")
+
+    asyncio.run(_call())
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="aftershock")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -179,9 +260,11 @@ def main() -> None:
     p_run = sub.add_parser("run", help="Run a simulation")
     p_run.add_argument("--seed", type=int, required=True)
     p_run.add_argument("--ticks", type=int, required=True)
-    p_run.add_argument("--arm", default="scripted", choices=["scripted"])
+    p_run.add_argument("--arm", default="scripted", choices=["scripted", "society"])
     p_run.add_argument("--out", default="runs")
     p_run.add_argument("--quiet", action="store_true")
+    p_run.add_argument("--timeout", type=float, default=None,
+                       help="Agent timeout in seconds (default: 5.0 scripted, 45.0 society)")
 
     # verify
     p_verify = sub.add_parser("verify", help="Verify determinism")
@@ -192,6 +275,10 @@ def main() -> None:
     p_replay = sub.add_parser("replay", help="Print scoreboard from a run dir")
     p_replay.add_argument("run_dir")
 
+    # smoke-llm
+    p_smoke = sub.add_parser("smoke-llm", help="Make one test LLM call and print results")
+    p_smoke.add_argument("--model", default="qwen3.5-flash")
+
     args = parser.parse_args()
 
     if args.command == "run":
@@ -200,3 +287,5 @@ def main() -> None:
         sys.exit(cmd_verify(args))
     elif args.command == "replay":
         sys.exit(cmd_replay(args))
+    elif args.command == "smoke-llm":
+        sys.exit(cmd_smoke_llm(args))

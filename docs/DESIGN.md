@@ -319,12 +319,157 @@ panic_changed`).
 `commander` (set_priority), `medical`/`rescue`/`fire` (recall), `infrastructure`
 (recall, repair_road), `comms` (broadcast). Dispatch is auction-granted only.
 
+## The LLM layer (`src/aftershock/llm/`)
+
+LLM agents are ordinary `Agent`s: they see the same observations, emit the same typed
+responses, and get the same rejection feedback as scripted agents. The engine cannot tell
+the difference — which is what makes arms comparable. Everything here must be fully
+testable offline via `MockProvider`; no test may require a network or an API key.
+
+### provider.py — the single chokepoint for model calls
+
+Every model call in the project goes through `Provider.chat` so cost accounting, retries,
+and request shaping live in exactly one place.
+
+```python
+DASHSCOPE_INTL_BASE = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+
+# (usd_per_1M_input, usd_per_1M_output) — first price tier; our prompts stay well under it
+MODEL_PRICES_USD_PER_MTOK: dict[str, tuple[float, float]] = {
+    "qwen3.5-flash": (0.10, 0.40),
+    "qwen3.5-plus": (0.40, 2.40),
+    "qwen3-max": (1.20, 6.00),
+    "qwen-flash": (0.05, 0.40),
+    "qwen-plus": (0.40, 1.20),
+    "qwen-max": (1.60, 6.40),
+    "qwen-turbo": (0.05, 0.20),
+}
+
+@dataclass(frozen=True)
+class ChatResult:
+    text: str
+    usage: TokenUsage   # cost_usd computed from MODEL_PRICES (unknown model -> 0.0)
+
+class Provider(Protocol):
+    async def chat(self, *, model: str, system: str, user: str,
+                   temperature: float, json_mode: bool = True) -> ChatResult
+
+class QwenProvider:
+    def __init__(self, api_key: str | None = None,        # default: env DASHSCOPE_API_KEY
+                 base_url: str = DASHSCOPE_INTL_BASE,
+                 timeout_s: float = 45.0, max_retries: int = 2,
+                 transport: httpx.AsyncBaseTransport | None = None) -> None
+        # missing key -> ProviderError at construction with a friendly message
+    # POST {base_url}/chat/completions, Authorization: Bearer <key>.
+    # json_mode=True adds response_format={"type":"json_object"} and
+    # "enable_thinking": false, and never sets max_tokens (DashScope JSON-mode rules;
+    # the word "JSON" in the prompt is the contract's job, asserted here defensively).
+    # Retries on 429/5xx/timeouts with exponential backoff (0.5s, 1s, 2s);
+    # exhausted retries raise ProviderError. transport is injectable for tests
+    # (httpx.MockTransport).
+
+class MockProvider:
+    def __init__(self, script: list[str] | Callable[[str, str, str], str]) -> None
+        # returns scripted texts in order (or callable of model/system/user);
+        # fabricates plausible TokenUsage (len//4 tokens) with real cost math;
+        # records every call as (model, system, user) in .calls
+```
+
+### parse.py — tolerant, strict-enough output parsing
+
+```python
+class LLMDecision(BaseModel):   # extra="ignore" on all three
+    decision_type: str; params: dict[str, Any] = {}; rationale: str = ""
+class LLMProposal(BaseModel):
+    kind: str; recipient: str | None = None; body: dict[str, Any] = {}
+class LLMResponse(BaseModel):
+    proposal_id: str; accept: bool; note: str = ""
+class LLMOutput(BaseModel):
+    decisions: list[LLMDecision] = []; proposals: list[LLMProposal] = []
+    responses: list[LLMResponse] = []
+
+class LLMParseError(Exception): ...   # carries a short reason
+
+def parse_llm_output(text: str) -> LLMOutput
+    # strip markdown code fences; extract the first balanced {...} block;
+    # json.loads; validate. Unknown decision_types/kinds pass through —
+    # the registry/engine rejects them with reasons (that IS the feedback loop).
+```
+
+### digest.py — bounded observations for small-context models
+
+```python
+def sanitize(text: str, cap: int = 200) -> str
+    # for any agent-authored text spliced into another agent's prompt:
+    # strip <| ... |> control sequences and backticks, collapse whitespace,
+    # neutralise leading "system:"/"assistant:"/"user:" prefixes, cap length.
+
+def render_observation(obs: Observation, max_missions: int = 12) -> str
+```
+
+Deterministic compact text, bounded size regardless of world size. Sections, in order:
+`TICK`/`PANIC`, `POOLS` (one line), `BLOCKED` districts, `MISSIONS` — open missions as a
+fixed-width table (id, kind, district, sev, lives, deadline_in, priority, staffing
+"assigned/required" per resource) sorted by (priority desc, deadline asc, id) and capped
+at `max_missions` with a `(+N more)` suffix; `YOUR INBOX` — proposals with sanitized
+bodies/notes; `RULINGS` on your past proposals (sanitized reasons); `REJECTED LAST TICK`
+— each with its reason, prefixed "do not repeat these"; allowed decision types last.
+
+### contract.py — the shared output contract appended to every system prompt
+
+```python
+def decision_contract(allowed: tuple[str, ...],
+                      decision_docs: dict[str, str],
+                      proposal_docs: dict[str, str]) -> str
+```
+
+Renders: the exact output JSON schema (`{"decisions": [...], "proposals": [...],
+"responses": [...]}` with field names matching parse.py), one usage line per allowed
+decision type (from `decision_docs`), one per proposal kind (from `proposal_docs`), and
+the hard rules: output ONLY a JSON object; use exact ids exactly as they appear in the
+observation (mission ids like "m3", resource names, proposal ids) and never invent ids;
+answer every proposal in YOUR INBOX via "responses"; resources are granted only through
+resource_request proposals, not dispatch decisions; keep each rationale under 25 words.
+Must contain the word "JSON" (DashScope json_mode requirement) — pinned by a test.
+
+### agent.py
+
+```python
+class LLMAgent(Agent):
+    def __init__(self, agent_id: str, role: RoleSpec, provider: Provider, contract: str)
+    async def act(self, observation: Observation) -> AgentResponse
+```
+
+- `system = role.system_prompt + "\n\n" + contract`; `user = render_observation(obs)`;
+  `model = role.model`, `temperature = role.temperature`, json_mode on.
+- Maps `LLMOutput` into protocol types, assigning ids `f"{agent_id}-t{tick}-{i}"`
+  (decisions) / `f"{agent_id}-t{tick}-p{i}"` (proposals) and forcing
+  `agent_id`/`sender`/`responder` to itself. Response entries whose `proposal_id` is not
+  in the observation inbox are dropped.
+- Provider or parse failure ⇒ `AgentResponse(error=<short reason>)`, with usage attached
+  when the call succeeded but parsing failed. Never raises.
+
+### Town wiring
+
+- `town/prompts.py`: `DECISION_DOCS` / `PROPOSAL_DOCS` dicts (one usage line each, e.g.
+  `"set_priority": "set_priority {mission_id, priority 0-10}: rank a mission for the
+  resource auction"`), plus `build_llm_agents(roles, provider) -> dict[str, Agent]`.
+- Role YAMLs gain `system_prompt` (concise role briefs: who you are, your objective,
+  your lane, when to escalate), `model` (`qwen3.5-plus` for commander, `qwen3.5-flash`
+  for the five others), `temperature: 0.3`.
+- CLI: `--arm society` builds LLM agents (friendly fail-fast if `DASHSCOPE_API_KEY` is
+  unset); `--timeout` flag for agent_timeout_s (default 5.0 scripted, 45.0 society);
+  new `aftershock smoke-llm [--model qwen3.5-flash]` makes one tiny JSON-mode call and
+  prints the reply, token counts, and cost — the first thing to run when credits land.
+
 ## CLI
 
 ```
-aftershock run    --seed 42 --ticks 60 --arm scripted [--out runs] [--quiet]
+aftershock run    --seed 42 --ticks 60 --arm scripted|society [--out runs] [--quiet]
+                  [--timeout S]
 aftershock verify --seed 42 --ticks 60     # run twice, assert identical digest sequences
 aftershock replay <run_dir>                # print scoreboard timeline from NDJSON
+aftershock smoke-llm [--model qwen3.5-flash]   # one live call: reply, tokens, cost
 ```
 
 `run` prints a one-line-per-tick summary and a final scoreboard (lives saved/lost,
