@@ -23,10 +23,40 @@ Aftershock is two things:
 
 Built for the Qwen Cloud Global AI Hackathon (Agent Society track).
 
+## Results (live benchmark, 2026-06-11)
+
+Four arms, identical seeded worlds (5 paired seeds × 60-tick budget), real Qwen Cloud
+calls. Full tables in [bench/results/2026-06-11/](bench/results/2026-06-11/RESULTS.md);
+reproduce with `aftershock bench`.
+
+| arm | coordination | models | lives saved (mean±sd) | missions failed | cost/run | lives per $ |
+|---|---|---|---|---|---|---|
+| **society** | negotiation protocol | flash ×5 + plus commander | 103.2 ± 23.6 | 0.4 | $0.042 | **2441** |
+| solo | none (one agent) | qwen3-max | 104.2 ± 13.6 | 0.4 | $0.065 | 1606 |
+| swarm | none (5 agents) | flash ×5 | 75.6 ± 15.4 | 3.0 | $0.016 | 4710* |
+| scripted | negotiation protocol | heuristics ($0) | 106.8 ± 18.0 | 0.2 | $0.00 | — |
+
+Two findings, both causal because every arm faces byte-identical worlds:
+
+1. **The protocol is worth +28 lives per run.** Same five cheap models, with vs without
+   the negotiation protocol: 103.2 vs 75.6 lives saved, 0.4 vs 3.0 missions failed.
+   The run records show why — the swarm wasted 160 decisions racing for empty resource
+   pools; the society resolved contention in the auction *before* acting.
+   (*swarm's high lives-per-$ is efficiency at a much worse outcome.)
+2. **The society matches the flagship at 65% of the cost.** A coordinated team of
+   qwen3.5-flash workers under a qwen3.5-plus commander saves as many lives as one
+   qwen3-max doing everything (103.2 vs 104.2 — within noise), for 52% more lives per
+   dollar, and runs 1.6× faster (parallel small calls beat sequential big ones).
+
+Honest caveat: well-tuned scripted heuristics using the same protocol remain competitive
+with all LLM arms on this scenario — the protocol, not raw model intelligence, carries
+most of the outcome. That is the point of the project.
+
 ## Status
 
-Early development. The kernel and the scripted-agent simulation land first; Qwen-driven
-agents, the benchmark harness, the live map UI, and the MCP spectator server follow.
+In active development for the Qwen Cloud Global AI Hackathon. Done: deterministic kernel,
+disaster-town society, Qwen-driven agents, 4-arm benchmark harness. Next: live map UI,
+MCP spectator server, Alibaba Cloud deployment.
 
 ## Quickstart
 
