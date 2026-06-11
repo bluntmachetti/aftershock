@@ -25,6 +25,7 @@ from aftershock.kernel.protocol import (
     ProposalKind,
     ProposalResponse,
     ProposalRuling,
+    TickRecord,
     WorldEvent,
 )
 from aftershock.kernel.recorder import Recorder
@@ -807,7 +808,7 @@ async def test_tick_listener_called_once_per_tick(tmp_path: Path) -> None:
     }
     received: list[TickRecord] = []
 
-    def listener(record: TickRecord) -> None:
+    def listener(record: TickRecord, world_state: dict) -> None:
         received.append(record)
 
     engine = Engine(
@@ -848,7 +849,7 @@ async def test_tick_listener_exception_does_not_break_run(tmp_path: Path) -> Non
     }
     call_count = 0
 
-    def bad_listener(record: TickRecord) -> None:
+    def bad_listener(record: TickRecord, world_state: dict) -> None:
         nonlocal call_count
         call_count += 1
         raise RuntimeError("listener exploded")
@@ -902,6 +903,9 @@ async def test_tick_listener_receives_world_digest(tmp_path: Path) -> None:
     }
     received: list[TickRecord] = []
 
+    def _listener(record: TickRecord, world_state: dict) -> None:
+        received.append(record)
+
     engine = Engine(
         world=world,
         society=CounterSociety(),
@@ -913,7 +917,7 @@ async def test_tick_listener_receives_world_digest(tmp_path: Path) -> None:
         seed=42,
         max_ticks=5,
         agent_timeout_s=30.0,
-        tick_listener=received.append,
+        tick_listener=_listener,
     )
 
     await engine.step(0)

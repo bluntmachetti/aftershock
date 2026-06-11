@@ -338,3 +338,84 @@ def test_bench_scripted_two_seeds_end_to_end() -> None:
         assert "scripted" in combined, "arm 'scripted' missing from stdout table"
         assert "42" in combined, "seed 42 missing from stdout table"
         assert "7" in combined, "seed 7 missing from stdout table"
+
+
+# ---------------------------------------------------------------------------
+# serve / mcp subcommands appear in --help
+# ---------------------------------------------------------------------------
+
+
+def test_serve_in_top_level_help() -> None:
+    """'serve' must appear in the top-level --help output."""
+    result = _run_aftershock("--help")
+    assert "serve" in result.stdout + result.stderr, (
+        f"'serve' not found in help:\n{result.stdout}{result.stderr}"
+    )
+
+
+def test_mcp_in_top_level_help() -> None:
+    """'mcp' must appear in the top-level --help output."""
+    result = _run_aftershock("--help")
+    assert "mcp" in result.stdout + result.stderr, (
+        f"'mcp' not found in help:\n{result.stdout}{result.stderr}"
+    )
+
+
+def test_serve_help_exits_0() -> None:
+    """aftershock serve --help must exit 0."""
+    result = _run_aftershock("serve", "--help")
+    _assert_rc(result, 0)
+
+
+def test_serve_help_shows_runs_dir() -> None:
+    """aftershock serve --help must mention --runs-dir."""
+    result = _run_aftershock("serve", "--help")
+    combined = result.stdout + result.stderr
+    assert "--runs-dir" in combined, f"'--runs-dir' not in serve help:\n{combined}"
+
+
+def test_serve_help_shows_host_and_port() -> None:
+    """aftershock serve --help must mention --host and --port."""
+    result = _run_aftershock("serve", "--help")
+    combined = result.stdout + result.stderr
+    assert "--host" in combined, f"'--host' not in serve help:\n{combined}"
+    assert "--port" in combined, f"'--port' not in serve help:\n{combined}"
+
+
+def test_mcp_help_exits_0() -> None:
+    """aftershock mcp --help must exit 0."""
+    result = _run_aftershock("mcp", "--help")
+    _assert_rc(result, 0)
+
+
+def test_mcp_help_shows_runs_dir() -> None:
+    """aftershock mcp --help must mention --runs-dir."""
+    result = _run_aftershock("mcp", "--help")
+    combined = result.stdout + result.stderr
+    assert "--runs-dir" in combined, f"'--runs-dir' not in mcp help:\n{combined}"
+
+
+# ---------------------------------------------------------------------------
+# create_app importable from cli wiring
+# ---------------------------------------------------------------------------
+
+
+def test_create_app_importable_from_web() -> None:
+    """create_app must be importable from aftershock.web (the module cli wires serve to)."""
+    from aftershock.web import create_app  # noqa: F401 — just assert it imports
+
+    assert callable(create_app)
+
+
+def test_create_app_returns_fastapi_app() -> None:
+    """create_app() must return a FastAPI application instance."""
+    import tempfile
+    from pathlib import Path
+
+    from fastapi import FastAPI
+
+    from aftershock.web import create_app
+
+    with tempfile.TemporaryDirectory() as td:
+        app = create_app(runs_root=Path(td))
+    assert isinstance(app, FastAPI)

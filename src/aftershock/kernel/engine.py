@@ -8,9 +8,11 @@ in sorted agent order regardless of completion order.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from aftershock.kernel.agents import Agent
 from aftershock.kernel.ledger import CostLedger
@@ -69,7 +71,7 @@ class Engine:
         max_ticks: int,
         agent_timeout_s: float = 30.0,
         rejection_memory_ticks: int = 3,
-        tick_listener: Callable[[TickRecord], None] | None = None,
+        tick_listener: Callable[[TickRecord, dict[str, Any]], None] | None = None,
     ) -> None:
         # Boot validation
         soc_ids = set(society.agent_ids())
@@ -128,13 +130,15 @@ class Engine:
             if self._society.is_over(self._world, tick):
                 break
             tick += 1
+        cost = self._ledger.totals()
+        self._recorder.write_final_summary(last_scores, cost)
         self._recorder.close()
         return RunSummary(
             run_id=self._recorder.run_dir.name,
             seed=self._seed,
             ticks_run=tick + 1,
             final_scores=last_scores,
-            cost=self._ledger.totals(),
+            cost=cost,
             run_dir=str(self._recorder.run_dir),
         )
 
@@ -452,10 +456,8 @@ class Engine:
 
         # Call tick_listener if provided; swallow exceptions so they never kill the tick
         if self._tick_listener is not None:
-            try:
-                self._tick_listener(record)
-            except Exception:
-                pass
+            with contextlib.suppress(Exception):
+                self._tick_listener(record, world_state_dict)
 
         # Refill feedback buffers for next tick
         # Reset inbox and rulings; rejection history is appended, not reset

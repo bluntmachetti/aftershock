@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-ground: #0a0e1a;
+  --bg-surface: #0f1624;
+  --bg-raised: #1a2235;
+  --bg-border: #243047;
+  --accent-amber: #f59e0b;
+  --accent-amber-dim: #78350f;
+  --accent-red: #ef4444;
+  --accent-red-dim: #7f1d1d;
+  --accent-green: #4ade80;
+  --accent-green-dim: #14532d;
+  --accent-cyan: #22d3ee;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-dim: #475569;
+}
+
+html, body {
+  background-color: var(--bg-ground);
+  color: var(--text-primary);
+  font-family: 'Share Tech', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Monospaced numerals everywhere */
+.tabular {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-surface);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bg-border);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}
+
+/* EOC glow utilities */
+.glow-amber {
+  box-shadow: 0 0 6px #f59e0b40, 0 0 12px #f59e0b20;
+}
+.glow-red {
+  box-shadow: 0 0 6px #ef444440, 0 0 12px #ef444420;
+}
+.glow-green {
+  box-shadow: 0 0 6px #4ade8040, 0 0 12px #4ade8020;
+}
+
+/* Scan line overlay effect */
+.scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+  pointer-events: none;
+}

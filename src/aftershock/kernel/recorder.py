@@ -59,6 +59,17 @@ class Recorder:
             self._world_file.write(line + "\n")
             self._world_file.flush()
 
+    def write_final_summary(self, final_scores: dict[str, Any], cost: dict[str, Any]) -> None:
+        """Rewrite run.json with final_scores and cost appended to the manifest."""
+        manifest_path = self._run_dir / "run.json"
+        try:
+            manifest: dict[str, Any] = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            manifest = {}
+        manifest["final_scores"] = final_scores
+        manifest["cost"] = cost
+        manifest_path.write_text(canonical_json(manifest), encoding="utf-8")
+
     def close(self) -> None:
         self._ticks_file.close()
         self._world_file.close()

@@ -268,6 +268,38 @@ def cmd_replay(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    """Start the FastAPI observatory server via uvicorn."""
+    try:
+        import uvicorn
+    except ImportError:
+        print(
+            "error: uvicorn is required for 'serve'. Install it with: pip install uvicorn",
+            file=sys.stderr,
+        )
+        return 1
+
+    from aftershock.web import create_app
+
+    runs_dir = Path(args.runs_dir)
+    host: str = args.host
+    port: int = args.port
+
+    app = create_app(runs_root=runs_dir, host=host)
+    uvicorn.run(app, host=host, port=port)
+    return 0
+
+
+def cmd_mcp(args: argparse.Namespace) -> int:
+    """Start the MCP spectator server (stdio transport)."""
+    from aftershock.mcp_server import create_server
+
+    runs_dir = Path(args.runs_dir)
+    server = create_server(runs_root=runs_dir)
+    server.run(transport="stdio")
+    return 0
+
+
 def cmd_smoke_llm(args: argparse.Namespace) -> int:
     """Make one tiny JSON-mode call and print reply, token counts, and cost."""
     api_key = os.environ.get("DASHSCOPE_API_KEY", "")
@@ -350,6 +382,39 @@ def main() -> None:
     p_smoke = sub.add_parser("smoke-llm", help="Make one test LLM call and print results")
     p_smoke.add_argument("--model", default="qwen3.5-flash")
 
+    # serve
+    p_serve = sub.add_parser(
+        "serve",
+        help="Start the FastAPI observatory server",
+    )
+    p_serve.add_argument(
+        "--runs-dir",
+        default="runs",
+        help="Directory containing run directories (default: runs)",
+    )
+    p_serve.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host to bind to (default: 127.0.0.1)",
+    )
+    p_serve.add_argument(
+        "--port",
+        type=int,
+        default=8788,
+        help="Port to listen on (default: 8788)",
+    )
+
+    # mcp
+    p_mcp = sub.add_parser(
+        "mcp",
+        help="Start the MCP spectator server (stdio transport)",
+    )
+    p_mcp.add_argument(
+        "--runs-dir",
+        default="runs",
+        help="Directory containing run directories (default: runs)",
+    )
+
     args = parser.parse_args()
 
     if args.command == "run":
@@ -362,3 +427,7 @@ def main() -> None:
         sys.exit(cmd_replay(args))
     elif args.command == "smoke-llm":
         sys.exit(cmd_smoke_llm(args))
+    elif args.command == "serve":
+        sys.exit(cmd_serve(args))
+    elif args.command == "mcp":
+        sys.exit(cmd_mcp(args))
