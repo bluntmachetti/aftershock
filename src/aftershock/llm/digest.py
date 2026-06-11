@@ -31,8 +31,12 @@ def sanitize(text: str, cap: int = 200) -> str:
     text = _CONTROL_SEQ.sub("", text)
     text = _BACKTICK.sub("", text)
     text = _WHITESPACE.sub(" ", text)
-    text = _ROLE_PREFIX.sub("", text)
     text = text.strip()
+    while True:
+        new = _ROLE_PREFIX.sub("", text)
+        if new == text:
+            break
+        text = new.strip()
     if len(text) > cap:
         text = text[:cap]
     return text

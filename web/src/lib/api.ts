@@ -3,6 +3,7 @@ import type {
   TicksResponse,
   BenchResult,
   LiveStatus,
+  AarReport,
 } from '../types'
 
 const TOKEN_KEY = 'observatory-token'
@@ -74,8 +75,15 @@ export const api = {
 
   liveStatus: (): Promise<LiveStatus> => get('/api/live'),
 
-  startLive: (arm: string, seed: number, ticks: number): Promise<{ live_id: string }> =>
-    post('/api/live', { arm, seed, ticks }),
+  aar: (runId: string): Promise<AarReport> => get(`/api/runs/${runId}/aar`),
+
+  startLive: (
+    arm: string,
+    seed: number,
+    ticks: number,
+    opts?: { aar?: boolean; memory?: boolean },
+  ): Promise<{ live_id: string }> =>
+    post('/api/live', { arm, seed, ticks, ...(opts ?? {}) }),
 
   injectEvent: (kind: string, district: string): Promise<void> =>
     post('/api/live/inject', { kind, district }),

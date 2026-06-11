@@ -643,11 +643,71 @@ missions; distinctive and calm, not a generic dashboard. Vite dev proxies `/api`
 of vitest specs cover the timeline reducer/selectors. `web/node_modules` and `web/dist`
 are gitignored.
 
+## After-action reports and the memory loop (`src/aftershock/llm/aar.py`)
+
+At the end of a society run, the flagship model writes the analysis — completing the
+cost-tiered cognition story (flash workers → plus commander → max analyst) — and its
+lessons feed the commander's next briefing, so the society learns across disasters.
+
+### aar.py
+
+```python
+AAR_MODEL = "qwen3-max"
+
+def build_run_digest(manifest: dict, ticks: list[TickRecord]) -> str
+    # Deterministic compact text: final scores; per-mission outcomes (kind, district,
+    # severity, spawned/resolved/failed tick, response latency, lives); negotiation
+    # stats (requests, grants, pool-exhausted declines with winner/loser pairs);
+    # per-agent rejection patterns; injected events. Bounded (< ~3500 chars).
+
+async def generate_aar(run_dir: Path, provider: Provider,
+                       model: str = AAR_MODEL) -> dict
+    # load_run -> digest -> one json_mode chat -> validate against AAR_SCHEMA ->
+    # write run_dir/aar.json (canonical JSON, includes "usage" with cost) -> return it.
+    # AAR_SCHEMA (pydantic): headline (str), grade (one of A/B/C/D/F),
+    # what_worked (list[str]), coordination_failures (list[str]),
+    # key_moments (list[{tick: int, description: str}]),
+    # lessons (list[str], MAX 5, each <= 140 chars, imperative voice).
+
+def load_lessons(memory_path: Path, max_lessons: int = 5) -> list[str]
+def append_lessons(memory_path: Path, run_id: str, lessons: list[str]) -> None
+    # memory_path (default <runs_root>/memory.json): append-only
+    # [{"run_id", "lessons"}]; load returns the most recent max_lessons,
+    # each passed through llm.digest.sanitize (LLM-generated text re-entering
+    # prompts is a self-injection surface — sanitize + cap is non-negotiable).
+```
+
+### Wiring
+
+- `build_llm_agents(roles, provider, lessons: list[str] | None = None)` — when lessons
+  are given, the COMMANDER's system prompt gains a final block:
+  "LESSONS FROM PREVIOUS DISASTERS (apply where relevant):" + numbered lessons.
+  Other roles unchanged. `build_arm(..., lessons=None)` passes through for the
+  society arm only.
+- **Fairness invariant: `bench.py` never passes lessons** — benchmark arms stay
+  memory-free so paired comparisons measure architecture, not accumulated hints.
+  The memory loop is measured by the dedicated episodes experiment instead.
+- CLI:
+  - `aftershock aar <run_dir>` — generate (or `--show` an existing) AAR.
+  - `aftershock run --arm society --memory` — load lessons from `<out>/memory.json`
+    before the run, and afterwards generate the AAR and append its lessons.
+  - `aftershock episodes --n 5 --seed-base 100 [--out runs/episodes]` — N sequential
+    society runs on seeds base..base+N-1 with AAR+memory between runs (episode 1 runs
+    memoryless); writes per-episode run dirs + `episodes.json` + a markdown table of
+    the lives_saved / cost trajectory. This is the "does the society learn?" experiment.
+- Web: `GET /api/runs/{run_id}/aar` (404 when absent); `POST /api/live` accepts
+  optional `"aar": true` — on completion the server generates the AAR, appends lessons
+  to `<runs_root>/memory.json`, and the next live society run with `"memory": true`
+  uses them. WS emits `{"type": "aar", "report": ...}` after "done" when requested.
+- UI: an After-Action Report drawer on the Map tab (visible when the loaded run has an
+  AAR): headline + grade badge, lessons, key moments as clickable tick-jump chips.
+  Live tab: aar/memory toggles on the start form, "[aar] generating…/done" log lines.
+
 ## CLI
 
 ```
 aftershock run    --seed 42 --ticks 60 --arm scripted|solo|swarm|society [--out runs]
-                  [--quiet] [--timeout S]
+                  [--quiet] [--timeout S] [--memory]
 aftershock bench  [--manifest bench/default.yaml] [--arms ...] [--seeds ...] [--ticks N]
                   [--out DIR] [--fresh]
 aftershock serve  [--runs-dir runs] [--host 127.0.0.1] [--port 8788]

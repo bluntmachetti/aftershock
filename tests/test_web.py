@@ -15,14 +15,19 @@ Covers:
   - POST /api/live/inject: mid-run injection appears in a later tick's events
   - Second concurrent live POST -> 409
   - LLM arm keyless -> 503 with hint in detail
+  - GET /api/runs/{run_id}/aar: 404 when absent, 200 after fixture written; traversal rejected
+  - POST /api/live with aar=true + memory=true: WS delivers aar message, memory.json grows
+  - Second live run with memory=true: commander system prompt contains lessons block
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -567,3 +572,345 @@ def test_static_serves_index_html_when_dist_exists(tmp_path: Path) -> None:
         assert resp.status_code == 200
         data = resp.json()
         assert "hint" in data
+
+
+# ---------------------------------------------------------------------------
+# Helpers for AAR / society tests
+# ---------------------------------------------------------------------------
+
+
+def _make_aar_fixture() -> dict[str, Any]:
+    return {
+        "headline": "Adequate response with coordination gaps",
+        "grade": "B",
+        "what_worked": ["Ambulances dispatched promptly"],
+        "coordination_failures": ["Fire response delayed"],
+        "key_moments": [{"tick": 3, "description": "First mission resolved"}],
+        "lessons": ["Prioritise fire missions early", "Broadcast more at high panic"],
+        "usage": {
+            "prompt_tokens": 100, "completion_tokens": 50, "cost_usd": 0.001, "model": "qwen3-max"
+        },
+    }
+
+
+def _build_society_mock_response(model: str, system: str, user: str) -> str:  # noqa: ARG001
+    """Return a minimal valid JSON agent response for any observation."""
+    decisions: list[dict[str, Any]] = []
+    proposals: list[dict[str, Any]] = []
+    responses: list[dict[str, Any]] = []
+
+    # Detect role from system prompt
+    agent_role = "unknown"
+    for role in ("commander", "medical", "rescue", "fire", "infrastructure", "comms"):
+        if role in system.lower()[:300]:
+            agent_role = role
+            break
+
+    # Simple strategy: commander sets priority, others request resources
+    if agent_role == "commander":
+        # Try to set priority on any mission in the observation
+        for line in user.splitlines():
+            m = re.match(r"\s+(m\d+)\s+\S+\s+\S+\s+\d+\s+\d+\s+\S+\s+0\s", line)
+            if m:
+                decisions.append({
+                    "decision_type": "set_priority",
+                    "params": {"mission_id": m.group(1), "priority": 5},
+                    "rationale": "initial triage",
+                })
+                break  # one decision per tick is enough
+
+    # Extract and respond to any inbox proposals
+    in_inbox = False
+    for line in user.splitlines():
+        if "YOUR INBOX" in line:
+            in_inbox = True
+            continue
+        if in_inbox:
+            if line.strip() == "" or (line and not line.startswith(" ") and "(empty)" not in line):
+                break
+            prop_m = re.search(r"\[([^\]]+)\]", line)
+            if prop_m:
+                pid = prop_m.group(1)
+                if not any(r["proposal_id"] == pid for r in responses):
+                    responses.append({"proposal_id": pid, "accept": True, "note": "ok"})
+
+    return json.dumps({"decisions": decisions, "proposals": proposals, "responses": responses})
+
+
+def _make_aar_provider_response() -> str:
+    """Return a valid AAR JSON string for MockProvider."""
+    return json.dumps({
+        "headline": "Test run: adequate response",
+        "grade": "B",
+        "what_worked": ["Ambulances dispatched promptly"],
+        "coordination_failures": ["Fire response slow"],
+        "key_moments": [{"tick": 1, "description": "First mission spawned"}],
+        "lessons": ["Prioritise fire early", "Broadcast to reduce panic"],
+    })
+
+
+# ---------------------------------------------------------------------------
+# Tests: GET /api/runs/{run_id}/aar
+# ---------------------------------------------------------------------------
+
+
+def test_aar_endpoint_404_when_absent(seeded_runs_root: tuple[Path, str]) -> None:
+    """GET /api/runs/{run_id}/aar returns 404 when aar.json is not present."""
+    root, run_id = seeded_runs_root
+    app = create_app(root)
+    with TestClient(app) as client:
+        resp = client.get(f"/api/runs/{run_id}/aar")
+    assert resp.status_code == 404
+
+
+def test_aar_endpoint_200_after_fixture_written(seeded_runs_root: tuple[Path, str]) -> None:
+    """GET /api/runs/{run_id}/aar returns 200 with the report after aar.json is written."""
+    root, run_id = seeded_runs_root
+    aar_data = _make_aar_fixture()
+    (root / run_id / "aar.json").write_text(json.dumps(aar_data), encoding="utf-8")
+
+    app = create_app(root)
+    with TestClient(app) as client:
+        resp = client.get(f"/api/runs/{run_id}/aar")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["grade"] == "B"
+    assert body["headline"] == "Adequate response with coordination gaps"
+    assert len(body["lessons"]) == 2
+
+
+@pytest.mark.parametrize("bad_id", [
+    "../etc",
+    "..%2fetc",
+    "%2e%2e",
+    "/etc/passwd",
+    "a/b",
+    "a\\b",
+])
+def test_aar_traversal_rejected(runs_root: Path, bad_id: str) -> None:
+    """Path traversal on /api/runs/{run_id}/aar must be rejected with 404 or 422."""
+    app = create_app(runs_root)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        resp = client.get(f"/api/runs/{bad_id}/aar")
+    assert resp.status_code in (404, 422), (
+        f"Expected 404/422 for traversal {bad_id!r}, got {resp.status_code}"
+    )
+
+
+def test_aar_endpoint_rejects_invalid_grade(tmp_path: Path) -> None:
+    """GET /api/runs/{run_id}/aar must return 404 for aar.json with invalid grade."""
+    run_id = "hostile-run"
+    run_dir = tmp_path / run_id
+    run_dir.mkdir(parents=True)
+    (run_dir / "aar.json").write_text(
+        json.dumps({
+            "headline": "x",
+            "grade": "Z-NOT-A-GRADE",
+            "what_worked": "not-a-list",
+            "coordination_failures": None,
+            "key_moments": [],
+            "lessons": [],
+        }),
+        encoding="utf-8",
+    )
+    app = create_app(tmp_path)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        resp = client.get(f"/api/runs/{run_id}/aar")
+    assert resp.status_code == 404, f"Expected 404, got {resp.status_code}"
+
+
+def test_aar_endpoint_rejects_oversized_file(tmp_path: Path) -> None:
+    """GET /api/runs/{run_id}/aar must return 404 for aar.json exceeding the size cap."""
+    run_id = "big-run"
+    run_dir = tmp_path / run_id
+    run_dir.mkdir(parents=True)
+    big = {
+        "headline": "x" * 600_000,
+        "grade": "A",
+        "what_worked": [],
+        "coordination_failures": [],
+        "key_moments": [],
+        "lessons": [],
+    }
+    (run_dir / "aar.json").write_text(json.dumps(big), encoding="utf-8")
+    app = create_app(tmp_path)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        resp = client.get(f"/api/runs/{run_id}/aar")
+    assert resp.status_code == 404, f"Expected 404, got {resp.status_code}"
+
+
+# ---------------------------------------------------------------------------
+# Tests: live run with aar=true + memory=true (MockProvider injected)
+# ---------------------------------------------------------------------------
+
+
+def test_live_aar_and_memory_end_to_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Live society run with aar=true + memory=true:
+    - WS delivers {"type": "aar", "report": ...} after {"type": "done"}
+    - memory.json is created and contains lessons
+    Uses MockProvider injected via monkeypatching QwenProvider.
+    """
+    from aftershock.llm.provider import MockProvider
+
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+
+    # Build a script: first N calls are agent responses, last call is the AAR
+    # The society arm has 6 agents × ticks calls, then 1 AAR call.
+    # Use a callable so it never runs out.
+    aar_call_count = 0
+    total_agent_calls = [0]
+
+    def _provider_script(model: str, system: str, user: str) -> str:
+        nonlocal aar_call_count
+        # The AAR model is qwen3-max; agent calls use qwen3.5-flash / qwen3.5-plus
+        if model == "qwen3-max" or "after-action" in system.lower():
+            aar_call_count += 1
+            return _make_aar_provider_response()
+        total_agent_calls[0] += 1
+        return _build_society_mock_response(model, system, user)
+
+    mock_provider_instance = MockProvider(script=_provider_script)
+
+    # Patch QwenProvider in the web module so _run_live uses our MockProvider
+    monkeypatch.setattr(
+        "aftershock.llm.provider.QwenProvider",
+        lambda **kwargs: mock_provider_instance,  # noqa: ARG005
+    )
+    # Satisfy the API-key check in start_live (the key is never actually used
+    # since QwenProvider is monkeypatched above)
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "mock-key-for-testing")
+
+    app = create_app(runs_root)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/live",
+            json={"arm": "society", "seed": 7, "ticks": 5, "aar": True, "memory": True},
+        )
+        assert resp.status_code == 200, resp.text
+        live_id = resp.json()["live_id"]
+        assert live_id
+
+        # Wait for run to complete
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline:
+            import aftershock.web as web_mod
+            state = web_mod._live
+            if state is None or not state.running:
+                break
+            time.sleep(0.1)
+
+        # Collect WS messages
+        tick_messages: list[dict] = []
+        done_message: dict | None = None
+        aar_message: dict | None = None
+
+        with client.websocket_connect("/ws/live") as ws:
+            collect_deadline = time.monotonic() + 15.0
+            while time.monotonic() < collect_deadline:
+                try:
+                    msg = ws.receive_json()
+                    if msg.get("type") == "tick":
+                        tick_messages.append(msg)
+                    elif msg.get("type") == "done":
+                        done_message = msg
+                    elif msg.get("type") == "aar":
+                        aar_message = msg
+                        break
+                    elif msg.get("type") == "ping":
+                        pass
+                except Exception:
+                    break
+
+    # Validate WS messages
+    assert done_message is not None, "expected a done message on WS"
+    assert aar_message is not None, "expected an aar message on WS after done"
+    assert "report" in aar_message, f"aar message missing 'report': {aar_message}"
+    report = aar_message["report"]
+    assert report["grade"] in ("A", "B", "C", "D", "F")
+    assert isinstance(report.get("lessons"), list)
+
+    # Validate memory.json was created and contains lessons
+    memory_path = runs_root / "memory.json"
+    assert memory_path.exists(), "memory.json should have been created"
+    entries = json.loads(memory_path.read_text(encoding="utf-8"))
+    assert isinstance(entries, list)
+    assert len(entries) >= 1
+    first_entry = entries[0]
+    assert "run_id" in first_entry
+    assert isinstance(first_entry.get("lessons"), list)
+    assert len(first_entry["lessons"]) >= 1
+
+
+def test_live_memory_loads_lessons_into_commander(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Second live run with memory=True: the commander's system prompt contains
+    the LESSONS FROM PREVIOUS DISASTERS block from memory.json.
+
+    Verified via the MockProvider's recorded calls.
+    """
+    from aftershock.llm.aar import append_lessons
+    from aftershock.llm.provider import MockProvider
+
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+
+    # Pre-seed memory.json with known lessons
+    memory_path = runs_root / "memory.json"
+    known_lessons = ["Prioritise fire missions early", "Always broadcast at panic > 0.4"]
+    append_lessons(memory_path, "prior-run-001", known_lessons)
+
+    recorded_calls: list[tuple[str, str, str]] = []
+
+    def _tracking_script(model: str, system: str, user: str) -> str:
+        recorded_calls.append((model, system, user))
+        if model == "qwen3-max" or "after-action" in system.lower():
+            return _make_aar_provider_response()
+        return _build_society_mock_response(model, system, user)
+
+    mock_provider_instance = MockProvider(script=_tracking_script)
+
+    monkeypatch.setattr(
+        "aftershock.llm.provider.QwenProvider",
+        lambda **kwargs: mock_provider_instance,  # noqa: ARG005
+    )
+    # Satisfy the API-key check in start_live
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "mock-key-for-testing")
+
+    app = create_app(runs_root)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/live",
+            json={"arm": "society", "seed": 13, "ticks": 5, "aar": False, "memory": True},
+        )
+        assert resp.status_code == 200, resp.text
+
+        # Wait for run to complete
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline:
+            import aftershock.web as web_mod
+            state = web_mod._live
+            if state is None or not state.running:
+                break
+            time.sleep(0.1)
+
+    # Inspect recorded calls: the commander's system prompt must contain the lessons block
+    commander_calls = [
+        (model, system, user)
+        for (model, system, user) in recorded_calls
+        if "commander" in system.lower()[:500]
+    ]
+    assert commander_calls, "Expected at least one call for the commander agent"
+
+    # Every commander call should have the lessons injected
+    lessons_marker = "LESSONS FROM PREVIOUS DISASTERS"
+    for _model, system, _user in commander_calls:
+        assert lessons_marker in system, (
+            f"Commander system prompt missing lessons block.\n"
+            f"System prompt (first 500 chars): {system[:500]!r}"
+        )
+        assert "Prioritise fire missions early" in system
+        assert "Always broadcast at panic > 0.4" in system

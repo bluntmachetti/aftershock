@@ -1,12 +1,14 @@
-"""Aftershock CLI: run | verify | replay | bench | smoke-llm.
+"""Aftershock CLI: run | verify | replay | bench | smoke-llm | aar | episodes.
 
 aftershock run    --seed 42 --ticks 60 --arm scripted|solo|swarm|society [--out runs]
-                  [--quiet] [--timeout S]
+                  [--quiet] [--timeout S] [--memory]
 aftershock bench  [--manifest bench/default.yaml] [--arms a,b] [--seeds 1,2] [--ticks N]
                   [--out DIR] [--fresh]
 aftershock verify --seed 42 --ticks 60
 aftershock replay <run_dir>
 aftershock smoke-llm [--model qwen3.5-flash]
+aftershock aar <run_dir> [--show]
+aftershock episodes --n 5 --seed-base 100 [--ticks 60] [--out runs/episodes]
 """
 
 from __future__ import annotations
@@ -61,6 +63,15 @@ def cmd_run(args: argparse.Namespace) -> int:
     arm: str = args.arm
     out_dir = Path(args.out)
     quiet: bool = args.quiet
+    memory: bool = getattr(args, "memory", False)
+
+    # --memory is only meaningful for society arm; require provider
+    if memory and arm != "society":
+        print(
+            f"error: --memory is only supported for --arm society (got {arm!r})",
+            file=sys.stderr,
+        )
+        return 1
 
     # Determine default timeout based on arm
     _ARM_DEFAULT_TIMEOUT = {"scripted": 5.0, "solo": 90.0, "swarm": 45.0, "society": 45.0}
@@ -71,8 +82,15 @@ def cmd_run(args: argparse.Namespace) -> int:
     # Key check before any work (exits 2 with hint if key missing for LLM arms)
     provider = _provider_for_arm(arm, timeout_s)
 
+    # Load lessons from memory when requested
+    lessons: list[str] | None = None
+    if memory and arm == "society":
+        from aftershock.llm.aar import load_lessons
+        memory_path = out_dir / "memory.json"
+        lessons = load_lessons(memory_path) or None  # keep None when empty
+
     run_id = _run_id(seed, arm)
-    setup = build_arm(arm, seed, provider)
+    setup = build_arm(arm, seed, provider, lessons=lessons)
 
     manifest: dict[str, Any] = {
         "run_id": run_id,
@@ -108,6 +126,20 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"  Panic:        {s.get('panic', 0.0):.3f}")
         print(f"  Cost USD:     {summary.cost.get('cost_usd', 0.0):.4f}")
         print(f"  Run dir:      {summary.run_dir}")
+
+    # Memory loop: generate AAR and append lessons after a society run with --memory
+    if memory and arm == "society":
+        from aftershock.llm.aar import append_lessons, generate_aar
+        if not quiet:
+            print("  Generating AAR…")
+        run_dir = Path(summary.run_dir)
+        aar = asyncio.run(generate_aar(run_dir, provider))
+        if not quiet:
+            print(f"  AAR grade: {aar.get('grade', '?')}  — {aar.get('headline', '')}")
+        memory_path = out_dir / "memory.json"
+        append_lessons(memory_path, run_id, aar.get("lessons", []))
+        if not quiet:
+            print(f"  Lessons appended to {memory_path}")
 
     return 0
 
@@ -340,6 +372,155 @@ def cmd_smoke_llm(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_aar(args: argparse.Namespace) -> int:
+    """Generate (or display) an after-action report for a completed run."""
+    run_dir = Path(args.run_dir)
+    if not run_dir.exists():
+        print(f"error: run directory not found: {run_dir}", file=sys.stderr)
+        return 1
+
+    from aftershock.llm.aar import generate_aar
+
+    aar_path = run_dir / "aar.json"
+
+    if getattr(args, "show", False):
+        # --show: display existing AAR without regenerating
+        if not aar_path.exists():
+            print(f"error: no aar.json in {run_dir}", file=sys.stderr)
+            return 1
+        aar = json.loads(aar_path.read_text(encoding="utf-8"))
+        print(json.dumps(aar, indent=2))
+        return 0
+
+    # Generate: require a provider
+    api_key = os.environ.get("DASHSCOPE_API_KEY", "")
+    if not api_key:
+        print(_KEY_HINT)
+        return 2
+
+    from aftershock.llm.provider import QwenProvider
+
+    provider = QwenProvider(api_key=api_key)
+    aar = asyncio.run(generate_aar(run_dir, provider))
+    print(json.dumps(aar, indent=2))
+    return 0
+
+
+def cmd_episodes(args: argparse.Namespace) -> int:
+    """Run N sequential society runs with AAR+memory between them.
+
+    Episode 1 runs memoryless; each subsequent episode loads lessons from the
+    previous run. Writes per-episode run dirs + episodes.json + a markdown table.
+    """
+    n: int = args.n
+    seed_base: int = args.seed_base
+    ticks: int = args.ticks
+    out_dir = Path(args.out)
+
+    # Require a provider for society runs
+    api_key = os.environ.get("DASHSCOPE_API_KEY", "")
+    if not api_key:
+        print(_KEY_HINT)
+        return 2
+
+    from aftershock.llm.aar import append_lessons, generate_aar, load_lessons
+    from aftershock.llm.provider import QwenProvider
+
+    provider = QwenProvider(api_key=api_key)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    memory_path = out_dir / "memory.json"
+
+    episode_results: list[dict[str, Any]] = []
+
+    for ep in range(n):
+        seed = seed_base + ep
+        lessons: list[str] | None = None
+        if ep > 0:
+            loaded = load_lessons(memory_path)
+            lessons = loaded if loaded else None
+
+        run_id = f"ep{ep + 1}-seed{seed}-society"
+        setup = build_arm("society", seed, provider, lessons=lessons)
+
+        manifest: dict[str, Any] = {
+            "run_id": run_id,
+            "seed": seed,
+            "ticks": ticks,
+            "arm": "society",
+            "episode": ep + 1,
+        }
+        recorder = Recorder(out_dir, run_id, manifest)
+        engine = Engine(
+            world=setup.world,
+            society=setup.society,
+            agents=setup.agents,
+            registry=setup.registry,
+            roles=setup.roles,
+            resolver=setup.resolver,
+            recorder=recorder,
+            seed=seed,
+            max_ticks=ticks,
+            agent_timeout_s=45.0,
+        )
+
+        summary = asyncio.run(engine.run())
+        run_dir = Path(summary.run_dir)
+
+        # Generate AAR and append lessons after every episode
+        aar = asyncio.run(generate_aar(run_dir, provider))
+        append_lessons(memory_path, run_id, aar.get("lessons", []))
+
+        s = summary.final_scores
+        episode_results.append({
+            "episode": ep + 1,
+            "seed": seed,
+            "run_id": run_id,
+            "lives_saved": s.get("lives_saved", 0),
+            "lives_lost": s.get("lives_lost", 0),
+            "missions_resolved": s.get("missions_resolved", 0),
+            "missions_failed": s.get("missions_failed", 0),
+            "cost_usd": summary.cost.get("cost_usd", 0.0),
+            "aar_grade": aar.get("grade", "?"),
+        })
+
+        print(
+            f"Episode {ep + 1}/{n}  seed={seed}  "
+            f"lives_saved={int(s.get('lives_saved', 0))}  "
+            f"grade={aar.get('grade', '?')}"
+        )
+
+    # Write episodes.json
+    episodes_json_path = out_dir / "episodes.json"
+    episodes_json_path.write_text(
+        json.dumps(episode_results, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    # Write markdown trajectory table
+    md_lines = [
+        "# Episodes Trajectory",
+        "",
+        "| Episode | Seed | Lives Saved | Lives Lost | Missions Res | Missions Fail"
+        " | Cost USD | AAR Grade |",
+        "|---------|------|-------------|------------|--------------|--------------|"
+        "----------|-----------|",
+    ]
+    for ep_r in episode_results:
+        md_lines.append(
+            f"| {ep_r['episode']} | {ep_r['seed']} | {int(ep_r['lives_saved'])} |"
+            f" {int(ep_r['lives_lost'])} | {int(ep_r['missions_resolved'])} |"
+            f" {int(ep_r['missions_failed'])} | {ep_r['cost_usd']:.4f} | {ep_r['aar_grade']} |"
+        )
+    md_text = "\n".join(md_lines) + "\n"
+
+    episodes_md_path = out_dir / "episodes.md"
+    episodes_md_path.write_text(md_text, encoding="utf-8")
+
+    print(md_text)
+    print(f"Written: {episodes_json_path}  {episodes_md_path}")
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="aftershock")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -353,6 +534,14 @@ def main() -> None:
     p_run.add_argument("--quiet", action="store_true")
     p_run.add_argument("--timeout", type=float, default=None,
                        help="Agent timeout in seconds (default: arm-specific default)")
+    p_run.add_argument(
+        "--memory",
+        action="store_true",
+        help=(
+            "Load lessons from <out>/memory.json before the run (society arm only) "
+            "and generate AAR + append lessons afterwards."
+        ),
+    )
 
     # bench
     p_bench = sub.add_parser("bench", help="Run the benchmark suite")
@@ -415,6 +604,37 @@ def main() -> None:
         help="Directory containing run directories (default: runs)",
     )
 
+    # aar
+    p_aar = sub.add_parser(
+        "aar",
+        help="Generate (or display) an after-action report for a completed run",
+    )
+    p_aar.add_argument("run_dir", help="Path to the run directory")
+    p_aar.add_argument(
+        "--show",
+        action="store_true",
+        help="Display an existing aar.json without regenerating (no API key required)",
+    )
+
+    # episodes
+    p_episodes = sub.add_parser(
+        "episodes",
+        help="Run N sequential society runs with AAR+memory between runs",
+    )
+    p_episodes.add_argument("--n", type=int, required=True, help="Number of episodes")
+    p_episodes.add_argument(
+        "--seed-base", type=int, required=True,
+        help="Starting seed; episode k uses seed base+k-1",
+    )
+    p_episodes.add_argument(
+        "--ticks", type=int, default=60,
+        help="Ticks per episode (default: 60)",
+    )
+    p_episodes.add_argument(
+        "--out", default="runs/episodes",
+        help="Output directory for episode run dirs and summary files (default: runs/episodes)",
+    )
+
     args = parser.parse_args()
 
     if args.command == "run":
@@ -431,3 +651,7 @@ def main() -> None:
         sys.exit(cmd_serve(args))
     elif args.command == "mcp":
         sys.exit(cmd_mcp(args))
+    elif args.command == "aar":
+        sys.exit(cmd_aar(args))
+    elif args.command == "episodes":
+        sys.exit(cmd_episodes(args))

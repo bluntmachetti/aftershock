@@ -32,6 +32,10 @@ export function LiveTab({ onTickReceived }: Props) {
   const [ticks, setTicks] = useState(60)
   const [startError, setStartError] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
+  const [aarEnabled, setAarEnabled] = useState(false)
+  const [memoryEnabled, setMemoryEnabled] = useState(false)
+  // Track whether the *current* live run was started with memory on
+  const [memoryActive, setMemoryActive] = useState(false)
 
   const [injectKind, setInjectKind] = useState('fire')
   const [injectDistrict, setInjectDistrict] = useState('market')
@@ -108,6 +112,14 @@ export function LiveTab({ onTickReceived }: Props) {
           onTickRef.current(msg.record, msg.world ?? null)
         } else if (msg.type === 'done') {
           appendLogRef.current('[done] run finished')
+        } else if (msg.type === 'aar') {
+          if (msg.error) {
+            appendLogRef.current(`[aar] failed: ${msg.error}`)
+          } else if (msg.report) {
+            appendLogRef.current(`[aar] ${msg.report.headline}`)
+          } else {
+            appendLogRef.current('[aar] generating…')
+          }
         }
       } catch {
         appendLogRef.current('[ws] parse error')
@@ -138,8 +150,17 @@ export function LiveTab({ onTickReceived }: Props) {
     setStarting(true)
     setLog([])
     try {
-      await api.startLive(arm, seed, ticks)
-      appendLog(`[start] arm=${arm} seed=${seed} ticks=${ticks}`)
+      const opts = {
+        ...(aarEnabled ? { aar: true } : {}),
+        ...(memoryEnabled ? { memory: true } : {}),
+      }
+      await api.startLive(arm, seed, ticks, opts)
+      setMemoryActive(memoryEnabled)
+      appendLog(
+        `[start] arm=${arm} seed=${seed} ticks=${ticks}` +
+        (aarEnabled ? ' aar=on' : '') +
+        (memoryEnabled ? ' memory=on' : ''),
+      )
     } catch (e) {
       setStartError(friendlyError(e as Error))
     } finally {
@@ -176,6 +197,15 @@ export function LiveTab({ onTickReceived }: Props) {
               ? `RUNNING — ${status?.arm} / seed ${status?.seed} / T${status?.tick}`
               : 'IDLE'}
           </span>
+          {/* MEMORY ON indicator — shown when current run was started with memory */}
+          {isRunning && memoryActive && (
+            <span
+              data-testid="memory-on-indicator"
+              className="px-1.5 py-0.5 rounded text-[8px] font-mono uppercase tracking-widest border border-cyan-700 bg-cyan-950/40 text-cyan-400"
+            >
+              MEMORY ON
+            </span>
+          )}
         </div>
         {statusError && (
           <div className="text-[10px] font-mono text-red-400">{statusError}</div>
@@ -243,6 +273,30 @@ export function LiveTab({ onTickReceived }: Props) {
               disabled={isRunning || starting}
               className="flex-1 bg-[#1a2235] border border-[#243047] rounded px-2 py-1 text-[11px] font-mono text-slate-200 disabled:opacity-40"
             />
+          </div>
+
+          {/* AAR / Memory toggles */}
+          <div className="flex gap-2">
+            {[
+              { id: 'aar', label: 'AAR', value: aarEnabled, set: setAarEnabled },
+              { id: 'memory', label: 'MEMORY', value: memoryEnabled, set: setMemoryEnabled },
+            ].map(({ id, label, value, set }) => (
+              <button
+                key={id}
+                data-testid={`toggle-${id}`}
+                onClick={() => set((v) => !v)}
+                disabled={isRunning || starting}
+                aria-pressed={value}
+                className="flex-1 py-0.5 rounded text-[9px] font-mono uppercase tracking-widest transition-all border disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{
+                  background: value ? 'rgba(6,182,212,0.12)' : 'transparent',
+                  borderColor: value ? '#0891b2' : '#243047',
+                  color: value ? '#22d3ee' : '#475569',
+                }}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
           <button

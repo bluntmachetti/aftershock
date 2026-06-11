@@ -30,7 +30,7 @@ from aftershock.town.heuristics import (
     MedicalScripted,
     RescueScripted,
 )
-from aftershock.town.prompts import DECISION_DOCS, DECISION_DOCS_DIRECT, PROPOSAL_DOCS
+from aftershock.town.prompts import DECISION_DOCS_DIRECT, build_llm_agents
 from aftershock.town.society import TownResolver, TownSociety
 from aftershock.town.state import TownState, new_town
 
@@ -60,7 +60,12 @@ class ArmSetup:
 # ---------------------------------------------------------------------------
 
 
-def build_arm(arm: str, seed: int, provider: Any | None) -> ArmSetup:
+def build_arm(
+    arm: str,
+    seed: int,
+    provider: Any | None,
+    lessons: list[str] | None = None,
+) -> ArmSetup:
     """Build all components for one (arm, seed) benchmark cell.
 
     Args:
@@ -68,6 +73,11 @@ def build_arm(arm: str, seed: int, provider: Any | None) -> ArmSetup:
         seed:     the scenario seed passed to new_town and Engine
         provider: a Provider instance for LLM arms; None for scripted.
                   Passing None for an LLM arm raises ValueError.
+        lessons:  optional lesson strings from a prior AAR memory loop.
+                  Only accepted for the society arm; all other arms raise
+                  ValueError to enforce the bench fairness invariant (benchmark
+                  arms must run memory-free so comparisons measure architecture,
+                  not accumulated hints).
 
     Returns:
         ArmSetup with fully wired world, society, agents, registry, roles,
@@ -75,6 +85,12 @@ def build_arm(arm: str, seed: int, provider: Any | None) -> ArmSetup:
     """
     if arm not in ARMS:
         raise ValueError(f"unknown arm {arm!r}; valid: {ARMS}")
+
+    if lessons is not None and arm != "society":
+        raise ValueError(
+            f"lessons are only accepted for arm 'society'; got arm={arm!r}. "
+            "The bench fairness invariant requires all other arms to run memory-free."
+        )
 
     if arm != "scripted" and provider is None:
         raise ValueError(
@@ -88,7 +104,7 @@ def build_arm(arm: str, seed: int, provider: Any | None) -> ArmSetup:
     if arm == "scripted":
         return _build_scripted(world, registry, seed)
     if arm == "society":
-        return _build_society(world, registry, seed, provider)
+        return _build_society(world, registry, seed, provider, lessons=lessons)
     if arm == "swarm":
         return _build_swarm(world, registry, seed, provider)
     if arm == "solo":
@@ -139,24 +155,13 @@ def _build_society(
     registry: DecisionRegistry,
     seed: int,  # noqa: ARG001
     provider: Any,
+    lessons: list[str] | None = None,
 ) -> ArmSetup:
     roles = load_roles(_TOWN_DIR / "roles")
     _six = ("commander", "comms", "fire", "infrastructure", "medical", "rescue")
     roster = {aid: aid for aid in _six}
     society = TownSociety(roster=roster)
-    agents: dict[str, Agent] = {}
-    for agent_id, role in roles.items():
-        contract = decision_contract(
-            allowed=role.allowed_decisions,
-            decision_docs=DECISION_DOCS,
-            proposal_docs=PROPOSAL_DOCS,
-        )
-        agents[agent_id] = LLMAgent(
-            agent_id=agent_id,
-            role=role,
-            provider=provider,
-            contract=contract,
-        )
+    agents = build_llm_agents(roles, provider, lessons=lessons)
     return ArmSetup(
         world=world,
         society=society,

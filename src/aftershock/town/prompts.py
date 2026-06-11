@@ -116,15 +116,25 @@ PROPOSAL_DOCS: dict[str, str] = {
 _TOWN_AGENT_IDS = ("commander", "comms", "fire", "infrastructure", "medical", "rescue")
 
 
-def build_llm_agents(roles: dict[str, RoleSpec], provider: Provider) -> dict[str, Agent]:
+def build_llm_agents(
+    roles: dict[str, RoleSpec],
+    provider: Provider,
+    lessons: list[str] | None = None,
+) -> dict[str, Agent]:
     """Build one LLMAgent per town role, sharing the same provider instance.
 
     The contract is built once per role from DECISION_DOCS/PROPOSAL_DOCS filtered
     to the role's allowed_decisions.
 
+    When lessons are provided, the commander's system_prompt gains a final block:
+    "LESSONS FROM PREVIOUS DISASTERS (apply where relevant):" + numbered lessons.
+    Other roles are unchanged.
+
     Args:
         roles: mapping loaded by load_roles() — must contain all six town roles.
         provider: a Provider instance (QwenProvider or MockProvider).
+        lessons: optional list of lesson strings from a previous AAR memory loop.
+                 Applied to the commander only; other roles are unaffected.
 
     Returns:
         dict mapping agent_id -> LLMAgent for all six town agents.
@@ -132,6 +142,18 @@ def build_llm_agents(roles: dict[str, RoleSpec], provider: Provider) -> dict[str
     agents: dict[str, Agent] = {}
     for agent_id in _TOWN_AGENT_IDS:
         role = roles[agent_id]
+
+        # Inject lessons into the commander's system prompt only
+        if lessons and agent_id == "commander":
+            numbered = "\n".join(f"{i + 1}. {lesson}" for i, lesson in enumerate(lessons))
+            lessons_block = (
+                "\n\nLESSONS FROM PREVIOUS DISASTERS (apply where relevant):\n" + numbered
+            )
+            # RoleSpec is frozen; create a copy with the augmented system_prompt
+            role = role.model_copy(
+                update={"system_prompt": role.system_prompt + lessons_block}
+            )
+
         contract = decision_contract(
             allowed=role.allowed_decisions,
             decision_docs=DECISION_DOCS,

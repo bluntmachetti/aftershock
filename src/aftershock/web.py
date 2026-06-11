@@ -60,6 +60,8 @@ class LiveRunRequest(BaseModel):
     arm: str
     seed: int
     ticks: int = 30
+    aar: bool = False
+    memory: bool = False
 
 
 class InjectRequest(BaseModel):
@@ -84,6 +86,11 @@ class _LiveState:
     buffer: list[dict[str, Any]] = field(default_factory=list)
     # active WebSocket connections
     connections: list[WebSocket] = field(default_factory=list)
+    # AAR / memory flags from the start request
+    aar: bool = False
+    memory: bool = False
+    # AAR message stored after generation so late WS connects can replay it
+    aar_msg: dict[str, Any] | None = None
 
 
 _live: _LiveState | None = None
@@ -175,7 +182,14 @@ async def _broadcast(state: _LiveState, msg: dict[str, Any]) -> None:
             state.connections.remove(ws)
 
 
-async def _run_live(arm: str, seed: int, ticks: int, runs_root: Path) -> None:
+async def _run_live(
+    arm: str,
+    seed: int,
+    ticks: int,
+    runs_root: Path,
+    do_aar: bool = False,
+    do_memory: bool = False,
+) -> None:
     """Run one live arm in a background task, streaming tick records to WS clients."""
     global _live
     state = _live
@@ -189,7 +203,16 @@ async def _run_live(arm: str, seed: int, ticks: int, runs_root: Path) -> None:
             from aftershock.llm.provider import QwenProvider
 
             provider = QwenProvider()
-        setup = build_arm(arm, seed, provider)
+
+        # Load lessons for society arm when memory=True
+        lessons: list[str] | None = None
+        if do_memory and arm == "society":
+            from aftershock.llm.aar import load_lessons
+
+            memory_path = runs_root / "memory.json"
+            lessons = load_lessons(memory_path) or None
+
+        setup = build_arm(arm, seed, provider, lessons=lessons)
     except Exception:  # noqa: BLE001
         async with _live_lock:
             if _live is state:
@@ -246,6 +269,27 @@ async def _run_live(arm: str, seed: int, ticks: int, runs_root: Path) -> None:
         state.summary = summary_dict
         done_msg: dict[str, Any] = {"type": "done", "summary": summary_dict}
         await _broadcast(state, done_msg)
+
+        # AAR generation: only when requested and a provider is available
+        if do_aar and provider is not None:
+            run_dir_path = recorder.run_dir
+            aar_msg: dict[str, Any]
+            try:
+                from aftershock.llm.aar import append_lessons, generate_aar
+
+                report = await generate_aar(run_dir_path, provider)
+                aar_msg = {"type": "aar", "report": report}
+                # Append lessons to memory.json
+                lessons_from_run: list[str] = report.get("lessons", [])
+                if lessons_from_run:
+                    memory_path = runs_root / "memory.json"
+                    append_lessons(memory_path, run_id, lessons_from_run)
+            except Exception as aar_exc:  # noqa: BLE001
+                logger.warning("AAR generation failed", exc_info=aar_exc)
+                aar_msg = {"type": "aar", "error": str(aar_exc)}
+            state.aar_msg = aar_msg
+            await _broadcast(state, aar_msg)
+
     except Exception as exc:  # noqa: BLE001
         logger.error("live run failed", exc_info=exc)
         with contextlib.suppress(Exception):
@@ -337,6 +381,30 @@ def create_app(
             "n_ticks": len(ticks),
             "has_world": worlds is not None,
         })
+
+    # ------------------------------------------------------------------
+    # GET /api/runs/{run_id}/aar
+    # ------------------------------------------------------------------
+
+    @app.get("/api/runs/{run_id}/aar")
+    async def run_aar(run_id: str) -> JSONResponse:
+        from aftershock.llm.aar import AAR_SCHEMA
+
+        _AAR_MAX_BYTES = 512 * 1024  # 512 KB cap to prevent DoS amplification
+
+        run_dir = _validate_run_id(run_id, runs_root)
+        aar_path = run_dir / "aar.json"
+        if not aar_path.exists():
+            raise HTTPException(status_code=404, detail="aar not found")
+        try:
+            raw_bytes = aar_path.read_bytes()
+            if len(raw_bytes) > _AAR_MAX_BYTES:
+                raise ValueError("aar.json exceeds size cap")
+            data = json.loads(raw_bytes.decode("utf-8"))
+            report = AAR_SCHEMA.model_validate(data)
+        except Exception:  # noqa: BLE001
+            raise HTTPException(status_code=404, detail="aar not found") from None
+        return JSONResponse(report.model_dump())
 
     # ------------------------------------------------------------------
     # GET /api/runs/{run_id}/ticks
@@ -454,9 +522,24 @@ def create_app(
         live_id = str(uuid.uuid4())
 
         async with _live_lock:
-            _live = _LiveState(live_id=live_id, arm=req.arm, seed=req.seed)
+            _live = _LiveState(
+                live_id=live_id,
+                arm=req.arm,
+                seed=req.seed,
+                aar=req.aar,
+                memory=req.memory,
+            )
 
-        task = asyncio.create_task(_run_live(req.arm, req.seed, req.ticks, runs_root))
+        task = asyncio.create_task(
+            _run_live(
+                req.arm,
+                req.seed,
+                req.ticks,
+                runs_root,
+                do_aar=req.aar,
+                do_memory=req.memory,
+            )
+        )
         _live._task = task  # type: ignore[attr-defined]  # retain strong ref to prevent GC
 
         return JSONResponse({"live_id": live_id})
@@ -498,7 +581,7 @@ def create_app(
         state = _live
 
         if state is not None:
-            # If already done before we even start, replay buffer + done then close
+            # If already done before we even start, replay buffer + done + aar then close
             if not state.running:
                 snapshot = list(state.buffer)
                 for msg in snapshot:
@@ -510,6 +593,9 @@ def create_app(
                 if state.summary is not None:
                     with contextlib.suppress(Exception):
                         await websocket.send_json({"type": "done", "summary": state.summary})
+                if state.aar_msg is not None:
+                    with contextlib.suppress(Exception):
+                        await websocket.send_json(state.aar_msg)
                 await websocket.close()
                 return
 

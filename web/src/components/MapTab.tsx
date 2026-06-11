@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import type { TimelineState, RunSummary } from '../types'
+import type { TimelineState, RunSummary, AarReport } from '../types'
 import type { TimelineAction } from '../lib/timeline'
 import {
   selectCurrentWorld,
@@ -15,6 +15,7 @@ import { NegotiationFeed } from './NegotiationFeed'
 import { AgentInspector } from './AgentInspector'
 import { Scrubber } from './Scrubber'
 import { RunPicker } from './RunPicker'
+import { AarDrawer } from './AarDrawer'
 
 interface Props {
   timeline: TimelineState
@@ -35,6 +36,7 @@ export function MapTab({
 }: Props) {
   const [selectedMission, setSelectedMission] = useState<string | null>(null)
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
+  const [aar, setAar] = useState<AarReport | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const world = selectCurrentWorld(timeline)
@@ -58,6 +60,29 @@ export function MapTab({
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
   }, [timeline.playing, timeline.speed, timeline.cursor, timeline.ticks.length, dispatch])
+
+  // Clear AAR when run changes
+  useEffect(() => {
+    setAar(null)
+  }, [timeline.runId])
+
+  // Fetch AAR whenever a run finishes loading (loading goes false and we have a runId)
+  useEffect(() => {
+    if (!timeline.runId || timeline.loading) return
+    let cancelled = false
+    api.aar(timeline.runId)
+      .then((report) => { if (!cancelled) setAar(report) })
+      .catch(() => { /* 404 = no AAR — stay null */ })
+    return () => { cancelled = true }
+  }, [timeline.runId, timeline.loading])
+
+  // Jump scrubber to the tick index whose tick record matches the given tick number
+  function handleJumpToTick(tickNumber: number) {
+    const idx = timeline.ticks.findIndex((t) => t.tick === tickNumber)
+    if (idx !== -1) {
+      dispatch({ type: 'SET_CURSOR', cursor: idx })
+    }
+  }
 
   // Fetch run details when runs list lacks has_world
   async function handleRunDetails(run: RunSummary) {
@@ -159,6 +184,11 @@ export function MapTab({
 
       {/* Scrubber */}
       <Scrubber timeline={timeline} dispatch={dispatch} onLoadMore={onLoadMore} />
+
+      {/* AAR Drawer — visible only when the loaded run has an AAR */}
+      {aar && (
+        <AarDrawer report={aar} onJumpToTick={handleJumpToTick} />
+      )}
     </div>
   )
 }

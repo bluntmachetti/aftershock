@@ -158,11 +158,27 @@ export interface LiveStatus {
   seed: number
 }
 
+export interface AarKeyMoment {
+  tick: number
+  description: string
+}
+
+export interface AarReport {
+  headline: string
+  grade: 'A' | 'B' | 'C' | 'D' | 'F'
+  what_worked: string[]
+  coordination_failures: string[]
+  key_moments: AarKeyMoment[]
+  lessons: string[]
+}
+
 export interface LiveWsMessage {
-  type: 'tick' | 'done'
+  type: 'tick' | 'done' | 'aar'
   record?: TickRecord
   world?: WorldState
   summary?: RunSummary
+  report?: AarReport
+  error?: string
 }
 
 // ---- UI state ----
