@@ -1,5 +1,13 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import type { TimelineState, RunSummary, AarReport, ConformanceReport } from '../types'
+import type {
+  TimelineState,
+  RunSummary,
+  AarReport,
+  ConformanceReport,
+  ScenarioManifestBlock,
+  ScenarioPack,
+  ScenarioReferenceMission,
+} from '../types'
 import type { TimelineAction } from '../lib/timeline'
 import {
   selectCurrentWorld,
@@ -10,7 +18,15 @@ import {
 } from '../lib/timeline'
 import { usePlaybackClock } from '../lib/usePlaybackClock'
 import { api } from '../lib/api'
+import {
+  mapTimelineIndexToMissionId,
+  timelineIndexForMissionId,
+  agentLatencyMinutes,
+  buildFirstArrivalMap,
+} from '../lib/scenario'
+import { ARM_COLORS } from '../lib/palette'
 import { TownMap } from './TownMap'
+import { RealityStrip } from './RealityStrip'
 import { PanicGauge } from './PanicGauge'
 import { ResourcePoolSidebar } from './ResourcePoolSidebar'
 import { NegotiationFeed } from './NegotiationFeed'
@@ -42,6 +58,19 @@ export function MapTab({
   const [aar, setAar] = useState<AarReport | null>(null)
   const [conformance, setConformance] = useState<ConformanceReport | null>(null)
 
+  // Scenario reality data (task #4). `scenarioBlock` carries the manifest's
+  // reference_aggregates / caveat_line / tick_minutes (for the RealityStrip
+  // footer); `scenarioPack` carries reference.missions (per-mission baseline)
+  // for the kept popover lines. Both stay null for a synthetic run, so the
+  // RealityStrip renders nothing and TownMap gets no scenario props — behavior
+  // unchanged with no scenario.
+  const [scenarioBlock, setScenarioBlock] = useState<ScenarioManifestBlock | null>(null)
+  const [scenarioPack, setScenarioPack] = useState<ScenarioPack | null>(null)
+
+  // Whether the active run carries a scenario (from the runs-list compact row).
+  const activeScenarioId =
+    runs.find((r) => r.run_id === timeline.runId)?.scenario?.id ?? null
+
   const world = selectCurrentWorld(timeline)
   const tick = selectCurrentTick(timeline)
 
@@ -65,6 +94,27 @@ export function MapTab({
     setAar(null)
     setConformance(null)
   }, [timeline.runId])
+
+  // Fetch the scenario reality data when the active run carries a scenario.
+  // Pulls the manifest block (aggregates/caveat/tick_minutes) from the run
+  // detail and the full pack (per-mission reference baselines) by scenario id.
+  // A synthetic run (no scenario id) clears both, restoring no-scenario behavior.
+  useEffect(() => {
+    if (!timeline.runId || !activeScenarioId) {
+      setScenarioBlock(null)
+      setScenarioPack(null)
+      return
+    }
+    let cancelled = false
+    const runId = timeline.runId
+    api.runDetail(runId)
+      .then((detail) => { if (!cancelled) setScenarioBlock(detail.scenario) })
+      .catch(() => { if (!cancelled) setScenarioBlock(null) })
+    api.getScenario(activeScenarioId)
+      .then((pack) => { if (!cancelled) setScenarioPack(pack) })
+      .catch(() => { if (!cancelled) setScenarioPack(null) })
+    return () => { cancelled = true }
+  }, [timeline.runId, activeScenarioId])
 
   // Fetch AAR whenever a run finishes loading (loading goes false and we have a runId)
   useEffect(() => {
@@ -126,6 +176,65 @@ export function MapTab({
     }
     return out
   }, [tick])
+
+  // ---- Scenario reality wiring (task #4) ----
+  // All of the below are inert (null/empty) on a synthetic run.
+
+  const tickMinutes = scenarioBlock?.tick_minutes ?? null
+
+  // First-arrival tick per mission id, from the loaded timeline events.
+  const firstArrivalMap = useMemo(
+    () => buildFirstArrivalMap(timeline.ticks),
+    [timeline.ticks],
+  )
+
+  // Per-mission real baseline getter for the popover. Resolves the mission's
+  // engine id → injection-safe timeline INDEX → `reference.missions[index]`.
+  // Returns null for an injected mission (no timeline baseline) or synthetic run.
+  const scenarioRefForMission = useCallback(
+    (missionId: string): ScenarioReferenceMission | null => {
+      if (!scenarioPack) return null
+      const idx = timelineIndexForMissionId(timeline.ticks, missionId)
+      if (idx === null) return null
+      return scenarioPack.reference.missions[String(idx)] ?? null
+    },
+    [scenarioPack, timeline.ticks],
+  )
+
+  // First-arrival tick getter for the popover's sim latency line.
+  const agentFirstArrivalForMission = useCallback(
+    (missionId: string): number | null => firstArrivalMap.get(missionId) ?? null,
+    [firstArrivalMap],
+  )
+
+  // The arm's MEAN spawn→first-arrival latency in minutes, averaged across the
+  // run's timeline missions (the single-arm RealityStrip readout). Only timeline
+  // missions (injection-safe) are considered, and only those with a comparable
+  // arrival contribute; null when none do. Pairs against the grey real baseline.
+  const armLatencyMinutes = useMemo(() => {
+    if (!scenarioPack || tickMinutes === null) return null
+    const ids = mapTimelineIndexToMissionId(timeline.ticks)
+    const samples: number[] = []
+    for (const missionId of ids) {
+      if (!missionId) continue
+      const mission = world?.missions[missionId]
+      const spawnTick = mission?.spawned_tick
+      if (spawnTick === undefined) continue
+      const arrival = firstArrivalMap.get(missionId) ?? null
+      const latency = agentLatencyMinutes(spawnTick, arrival, tickMinutes)
+      if (latency !== null) samples.push(latency)
+    }
+    if (samples.length === 0) return null
+    return samples.reduce((s, v) => s + v, 0) / samples.length
+  }, [scenarioPack, tickMinutes, timeline.ticks, world, firstArrivalMap])
+
+  // The arm color for the strip — society=cyan, every baseline=amber.
+  const armColor =
+    runs.find((r) => r.run_id === timeline.runId)?.arm === 'society'
+      ? ARM_COLORS.society
+      : ARM_COLORS.baseline
+  const armLabel =
+    runs.find((r) => r.run_id === timeline.runId)?.arm ?? 'agents'
 
   // Jump scrubber to the tick index whose tick record matches the given tick number
   function handleJumpToTick(tickNumber: number) {
@@ -207,6 +316,9 @@ export function MapTab({
                 onSelectMission={setSelectedMission}
                 pulseDistricts={pulseDistricts}
                 missionRequesters={missionRequesters}
+                scenarioRefForMission={scenarioRefForMission}
+                agentFirstArrivalForMission={agentFirstArrivalForMission}
+                tickMinutes={tickMinutes}
               />
               {/* Dismissible legend overlay (self-suppresses via localStorage) */}
               <Legend />
@@ -237,6 +349,26 @@ export function MapTab({
           </div>
         </div>
       </div>
+
+      {/* Reality baseline — scenario-level map FOOTER pinned ABOVE the Scrubber
+          (delta 2). One strip, one arm (this run) vs the single grey real
+          baseline. Self-suppresses (renders nothing) when the run has no
+          scenario / no real latency baseline, so synthetic behavior is
+          unchanged. */}
+      {scenarioBlock && (
+        <RealityStrip
+          aggregates={scenarioBlock.reference_aggregates}
+          caveatLine={scenarioBlock.caveat_line}
+          arms={[
+            {
+              arm: armLabel,
+              latencyMinutes: armLatencyMinutes,
+              color: armColor,
+            },
+          ]}
+          className="border-t"
+        />
+      )}
 
       {/* Scrubber */}
       <Scrubber

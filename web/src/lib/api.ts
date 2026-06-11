@@ -1,10 +1,13 @@
 import type {
   RunSummary,
+  RunDetail,
   TicksResponse,
   BenchResult,
   LiveStatus,
   AarReport,
   ConformanceReport,
+  ScenarioSummary,
+  ScenarioPack,
 } from '../types'
 
 const TOKEN_KEY = 'observatory-token'
@@ -65,6 +68,12 @@ export const api = {
 
   run: (runId: string): Promise<RunSummary> => get(`/api/runs/${runId}`),
 
+  // Full run detail — the truthful /api/runs/{id} shape (manifest, n_ticks,
+  // has_world, and the scenario manifest block or null). Use this when a
+  // component needs the scenario block (provenance / RealityStrip); `run`
+  // remains for the legacy summary-shaped reads.
+  runDetail: (runId: string): Promise<RunDetail> => get(`/api/runs/${runId}`),
+
   ticks: (
     runId: string,
     start = 0,
@@ -81,13 +90,28 @@ export const api = {
   conformance: (runId: string): Promise<ConformanceReport> =>
     get(`/api/runs/${runId}/conformance`),
 
+  // Scenario packs (task #4). Both GETs are ungated, like every other GET.
+  getScenarios: (): Promise<ScenarioSummary[]> => get('/api/scenarios'),
+
+  getScenario: (scenarioId: string): Promise<ScenarioPack> =>
+    get(`/api/scenarios/${scenarioId}`),
+
+  // `ticks` is optional so the server applies the scenario budget default
+  // (min(last timeline tick + 20, 120)) when a scenario is selected and no
+  // explicit tick count is given. Passing `scenario` builds the world from the
+  // committed pack; omitting it preserves the synthetic behavior exactly.
   startLive: (
     arm: string,
     seed: number,
-    ticks: number,
-    opts?: { aar?: boolean; memory?: boolean },
+    ticks?: number,
+    opts?: { aar?: boolean; memory?: boolean; scenario?: string },
   ): Promise<{ live_id: string }> =>
-    post('/api/live', { arm, seed, ticks, ...(opts ?? {}) }),
+    post('/api/live', {
+      arm,
+      seed,
+      ...(ticks !== undefined ? { ticks } : {}),
+      ...(opts ?? {}),
+    }),
 
   injectEvent: (kind: string, district: string): Promise<void> =>
     post('/api/live/inject', { kind, district }),

@@ -1,10 +1,20 @@
 import React, { useMemo } from 'react'
-import type { WorldState, MissionState } from '../types'
+import type {
+  WorldState,
+  MissionState,
+  ScenarioReferenceMission,
+} from '../types'
 import {
   MISSION_KIND_COLORS,
   STATUS_COLORS,
   FALLBACK_COLOR,
+  PROVENANCE_COLORS,
 } from '../lib/palette'
+import {
+  agentLatencyMinutes,
+  realLatencyMinutes,
+  formatMinutes,
+} from '../lib/scenario'
 
 // SVG-only chrome colors. Tailwind classes can't reach inside <svg fill>, so
 // these read the EOC RGB-channel CSS vars (defined in index.css :root) as
@@ -198,6 +208,17 @@ interface MissionPopoverProps {
   cy: number
   /** The agent_id that most recently requested resources for this mission, if any. */
   requester: string | null
+  /** Scenario reality baseline for THIS mission (resolved by the caller via the
+   *  injection-safe index→mission map in lib/scenario.ts). Null/undefined for a
+   *  synthetic run or an injected mission with no timeline baseline — in that case
+   *  the two scenario lines + INFERRED badge are suppressed entirely. */
+  scenarioRef?: ScenarioReferenceMission | null
+  /** The tick the first assigned resource arrived for this mission, if any. Feeds
+   *  agentLatencyMinutes(spawned_tick, firstArrival, tickMinutes). */
+  agentFirstArrivalTick?: number | null
+  /** Pack tick length in minutes (only present on scenario runs). When set
+   *  together with scenarioRef, the two real-vs-sim latency lines render. */
+  tickMinutes?: number | null
 }
 
 // Resource-kind tracking for the required/assigned breakdown rows.
@@ -217,14 +238,46 @@ function resourceRows(mission: MissionState): { kind: string; req: number; got: 
 
 /** Mission detail card anchored to the marker. Pure SVG (foreignObject avoided
  *  to keep the card crisp under 1080p capture and inside preserveAspectRatio). */
-function MissionPopover({ mission, cx, cy, requester }: MissionPopoverProps) {
+function MissionPopover({
+  mission,
+  cx,
+  cy,
+  requester,
+  scenarioRef,
+  agentFirstArrivalTick,
+  tickMinutes,
+}: MissionPopoverProps) {
   const color = MISSION_KIND_COLORS[mission.kind] ?? FALLBACK_COLOR
   const rows = resourceRows(mission)
   const PAD = 8
   const LINE = 12
   const W = 168
+
+  // Scenario reality lines (UX delta #8 — KEPT). Only present on a scenario run
+  // where this mission resolves to a timeline baseline (scenarioRef supplied) and
+  // a pack tick length is known. The real line uses lib/scenario.realLatencyMinutes
+  // — which returns null whenever latency_s is null EVEN IF first_on_scene exists,
+  // so we render NOTHING for the real line in that case (never a fabricated delta).
+  // The sim line uses agentLatencyMinutes(spawn, firstArrival, tickMinutes); null
+  // (no unit on scene yet) renders the em-dash placeholder.
+  const hasScenario = Boolean(
+    scenarioRef && tickMinutes !== null && tickMinutes !== undefined,
+  )
+  const realMin = hasScenario ? realLatencyMinutes(scenarioRef) : null
+  const simMin = hasScenario
+    ? agentLatencyMinutes(
+        mission.spawned_tick,
+        agentFirstArrivalTick ?? null,
+        tickMinutes as number,
+      )
+    : null
+  const showRealLine = hasScenario && realMin !== null
+  const showSimLine = hasScenario
+  const scenarioLineCount = (showRealLine ? 1 : 0) + (showSimLine ? 1 : 0)
+
   // header(2 lines) + each resource row + deadline/priority + optional requester
-  const bodyRows = rows.length + 2 + (requester ? 1 : 0)
+  // + the scenario reality lines (grown so they never clip — delta #8).
+  const bodyRows = rows.length + 2 + (requester ? 1 : 0) + scenarioLineCount
   const H = PAD * 2 + LINE * (2 + bodyRows)
 
   // Anchor to the right of the marker by default; flip left near the right edge.
@@ -252,10 +305,55 @@ function MissionPopover({ mission, cx, cy, requester }: MissionPopoverProps) {
       <text x={ox + PAD} y={lineY(row++)} fill={color} fontSize={10} fontFamily="'JetBrains Mono', monospace" fontWeight="700">
         {mission.id} · {mission.kind.replace(/_/g, ' ')}
       </text>
-      {/* Status + severity */}
-      <text x={ox + PAD} y={lineY(row++)} fill={STATUS_COLORS[mission.status]} fontSize={9} fontFamily="'JetBrains Mono', monospace">
-        {mission.status} · sev {mission.severity} · {mission.lives_at_risk}♥
-      </text>
+      {/* Status + severity + lives. On a scenario run, lives_at_risk carries an
+          INFERRED ghost badge (border-only, neutral — never reads as an error). */}
+      {(() => {
+        const y = lineY(row++)
+        const prefix = `${mission.status} · sev ${mission.severity} · `
+        if (!hasScenario) {
+          return (
+            <text x={ox + PAD} y={y} fill={STATUS_COLORS[mission.status]} fontSize={9} fontFamily="'JetBrains Mono', monospace">
+              {prefix}{mission.lives_at_risk}♥
+            </text>
+          )
+        }
+        // Approx mono char advance at 9px to place the ghost badge after the lives glyph.
+        const CH = 5.4
+        const livesText = `${mission.lives_at_risk}♥`
+        const badgeX = ox + PAD + (prefix.length + livesText.length) * CH + 4
+        const badgeY = y - 8
+        const inf = PROVENANCE_COLORS.inferred
+        return (
+          <g>
+            <text x={ox + PAD} y={y} fill={STATUS_COLORS[mission.status]} fontSize={9} fontFamily="'JetBrains Mono', monospace">
+              {prefix}{livesText}
+            </text>
+            {/* INFERRED ghost badge — transparent fill, dotted neutral border. */}
+            <rect
+              x={badgeX}
+              y={badgeY - 1}
+              width={48}
+              height={12}
+              rx={2}
+              fill={inf.fill}
+              stroke={inf.border}
+              strokeWidth={0.75}
+              strokeDasharray="2 1.5"
+            />
+            <text
+              x={badgeX + 24}
+              y={badgeY + 8}
+              textAnchor="middle"
+              fill={inf.text}
+              fontSize={9}
+              fontFamily="'JetBrains Mono', monospace"
+              letterSpacing={0.2}
+            >
+              INFERRED
+            </text>
+          </g>
+        )
+      })()}
       {/* Required vs assigned per resource */}
       {rows.map((r) => {
         const y = lineY(row++)
@@ -284,6 +382,21 @@ function MissionPopover({ mission, cx, cy, requester }: MissionPopoverProps) {
           <tspan fill={color} fontWeight="600">{requester}</tspan>
         </text>
       )}
+      {/* Scenario reality lines (delta #8). Real first-on-scene baseline (grey),
+          then agents-sim latency (arm/kind color). Real line is suppressed when
+          the pack's latency_s is null — realLatencyMinutes already returns null. */}
+      {showRealLine && (
+        <text x={ox + PAD} y={lineY(row++)} fontSize={9} fontFamily="'JetBrains Mono', monospace" fill={FALLBACK_COLOR}>
+          first on scene (real):{' '}
+          <tspan fontWeight="600">{formatMinutes(realMin)}</tspan>
+        </text>
+      )}
+      {showSimLine && (
+        <text x={ox + PAD} y={lineY(row++)} fontSize={9} fontFamily="'JetBrains Mono', monospace" fill={FALLBACK_COLOR}>
+          agents (sim):{' '}
+          <tspan fill={color} fontWeight="600">{formatMinutes(simMin)}</tspan>
+        </text>
+      )}
     </g>
   )
 }
@@ -298,6 +411,17 @@ interface Props {
   pulseDistricts?: string[]
   /** agent_id → mission_id this tick (most recent resource requester per mission). */
   missionRequesters?: Record<string, string>
+  /** Scenario reality baseline lookup for the selected mission (delta #8). MapTab
+   *  resolves it via the injection-safe index→mission map (lib/scenario.ts) and
+   *  passes a per-mission-id getter — TownMap stays presentational (no fetch, no
+   *  index computation). Absent/returns null on a synthetic run → no scenario lines. */
+  scenarioRefForMission?: (missionId: string) => ScenarioReferenceMission | null
+  /** First-arrival tick lookup for the selected mission (feeds the sim latency).
+   *  Returns null when no unit has arrived yet → sim line shows the em-dash. */
+  agentFirstArrivalForMission?: (missionId: string) => number | null
+  /** Pack tick length in minutes — only set on a scenario run. Required (with a
+   *  resolved scenarioRef) for the popover's real-vs-sim latency lines to render. */
+  tickMinutes?: number | null
 }
 
 function TownMapImpl({
@@ -307,6 +431,9 @@ function TownMapImpl({
   effects = 'normal',
   pulseDistricts,
   missionRequesters,
+  scenarioRefForMission,
+  agentFirstArrivalForMission,
+  tickMinutes,
 }: Props) {
   const SVG_W = 500
   const SVG_H = 380  // expanded: GRID_Y(50) + row0(130) + row1(150) + bottom(50)
@@ -384,7 +511,9 @@ function TownMapImpl({
                 style={{ animationDuration: '1s' }}
               />
             )}
-            {/* District label */}
+            {/* District label — prefer the world/pack display name (P0, delta 1:
+                so nyc-ida-2021 renders "Manhattan", not "Old Town"). Geometry
+                stays keyed by canonical id; only the label text is overridden. */}
             <text
               x={d.x + 8}
               y={d.y + 14}
@@ -393,7 +522,7 @@ function TownMapImpl({
               fontFamily="'Share Tech Mono', monospace"
               letterSpacing={1}
             >
-              {d.label.toUpperCase()}
+              {(dist?.name ?? d.label).toUpperCase()}
             </text>
             {/* Blocked road indicator — corner badge */}
             {blocked && (
@@ -470,6 +599,9 @@ function TownMapImpl({
           cx={selectedPos.cx}
           cy={selectedPos.cy}
           requester={missionRequesters?.[selected.id] ?? null}
+          scenarioRef={scenarioRefForMission?.(selected.id) ?? null}
+          agentFirstArrivalTick={agentFirstArrivalForMission?.(selected.id) ?? null}
+          tickMinutes={tickMinutes ?? null}
         />
       )}
     </svg>

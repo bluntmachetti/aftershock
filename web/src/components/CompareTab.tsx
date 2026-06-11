@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import type { RunSummary } from '../types'
+import type {
+  RunSummary,
+  ScenarioCompact,
+  ScenarioManifestBlock,
+  ScenarioPack,
+  TickRecord,
+  WorldState,
+} from '../types'
 import {
   timelineReducer,
   initialTimelineState,
@@ -18,9 +25,83 @@ import {
   winnerColor,
 } from '../lib/compare'
 import { usePlaybackClock as useSharedClock } from '../lib/usePlaybackClock'
-import { ARM_COLORS } from '../lib/palette'
+import { ARM_COLORS, HAZARD_SYNTHETIC_ACCENT, hazardAccent } from '../lib/palette'
+import {
+  mapTimelineIndexToMissionId,
+  agentLatencyMinutes,
+  buildFirstArrivalMap,
+} from '../lib/scenario'
 import { api } from '../lib/api'
 import { TownMap } from './TownMap'
+import { RealityStrip } from './RealityStrip'
+
+// ---- Hazard chip (UX delta #7) ----
+// In a run/side HEADER the hazard chip reads STRONGER than RunPicker's dim row
+// chip: a signal-accented border + fill for a REAL pack (the verified-data
+// accent from palette), the dim/neutral sentinel for a synthetic run. The accent
+// always comes from palette tokens — no #rrggbb literal lives in this .tsx.
+function shortScenarioTail(id: string): string {
+  const tokens = id.split('-').filter((t) => t.length > 0 && !/^\d{4}$/.test(t))
+  const base = tokens.length > 0 ? tokens : id.split('-').filter(Boolean)
+  return base.join(' ').toUpperCase()
+}
+
+function HazardChip({ scenario }: { scenario: ScenarioCompact | null | undefined }) {
+  const real = Boolean(scenario)
+  const accent = real ? hazardAccent(scenario?.hazard) : HAZARD_SYNTHETIC_ACCENT
+  const label = real ? `REAL·${shortScenarioTail(scenario!.id)}` : 'SYN·QUAKE'
+  return (
+    <span
+      className="shrink-0 rounded-sm border px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider tabular-nums"
+      style={{
+        color: accent,
+        // Stronger than the dim RunPicker row chip: a fuller border + fill for
+        // REAL; the synthetic sentinel stays restrained.
+        borderColor: `${accent}${real ? 'aa' : '40'}`,
+        background: `${accent}${real ? '22' : '12'}`,
+      }}
+      title={
+        real
+          ? `Real scenario: ${scenario?.name ?? scenario?.id ?? ''}`
+          : 'Synthetic run (no scenario pack)'
+      }
+    >
+      {label}
+    </span>
+  )
+}
+
+/** Each arm's MEAN spawn→first-arrival latency in minutes across its timeline
+ *  missions, or null when no comparable arrival exists. Injection-safe (only
+ *  timeline missions count). Shared by both compare arms against the one real
+ *  baseline. */
+function armMeanLatencyMinutes(
+  ticks: TickRecord[],
+  worlds: WorldState[] | null,
+  tickMinutes: number | null,
+): number | null {
+  if (tickMinutes === null) return null
+  const finalWorld = worlds && worlds.length > 0 ? worlds[worlds.length - 1] : null
+  if (!finalWorld) return null
+  // Shared injection-safe + blocked-road-aware selection (skips the dispatch
+  // placeholder so only the genuine on-scene landing counts — see scenario.ts).
+  const firstArrival = buildFirstArrivalMap(ticks)
+  const ids = mapTimelineIndexToMissionId(ticks)
+  const samples: number[] = []
+  for (const mid of ids) {
+    if (!mid) continue
+    const mission = finalWorld.missions[mid]
+    if (!mission) continue
+    const latency = agentLatencyMinutes(
+      mission.spawned_tick,
+      firstArrival.get(mid) ?? null,
+      tickMinutes,
+    )
+    if (latency !== null) samples.push(latency)
+  }
+  if (samples.length === 0) return null
+  return samples.reduce((s, v) => s + v, 0) / samples.length
+}
 
 const PAGE = 100 // larger page in compare so 8× playback never stalls mid-run
 const SPEEDS = [0.5, 1, 2, 4, 8]
@@ -209,6 +290,52 @@ export function CompareTab({
   const seedsDiffer =
     leftRun != null && rightRun != null && leftRun.seed !== rightRun.seed
 
+  // ---- Shared scenario reality band (task #4, delta 2) ----
+  // The single shared RealityStrip renders ONLY when BOTH arms carry the SAME
+  // scenario id (both arms vs ONE real baseline — never one strip per side).
+  // Mismatched / absent scenarios suppress the band entirely.
+  const sharedScenarioId =
+    leftRun?.scenario?.id && rightRun?.scenario?.id &&
+    leftRun.scenario.id === rightRun.scenario.id
+      ? leftRun.scenario.id
+      : null
+
+  const [scenarioBlock, setScenarioBlock] = useState<ScenarioManifestBlock | null>(null)
+  const [scenarioPack, setScenarioPack] = useState<ScenarioPack | null>(null)
+
+  // Fetch the one shared scenario's manifest block (aggregates/caveat/
+  // tick_minutes) + full pack once both arms agree on the id. Cleared when the
+  // shared id goes away, so a mismatched re-pick suppresses the band.
+  useEffect(() => {
+    if (!sharedScenarioId || !controller.leftRunId) {
+      setScenarioBlock(null)
+      setScenarioPack(null)
+      return
+    }
+    let cancelled = false
+    const runId = controller.leftRunId
+    api.runDetail(runId)
+      .then((detail) => { if (!cancelled) setScenarioBlock(detail.scenario) })
+      .catch(() => { if (!cancelled) setScenarioBlock(null) })
+    api.getScenario(sharedScenarioId)
+      .then((pack) => { if (!cancelled) setScenarioPack(pack) })
+      .catch(() => { if (!cancelled) setScenarioPack(null) })
+    return () => { cancelled = true }
+  }, [sharedScenarioId, controller.leftRunId])
+
+  const tickMinutes = scenarioBlock?.tick_minutes ?? null
+
+  // Each arm's mean sim latency (minutes) vs the ONE real baseline. Recomputed as
+  // pages land; inert (null) without a shared pack.
+  const leftArmLatency = useMemo(
+    () => (scenarioPack ? armMeanLatencyMinutes(left.ticks, left.worlds, tickMinutes) : null),
+    [scenarioPack, left.ticks, left.worlds, tickMinutes],
+  )
+  const rightArmLatency = useMemo(
+    () => (scenarioPack ? armMeanLatencyMinutes(right.ticks, right.worlds, tickMinutes) : null),
+    [scenarioPack, right.ticks, right.worlds, tickMinutes],
+  )
+
   // ---- Guards / pickers ----
   if (!bothSelected) {
     return <ComparePicker runs={runs} controller={controller} setController={setController} />
@@ -248,6 +375,31 @@ export function CompareTab({
         leftArm={leftRun?.arm}
         rightArm={rightRun?.arm}
       />
+
+      {/* ONE shared reality band directly under the delta strip (delta 2):
+          BOTH arms' sim latency vs the SINGLE grey real baseline — never one
+          strip per side. Mounted only when both arms share a scenario id; the
+          strip itself also self-suppresses if the pack has no real latency
+          baseline. */}
+      {scenarioBlock && (
+        <RealityStrip
+          aggregates={scenarioBlock.reference_aggregates}
+          caveatLine={scenarioBlock.caveat_line}
+          arms={[
+            {
+              arm: leftRun?.arm ?? 'left',
+              latencyMinutes: leftArmLatency,
+              color: leftRun?.arm === 'society' ? ARM_COLORS.society : ARM_COLORS.baseline,
+            },
+            {
+              arm: rightRun?.arm ?? 'right',
+              latencyMinutes: rightArmLatency,
+              color: rightRun?.arm === 'society' ? ARM_COLORS.society : ARM_COLORS.baseline,
+            },
+          ]}
+          className="border-b"
+        />
+      )}
 
       {/* Two maps with per-side headers */}
       <div className="flex flex-1 overflow-hidden">
@@ -391,7 +543,10 @@ function SidePanel({ run, side, align }: SidePanelProps) {
   const armColorClass = run?.arm === 'society' ? 'text-signal-cyan' : 'text-signal-amber'
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      {/* Run header — SOCIETY · seed 42 · T31 */}
+      {/* Run header — SOCIETY · seed 42 · T31 · [REAL·NYC IDA].
+          The hazard chip here is STRONGER than RunPicker's dim row chip
+          (delta 7): a signal-accented header badge. Synthetic runs show the dim
+          SYN·QUAKE sentinel, so the header is honest either way. */}
       <div
         className={`flex items-center gap-2 border-b border-eoc-border bg-eoc-surface px-3 py-1.5 ${
           align === 'right' ? 'flex-row-reverse text-right' : ''
@@ -403,6 +558,7 @@ function SidePanel({ run, side, align }: SidePanelProps) {
         <span className="text-[11px] tabular-nums text-eoc-secondary">
           {run ? `seed ${run.seed} · T${finalTick}` : '—'}
         </span>
+        <HazardChip scenario={run?.scenario} />
       </div>
 
       {/* Map — quiet effects in compare (no scanlines/animated rings competing) */}

@@ -1,5 +1,5 @@
 import { useReducer, useState, useEffect, useCallback, useRef } from 'react'
-import type { TabId, RunSummary } from './types'
+import type { TabId, RunSummary, ScenarioPack } from './types'
 import {
   timelineReducer,
   initialTimelineState,
@@ -16,6 +16,7 @@ import { BenchTab } from './components/BenchTab'
 import { LiveTab } from './components/LiveTab'
 import { CompareTab } from './components/CompareTab'
 import { Scoreboard } from './components/Scoreboard'
+import { DataChip, ProvenancePanel } from './components/ProvenancePanel'
 
 const TABS: TabId[] = ['map', 'bench', 'live', 'compare']
 
@@ -38,6 +39,18 @@ export default function App() {
   // controller state flows back up via onStateChange for URL reflection.
   const [compareInit, setCompareInit] = useState<CompareInit | null>(null)
   const [compareState, setCompareState] = useState<CompareController | null>(null)
+
+  // DATA chip + provenance deep-dive (task #4). The chip is mounted in the app
+  // header ONLY when the active MAP run carries a scenario block; absent →
+  // nothing renders (behavior unchanged for synthetic runs). The full pack is
+  // fetched lazily per scenario id and cached so the panel needs no second hit.
+  const [provenanceOpen, setProvenanceOpen] = useState(false)
+  const [scenarioPack, setScenarioPack] = useState<ScenarioPack | null>(null)
+
+  // The compact scenario ({id,name,hazard}) of the active MAP run, or null for a
+  // synthetic run. Drives whether the DATA chip mounts at all.
+  const activeScenario =
+    runs.find((r) => r.run_id === timeline.runId)?.scenario ?? null
 
   // Guard so the deep link is applied exactly once (not on every runs refresh).
   const deepLinkAppliedRef = useRef(false)
@@ -159,6 +172,25 @@ export default function App() {
   })()
   useUrlReflection(reflectState)
 
+  // Lazily fetch the full scenario pack for the active MAP run (the
+  // ProvenancePanel data source). A synthetic run (no scenario) clears the pack
+  // and force-closes the panel, so the deep dive is impossible to leave open
+  // across a scenario→synthetic switch. Re-fetches only when the id changes.
+  const activeScenarioId = activeScenario?.id ?? null
+  useEffect(() => {
+    if (!activeScenarioId) {
+      setScenarioPack(null)
+      setProvenanceOpen(false)
+      return
+    }
+    let cancelled = false
+    setProvenanceOpen(false)
+    api.getScenario(activeScenarioId)
+      .then((pack) => { if (!cancelled) setScenarioPack(pack) })
+      .catch(() => { if (!cancelled) setScenarioPack(null) })
+    return () => { cancelled = true }
+  }, [activeScenarioId])
+
   return (
     <div className="flex flex-col h-screen bg-eoc-ground text-eoc-primary overflow-hidden">
       {/* Header */}
@@ -170,21 +202,31 @@ export default function App() {
           </span>
         </div>
         <Scoreboard tick={timeline.ticks[timeline.cursor] ?? null} />
-        <nav className="flex gap-1">
-          {TABS.map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-3 py-1 text-xs font-mono uppercase tracking-wider rounded transition-colors ${
-                tab === t
-                  ? 'bg-signal-amber text-eoc-ground font-semibold'
-                  : 'text-eoc-secondary hover:text-eoc-primary hover:bg-eoc-raised'
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-        </nav>
+        <div className="flex items-center gap-2">
+          {/* DATA chip — mounted ONLY when the active MAP run carries a
+              scenario; a synthetic run renders nothing here (no inert chip). */}
+          {activeScenario && (
+            <DataChip
+              active={provenanceOpen}
+              onClick={() => setProvenanceOpen((v) => !v)}
+            />
+          )}
+          <nav className="flex gap-1">
+            {TABS.map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`px-3 py-1 text-xs font-mono uppercase tracking-wider rounded transition-colors ${
+                  tab === t
+                    ? 'bg-signal-amber text-eoc-ground font-semibold'
+                    : 'text-eoc-secondary hover:text-eoc-primary hover:bg-eoc-raised'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </nav>
+        </div>
       </header>
 
       {/* Main content */}
@@ -217,6 +259,15 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Provenance deep-dive — floats over the app as a right-anchored sheet.
+          Self-renders nothing unless `open` AND a `pack` is present, so a
+          synthetic run can never surface it. */}
+      <ProvenancePanel
+        pack={scenarioPack}
+        open={provenanceOpen}
+        onClose={() => setProvenanceOpen(false)}
+      />
     </div>
   )
 }

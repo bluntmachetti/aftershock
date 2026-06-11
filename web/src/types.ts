@@ -119,6 +119,180 @@ export interface TickRecord {
 
 // ---- API response types ----
 
+// ---- Scenario pack types (task #4 — real-data scenario packs) ----
+//
+// These mirror the Python shapes EXACTLY:
+//   - the compact run-manifest block + /api/runs passthrough (web.py
+//     `_scenario_manifest_block` / `_scenario_compact_from_manifest`),
+//   - the /api/scenarios list rows (`_scenario_list_entry`),
+//   - the full pack from /api/scenarios/{id} (`ScenarioPack.model_dump()` in
+//     town/scenario.py).
+// Behavior is unchanged when a run has no scenario: every consumer treats a
+// null/absent `scenario` as the synthetic case.
+
+/** Field-provenance marker for the two-tier badge system. `real` => solid fill;
+ *  `mapped`/`inferred`/`synthetic` => ghost/dotted border. */
+export type ProvenanceLabel = 'real' | 'mapped' | 'inferred' | 'synthetic'
+
+/** The six field-provenance markers carried by every pack (drives the badge
+ *  grid in ProvenancePanel). Mirrors `ScenarioFieldProvenance` in scenario.py. */
+export interface ScenarioFieldProvenance {
+  tick: ProvenanceLabel
+  district_id: ProvenanceLabel
+  mission_kind: ProvenanceLabel
+  severity: ProvenanceLabel
+  lives_at_risk: ProvenanceLabel
+  blockage: ProvenanceLabel
+}
+
+/** One upstream dataset (verbatim attribution, license, query). Mirrors
+ *  `ScenarioSource`; extra keys allowed there, but these are the stable ones. */
+export interface ScenarioSource {
+  dataset: string
+  provider: string
+  dataset_id?: string
+  query_url?: string
+  fetched_at?: string
+  rows_fetched?: number
+  license?: string
+  license_url?: string
+  attribution?: string
+}
+
+/** The real-vs-window observation window. Mirrors `ScenarioWindow`. */
+export interface ScenarioWindow {
+  start: string
+  end: string
+}
+
+/** Published semantic decisions (verbatim, for provenance). Mirrors
+ *  `ScenarioMapping` (pydantic extra="allow", so extra keys may appear). */
+export interface ScenarioMapping {
+  version: string
+  mission_kind: Record<string, string>
+  severity_rule?: string
+  lives_rule?: string
+}
+
+/** How the real window was downscaled. Mirrors `ScenarioSampling`. */
+export interface ScenarioSampling {
+  method: string
+  sample_seed: number
+  kept: number
+  total: number
+  filter?: string
+}
+
+/** One district slot (canonical id + pack display name). Mirrors
+ *  `ScenarioDistrict`. */
+export interface ScenarioDistrict {
+  id: string
+  name: string
+  members: string[]
+}
+
+/** One resource pool (size + observed/calibrated basis). Mirrors
+ *  `ScenarioPool`. */
+export interface ScenarioPool {
+  size: number
+  basis: string
+  note: string
+}
+
+/** One timeline entry — exact TimelineEntry shape. Mirrors
+ *  `ScenarioTimelineEntry`. */
+export interface ScenarioTimelineEntry {
+  tick: number
+  kind: 'mission' | 'blockage'
+  mission_kind: string
+  district_id: string
+  severity: number
+  lives_at_risk: number
+}
+
+/** Per-mission real baseline, keyed by TIMELINE INDEX of the mission entry.
+ *  `first_on_scene`/`latency_s` are null when no unit arrived. Mirrors
+ *  `ScenarioReferenceMission`. */
+export interface ScenarioReferenceMission {
+  received: string | null
+  first_on_scene: string | null
+  latency_s: number | null
+}
+
+/** The reality baseline. `missions` keyed by string timeline index;
+ *  `aggregates` computed over the full filtered window (mean/median latency,
+ *  held-rate, named calm-window baseline). Mirrors `ScenarioReference`. */
+export interface ScenarioReference {
+  missions: Record<string, ScenarioReferenceMission>
+  aggregates: Record<string, unknown>
+}
+
+/** The full scenario pack as returned by GET /api/scenarios/{id}
+ *  (`ScenarioPack.model_dump()`). The RealityStrip + ProvenancePanel data
+ *  source. */
+export interface ScenarioPack {
+  format_version: number
+  id: string
+  name: string
+  hazard: string
+  adapter: string
+  compiler_version: string
+  config_sha256: string
+  tick_minutes: number
+  window: ScenarioWindow
+  districts: ScenarioDistrict[]
+  pools: Record<string, ScenarioPool>
+  timeline: ScenarioTimelineEntry[]
+  field_provenance: ScenarioFieldProvenance
+  mapping: ScenarioMapping
+  sampling: ScenarioSampling
+  source: ScenarioSource[]
+  reference: ScenarioReference
+  pack_digest: string
+}
+
+/** Compact list row from GET /api/scenarios (`_scenario_list_entry`). Used by
+ *  the LiveTab scenario select. `source` is the trimmed 4-field view. */
+export interface ScenarioSummary {
+  id: string
+  name: string
+  hazard: string
+  tick_minutes: number
+  window: ScenarioWindow
+  missions: number
+  sampling: { kept: number; total: number }
+  source: Array<{
+    dataset: string
+    provider: string
+    license: string
+    attribution: string
+  }>
+}
+
+/** The run-manifest scenario block (`_scenario_manifest_block`) — enough for the
+ *  UI to render provenance without a second fetch. Carried on a scenario run's
+ *  `run.json` and surfaced by GET /api/runs/{id}. */
+export interface ScenarioManifestBlock {
+  id: string
+  name: string
+  hazard: string
+  tick_minutes: number
+  pack_digest: string
+  config_sha256: string
+  source: ScenarioSource[]
+  field_provenance: ScenarioFieldProvenance
+  caveat_line: string
+  reference_aggregates: Record<string, unknown>
+}
+
+/** The compact passthrough on /api/runs list rows
+ *  (`_scenario_compact_from_manifest`): just enough to badge a row. */
+export interface ScenarioCompact {
+  id: string
+  name: string
+  hazard: string
+}
+
 export interface RunSummary {
   run_id: string
   seed: number
@@ -127,6 +301,20 @@ export interface RunSummary {
   final_scores?: Record<string, number>
   cost?: Record<string, unknown>
   has_world?: boolean
+  // Compact {id, name, hazard} from the run manifest; null/absent for synthetic
+  // runs (the UI treats absence as SYN·QUAKE).
+  scenario?: ScenarioCompact | null
+}
+
+/** GET /api/runs/{id} detail. The full scenario manifest block (or null for a
+ *  synthetic run) rides alongside the manifest. Mirrors `run_detail`. */
+export interface RunDetail {
+  run_id: string
+  manifest: Record<string, unknown>
+  final_scores: Record<string, number>
+  n_ticks: number
+  has_world: boolean
+  scenario: ScenarioManifestBlock | null
 }
 
 export interface TicksResponse {
