@@ -55,6 +55,29 @@ most of the outcome. That is the point of the project.
 Everything we've learned about agent behavior along the way — including the negative
 results — is logged with evidence in [docs/FIELD-NOTES.md](docs/FIELD-NOTES.md).
 
+## Real-data scenarios (sim vs reality)
+
+Beyond the synthetic benchmark, the society can run on scenarios compiled **offline from real
+open incident data**, with that incident stream's real first-on-scene latency shown on screen as
+the baseline. This is *sim-vs-reality*, not a claim about real outcomes: the demand arrival and
+the response-latency baseline are real; lives saved and outcomes are a simulated model. Every
+scenario surface carries `REAL / MAPPED / INFERRED / SYNTHETIC` provenance and a caveat line, and
+the compiler runs offline so determinism is preserved (same pack + seed = byte-identical run).
+Run one with `aftershock run --scenario nyc-ida-2021` and watch the observatory's reality strip.
+
+Shipped packs (see each pack's `README.md` and `docs/DESIGN.md` §"Real-data scenario packs"):
+
+- **`nyc-ida-2021`** — Hurricane Ida over NYC, night of 2021-09-01 (the real surge: ~16.5% of EMS
+  calls held, ~948 s mean first-on-scene). Source: **FDNY EMS Incident Dispatch Data
+  (`76xm-jjuj`) + Fire Incident Dispatch Data (`8m42-w767`) via NYC Open Data** — attribution:
+  *FDNY via NYC Open Data* (NYC Open Data terms).
+- **`sf-routine-2018`** — routine emergency demand, San Francisco. Source: **DataSF Fire
+  Department and EMS Dispatched Calls for Service (`nuek-vuh3`)** — license: **PDDL (public
+  domain)**; attribution: *DataSF*.
+
+Scenario packs are demo/observatory surfaces only; the published 4-arm benchmark above stays
+synthetic-seed (`aftershock bench` refuses `--scenario`).
+
 ## Status
 
 In active development for the Qwen Cloud Global AI Hackathon. Done: deterministic kernel,
