@@ -1,0 +1,57 @@
+[
+  {
+    "aar_grade": "B",
+    "cost_usd": 0.044097800000000034,
+    "episode": 1,
+    "lives_lost": 57.0,
+    "lives_saved": 113.0,
+    "missions_failed": 0.0,
+    "missions_resolved": 11.0,
+    "run_id": "ep1-seed100-society",
+    "seed": 100
+  },
+  {
+    "aar_grade": "B",
+    "cost_usd": 0.0430699,
+    "episode": 2,
+    "lives_lost": 36.0,
+    "lives_saved": 108.0,
+    "missions_failed": 0.0,
+    "missions_resolved": 9.0,
+    "run_id": "ep2-seed101-society",
+    "seed": 101
+  },
+  {
+    "aar_grade": "C",
+    "cost_usd": 0.0519681,
+    "episode": 3,
+    "lives_lost": 83.0,
+    "lives_saved": 71.0,
+    "missions_failed": 1.0,
+    "missions_resolved": 11.0,
+    "run_id": "ep3-seed102-society",
+    "seed": 102
+  },
+  {
+    "aar_grade": "C",
+    "cost_usd": 0.046329899999999986,
+    "episode": 4,
+    "lives_lost": 81.0,
+    "lives_saved": 134.0,
+    "missions_failed": 0.0,
+    "missions_resolved": 13.0,
+    "run_id": "ep4-seed103-society",
+    "seed": 103
+  },
+  {
+    "aar_grade": "C",
+    "cost_usd": 0.0669766,
+    "episode": 5,
+    "lives_lost": 87.0,
+    "lives_saved": 114.0,
+    "missions_failed": 2.0,
+    "missions_resolved": 12.0,
+    "run_id": "ep5-seed104-society",
+    "seed": 104
+  }
+]
