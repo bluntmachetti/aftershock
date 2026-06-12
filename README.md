@@ -81,8 +81,9 @@ synthetic-seed (`aftershock bench` refuses `--scenario`).
 ## Status
 
 In active development for the Qwen Cloud Global AI Hackathon. Done: deterministic kernel,
-disaster-town society, Qwen-driven agents, 4-arm benchmark harness. Next: live map UI,
-MCP spectator server, Alibaba Cloud deployment.
+disaster-town society, Qwen-driven agents, 4-arm benchmark harness, observatory UI, MCP spectator,
+real-data scenario packs, and Docker deployment with a Caddy front door for a friendly Alibaba Cloud
+URL. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Quickstart
 

@@ -1,0 +1,5 @@
+{$AFTERSHOCK_HOSTNAME:localhost} {
+	encode zstd gzip
+
+	reverse_proxy aftershock:8788
+}
