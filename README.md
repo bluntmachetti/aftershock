@@ -110,6 +110,24 @@ Shipped packs (see each pack's `README.md` and `docs/DESIGN.md` §"Real-data sce
 Scenario packs are demo/observatory surfaces only; the published 4-arm benchmark above stays
 synthetic-seed (`aftershock bench` refuses `--scenario`).
 
+## Future work
+
+Aftershock is meant to become a broader benchmark harness for agent societies, not just a single
+disaster demo. Planned directions:
+
+- **More real-data scenario packs:** add other cities, hazards, and operating conditions while
+  preserving the same provenance contract (`REAL / MAPPED / INFERRED / SYNTHETIC`).
+- **Architecture leaderboard:** compare society designs against solo and swarm baselines under
+  paired deterministic seeds, with public run records and cost accounting.
+- **Better memory loops:** turn after-action lessons into doctrine-grounded, action-space rules
+  agents can actually use; naive free-text memory made outcomes worse in early experiments.
+- **Human-in-the-loop operations:** expand the MCP spectator and live-injection tools so external
+  users can stress-test the society during a run.
+- **Community role packs:** make it easier to contribute new role definitions, doctrine files, and
+  negotiation policies on top of the same kernel.
+- **Richer real-data honesty:** add more baseline measurements where source data supports them,
+  while keeping simulated outcomes clearly separated from real-world claims.
+
 ## Quickstart
 
 ```bash
