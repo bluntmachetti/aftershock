@@ -5,6 +5,8 @@ description: >-
 theme: minima
 minima:
   skin: dark
+# Publish posts even if their timestamp is ahead of the build clock (timezone-safe).
+future: true
 url: "https://bluntmachetti.github.io"
 baseurl: "/aftershock"
 author:
