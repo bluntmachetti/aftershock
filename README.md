@@ -37,8 +37,8 @@ Aftershock is a working end-to-end prototype:
 - MCP spectator server for browsing run records and injecting live events.
 - Real-data scenario packs committed under `scenarios/`, including the headline NYC Hurricane Ida
   pack.
-- Docker deployment with Caddy HTTPS front door. The current public deployment is:
-  <https://aftershock.redoubtlabs.dev>
+- Docker deployment with a Caddy HTTPS front door (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). The
+  current public deployment is: <https://aftershock.redoubtlabs.dev>
 
 The public deployment requires an observatory token for mutating live-run endpoints; read-only
 surfaces such as recorded runs and scenario metadata are public.
@@ -66,7 +66,7 @@ Two findings, both causal because every arm faces byte-identical worlds:
 2. **The society matches the flagship at 65% of the cost.** A coordinated team of
    qwen3.5-flash workers under a qwen3.5-plus commander saves as many lives as one
    qwen3-max doing everything (103.2 vs 104.2 — within noise), for 52% more lives per
-   dollar, and runs 1.6× faster (parallel small calls beat sequential big ones).
+   dollar, and runs over 1.5× faster (parallel small calls beat sequential big ones).
 
 Honest caveat: well-tuned scripted heuristics using the same protocol remain competitive
 with all LLM arms on this scenario — the protocol, not raw model intelligence, carries
@@ -109,13 +109,6 @@ Shipped packs (see each pack's `README.md` and `docs/DESIGN.md` §"Real-data sce
 
 Scenario packs are demo/observatory surfaces only; the published 4-arm benchmark above stays
 synthetic-seed (`aftershock bench` refuses `--scenario`).
-
-## Status
-
-In active development for the Qwen Cloud Global AI Hackathon. Done: deterministic kernel,
-disaster-town society, Qwen-driven agents, 4-arm benchmark harness, observatory UI, MCP spectator,
-real-data scenario packs, and Docker deployment with a Caddy front door for a friendly Alibaba Cloud
-URL. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Quickstart
 

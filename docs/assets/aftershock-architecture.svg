@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1200" viewBox="0 0 1800 1200">
+  <defs>
+    <style>
+      .bg { fill: #f7fafc; }
+      .title { font: 700 52px Arial, sans-serif; fill: #111827; }
+      .subtitle { font: 400 25px Arial, sans-serif; fill: #4b5563; }
+      .section { font: 700 28px Arial, sans-serif; fill: #0f172a; }
+      .label { font: 700 24px Arial, sans-serif; fill: #111827; }
+      .small { font: 400 19px Arial, sans-serif; fill: #334155; }
+      .tiny { font: 400 16px Arial, sans-serif; fill: #475569; }
+      .box { fill: #ffffff; stroke: #94a3b8; stroke-width: 2.5; rx: 16; }
+      .qwen { fill: #f3e8ff; stroke: #8b5cf6; }
+      .engine { fill: #ecfeff; stroke: #0891b2; }
+      .cloud { fill: #fff7ed; stroke: #ea580c; }
+      .data { fill: #f0fdf4; stroke: #16a34a; }
+      .obs { fill: #eff6ff; stroke: #2563eb; }
+      .arrow { stroke: #334155; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .dash { stroke-dasharray: 9 8; }
+    </style>
+    <marker id="arrow" markerWidth="14" markerHeight="14" refX="12" refY="7" orient="auto">
+      <path d="M0,0 L14,7 L0,14 z" fill="#334155" />
+    </marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1800" height="1200" />
+
+  <text class="title" x="90" y="90">Aftershock Architecture</text>
+  <text class="subtitle" x="90" y="130">Qwen agent society + deterministic disaster simulator + Alibaba Cloud deployment</text>
+
+  <rect class="box qwen" x="90" y="210" width="430" height="285" />
+  <text class="section" x="125" y="260">Qwen Cloud API</text>
+  <text class="label" x="125" y="315">Role agents</text>
+  <text class="small" x="125" y="350">qwen3.5-flash workers</text>
+  <text class="small" x="125" y="382">qwen3.5-plus commander</text>
+  <text class="small" x="125" y="414">qwen3-max solo baseline + AAR</text>
+  <text class="tiny" x="125" y="462">Strict JSON decisions via compatible chat completions</text>
+
+  <rect class="box engine" x="690" y="170" width="470" height="365" />
+  <text class="section" x="730" y="220">Aftershock Kernel</text>
+  <text class="label" x="730" y="275">Deterministic tick engine</text>
+  <text class="small" x="730" y="310">Typed decision registry</text>
+  <text class="small" x="730" y="342">Negotiation protocol</text>
+  <text class="small" x="730" y="374">Atomic resource auction</text>
+  <text class="small" x="730" y="406">Validation + rejection feedback</text>
+  <text class="small" x="730" y="438">Token/cost ledger</text>
+  <text class="tiny" x="730" y="490">Same seed + same decisions = same outcome</text>
+
+  <rect class="box data" x="1280" y="210" width="430" height="285" />
+  <text class="section" x="1315" y="260">Scenario Packs</text>
+  <text class="label" x="1315" y="315">Synthetic benchmark</text>
+  <text class="small" x="1315" y="350">Paired seeded worlds</text>
+  <text class="label" x="1315" y="398">NYC Hurricane Ida</text>
+  <text class="small" x="1315" y="433">Real FDNY EMS + Fire demand</text>
+  <text class="small" x="1315" y="465">Real latency baseline</text>
+
+  <rect class="box obs" x="220" y="695" width="430" height="295" />
+  <text class="section" x="255" y="745">React Observatory</text>
+  <text class="small" x="255" y="800">Map replay + live runs</text>
+  <text class="small" x="255" y="832">Benchmark comparison</text>
+  <text class="small" x="255" y="864">Agent inspector</text>
+  <text class="small" x="255" y="896">Negotiation feed</text>
+  <text class="small" x="255" y="928">NYC provenance + reality strip</text>
+
+  <rect class="box obs" x="760" y="695" width="355" height="295" />
+  <text class="section" x="800" y="745">FastAPI Backend</text>
+  <text class="small" x="800" y="800">/api/runs</text>
+  <text class="small" x="800" y="832">/api/scenarios</text>
+  <text class="small" x="800" y="864">/api/live</text>
+  <text class="small" x="800" y="896">WebSocket stream</text>
+  <text class="small" x="800" y="928">MCP spectator server</text>
+
+  <rect class="box cloud" x="1260" y="675" width="455" height="335" />
+  <text class="section" x="1295" y="725">Alibaba Cloud ECS</text>
+  <text class="small" x="1295" y="780">Docker Compose stack</text>
+  <text class="small" x="1295" y="812">aftershock container on 8788</text>
+  <text class="small" x="1295" y="844">Caddy HTTPS front door</text>
+  <text class="small" x="1295" y="876">Public URL:</text>
+  <text class="label" x="1295" y="914">aftershock.redoubtlabs.dev</text>
+  <text class="tiny" x="1295" y="962">Mutating endpoints protected by observatory token</text>
+
+  <path class="arrow" d="M520 350 C590 350, 620 350, 690 350" />
+  <text class="tiny" x="548" y="330">observations</text>
+  <text class="tiny" x="548" y="385">JSON actions</text>
+
+  <path class="arrow" d="M1160 350 C1215 350, 1225 350, 1280 350" />
+  <text class="tiny" x="1184" y="330">world builder</text>
+
+  <path class="arrow" d="M925 535 L925 695" />
+  <text class="tiny" x="945" y="620">run records + live state</text>
+
+  <path class="arrow" d="M760 842 C705 842, 705 842, 650 842" />
+  <text class="tiny" x="670" y="822">REST + WebSocket</text>
+
+  <path class="arrow" d="M1115 842 C1180 842, 1195 842, 1260 842" />
+  <text class="tiny" x="1148" y="822">Docker network</text>
+
+  <path class="arrow dash" d="M435 695 C435 610, 690 610, 690 445" />
+  <text class="tiny" x="460" y="610">start live run / inject event</text>
+
+  <path class="arrow dash" d="M1495 675 C1495 585, 1495 585, 1495 495" />
+  <text class="tiny" x="1515" y="590">committed scenario data</text>
+
+  <text class="small" x="90" y="1110">Judging requirements covered: Qwen Cloud API usage, Alibaba Cloud deployment, public GitHub repo, replayable benchmark evidence, real-data provenance.</text>
+</svg>

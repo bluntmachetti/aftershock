@@ -107,9 +107,7 @@ describe('AAR fetch state handling', () => {
 // ---- Key-moment cursor-jump action ----
 
 describe('key-moment cursor-jump', () => {
-  // The jump logic used in MapTab:
-  //   const idx = timeline.ticks.findIndex((t) => t.tick === tickNumber)
-  //   if (idx !== -1) dispatch({ type: 'SET_CURSOR', cursor: idx })
+  // Mirrors the cursor-jump used in MapTab: find the tick index by tick number, then SET_CURSOR.
   function jumpToTick(state: TimelineState, tickNumber: number): TimelineState {
     const idx = state.ticks.findIndex((t) => t.tick === tickNumber)
     if (idx === -1) return state

@@ -7,7 +7,10 @@ services:
     ports:
       - "127.0.0.1:8788:8788"
     env_file:
-      - .env            # DASHSCOPE_API_KEY=... (gitignored; required for live LLM runs)
+      # Optional: copy .env.example to .env for live LLM runs (DASHSCOPE_API_KEY) and the
+      # observatory token. A fresh clone runs without it (scripted arm + recorded-run replay).
+      - path: .env
+        required: false
     environment:
       OBSERVATORY_ORIGIN: ${OBSERVATORY_ORIGIN:-http://127.0.0.1:8788}
     volumes:
