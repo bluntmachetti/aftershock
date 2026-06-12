@@ -1,6 +1,9 @@
-# When does a society of small Qwen models beat one big model? Building Aftershock.
-
-*2026-06-12 · Qwen Cloud Global AI Hackathon — Agent Society track*
+---
+layout: post
+title: "When does a society of small Qwen models beat one big model? Building Aftershock."
+date: 2026-06-12 09:00:00 -0700
+description: "The build journey of Aftershock — cost-tiered cognition on Qwen Cloud, a +28-lives coordination result, the honest negative results, and a real NYC Hurricane Ida scenario."
+---
 
 Most multi-agent demos are theater. Agents take turns talking, politely agree with each
 other, duplicate half the work, and somewhere off-camera a single strong model with a decent

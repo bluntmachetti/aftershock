@@ -1,20 +1,19 @@
 # Aftershock — build blog
 
-The journey of building **Aftershock**, a disaster-response society of Qwen agents, for the
-Qwen Cloud Global AI Hackathon — progress, architecture decisions, and what the numbers
-(including the negative results) actually said.
+The build journey of [**Aftershock**](https://github.com/bluntmachetti/aftershock), a
+disaster-response society of Qwen agents, for the Qwen Cloud Global AI Hackathon.
 
-- Live demo: <https://aftershock.redoubtlabs.dev>
-- Code: <https://github.com/bluntmachetti/aftershock>
+**📖 Read the rendered blog → <https://bluntmachetti.github.io/aftershock/>**
+
+This folder is the Jekyll source for that site (built to GitHub Pages by
+[`.github/workflows/pages.yml`](../.github/workflows/pages.yml)):
+
+- `index.md` — site home
+- `_posts/` — blog entries
+- `_config.yml` — Jekyll config
 
 ## Posts
 
-- **2026-06-12 — [When does a society of small Qwen models beat one big model? Building Aftershock.](2026-06-12-building-an-agent-society-on-qwen-cloud.md)**
-  The bet, why Qwen Cloud's tiered models (`qwen3.5-flash` / `qwen3.5-plus` / `qwen3-max`) made the
-  architecture economical, the headline result (+28 lives from the coordination protocol; small
-  models matching `qwen3-max` at a third less cost), the honest negative results, and the real
-  NYC Hurricane Ida scenario.
+- **2026-06-12 — [When does a society of small Qwen models beat one big model? Building Aftershock.](_posts/2026-06-12-building-an-agent-society-on-qwen-cloud.md)**
 
----
-
-*New entries are added here as the project hits milestones.*
+Live demo: <https://aftershock.redoubtlabs.dev> · Code: <https://github.com/bluntmachetti/aftershock>

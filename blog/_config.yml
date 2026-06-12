@@ -1,0 +1,17 @@
+title: "Aftershock — build blog"
+description: >-
+  Building a disaster-response society of Qwen agents for the Qwen Cloud Global AI Hackathon —
+  progress, architecture decisions, and what the numbers (including the negative results) said.
+theme: minima
+minima:
+  skin: dark
+url: "https://bluntmachetti.github.io"
+baseurl: "/aftershock"
+author:
+  name: "bluntmachetti"
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
+# README.md is for the GitHub folder view; the live site home is index.md.
+exclude:
+  - README.md
