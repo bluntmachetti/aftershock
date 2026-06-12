@@ -3,11 +3,12 @@
 **A disaster-struck town run by a society of Qwen agents that split tasks, negotiate scarce
 rescue resources, and measurably beat a single big model on lives saved per dollar.**
 
-An earthquake hits a simulated town. Missions appear — a collapsed school with people trapped,
-a hospital running on six hours of generator fuel. A society of AI agents with distinct
+A disaster hits a simulated city. Missions appear — flooded neighborhoods, a collapsed school
+with people trapped, a hospital running on generator fuel. A society of AI agents with distinct
 capabilities (incident commander, medical, fire & rescue, logistics, infrastructure, public
-comms) must divide the work, negotiate over scarce resources, and save as many lives as
-possible before deadlines expire.
+comms) must divide the work, negotiate over scarce resources, and save as many lives as possible
+before deadlines expire. Synthetic disasters drive the benchmark; committed real-data scenario
+packs let the observatory replay real incident demand while keeping outcomes explicitly simulated.
 
 Aftershock is two things:
 
@@ -22,6 +23,25 @@ Aftershock is two things:
    cost per run.
 
 Built for the Qwen Cloud Global AI Hackathon (Agent Society track).
+
+## Current status
+
+Aftershock is a working end-to-end prototype:
+
+- Deterministic Python simulation kernel and four-arm benchmark: `scripted`, `solo`, `swarm`,
+  `society`.
+- Qwen-backed agent society using DashScope models, with token/cost accounting and after-action
+  reporting.
+- React observatory served by FastAPI, including map replay, live runs, benchmark comparison,
+  scenario provenance, and real-vs-sim latency strips.
+- MCP spectator server for browsing run records and injecting live events.
+- Real-data scenario packs committed under `scenarios/`, including the headline NYC Hurricane Ida
+  pack.
+- Docker deployment with Caddy HTTPS front door. The current public deployment is:
+  <https://aftershock.redoubtlabs.dev>
+
+The public deployment requires an observatory token for mutating live-run endpoints; read-only
+surfaces such as recorded runs and scenario metadata are public.
 
 ## Results (live benchmark, 2026-06-11)
 
@@ -65,6 +85,18 @@ scenario surface carries `REAL / MAPPED / INFERRED / SYNTHETIC` provenance and a
 the compiler runs offline so determinism is preserved (same pack + seed = byte-identical run).
 Run one with `aftershock run --scenario nyc-ida-2021` and watch the observatory's reality strip.
 
+The flagship real-data pack is **NYC Hurricane Ida, night of 2021-09-01**:
+
+- Source data: FDNY EMS Incident Dispatch Data (`76xm-jjuj`) and Fire Incident Dispatch Data
+  (`8m42-w767`) via NYC Open Data.
+- Window: `2021-09-01T18:00:00-04:00` to `2021-09-02T06:00:00-04:00`.
+- Real demand sample: 16 scenario missions stratified from 2,212 filtered EMS/fire incidents.
+- Real surge signal: 2,003 EMS rows in the Ida window, ~16.5% held, 948 s mean first-on-scene.
+- Calm comparison window: 2021-08-18 18:00 to 2021-08-19 06:00 EDT, 524 s mean first-on-scene,
+  4.2% held.
+- Honesty contract: demand and latency baseline are real; mission kinds/severity are mapped;
+  lives at risk are inferred; blockages and outcomes are simulated.
+
 Shipped packs (see each pack's `README.md` and `docs/DESIGN.md` §"Real-data scenario packs"):
 
 - **`nyc-ida-2021`** — Hurricane Ida over NYC, night of 2021-09-01 (the real surge: ~16.5% of EMS
@@ -93,6 +125,15 @@ uv run aftershock run --seed 42 --ticks 60 --arm scripted
 uv run aftershock verify --seed 42   # determinism self-check: two runs, identical digests
 uv run pytest
 ```
+
+Run the NYC Ida scenario locally:
+
+```bash
+uv run aftershock run --scenario nyc-ida-2021 --arm society --seed 4636
+uv run aftershock serve --runs-dir runs --port 8788
+```
+
+For a local no-LLM smoke test, use `--arm scripted` instead of `--arm society`.
 
 ## License
 
