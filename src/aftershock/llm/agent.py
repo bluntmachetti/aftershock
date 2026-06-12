@@ -6,9 +6,12 @@ IDs           = f"{agent_id}-t{tick}-{i}" (decisions) / f"{agent_id}-t{tick}-p{i
 Identity      = forced on every decision/proposal/response produced
 Inbox filter  = ProposalResponse entries whose proposal_id is not in inbox are dropped
 Errors        = AgentResponse(error=...) with usage attached when available — never raises
+Tool mode     = when role.use_tools, calls provider with tools, maps via tool_mapper
 """
 
 from __future__ import annotations
+
+from collections.abc import Callable
 
 from aftershock.kernel.agents import Agent
 from aftershock.kernel.protocol import (
@@ -35,11 +38,15 @@ class LLMAgent(Agent):
         role: RoleSpec,
         provider: Provider,
         contract: str,
+        tool_defs: list[dict] | None = None,
+        tool_mapper: Callable[..., AgentResponse] | None = None,
     ) -> None:
         super().__init__(agent_id, role.name)
         self._role = role
         self._provider = provider
         self._system = role.system_prompt + "\n\n" + contract
+        self._tool_defs = tool_defs
+        self._tool_mapper = tool_mapper
 
     async def act(self, observation: Observation) -> AgentResponse:
         """Call the provider, parse output, return a fully typed AgentResponse.
@@ -49,19 +56,41 @@ class LLMAgent(Agent):
         """
         tick = observation.tick
         user = render_observation(observation)
+        inbox_ids: frozenset[str] = frozenset(p.proposal_id for p in observation.inbox)
 
-        # --- Provider call ---
         usage: TokenUsage | None = None
         try:
-            result = await self._provider.chat(
-                model=self._role.model,
-                system=self._system,
-                user=user,
-                temperature=self._role.temperature,
-                json_mode=True,
-            )
-            usage = result.usage
-            text = result.text
+            if self._role.use_tools:
+                if not self._tool_defs or not self._tool_mapper:
+                    return AgentResponse(
+                        agent_id=self.agent_id,
+                        error="tool mode: role configured for tools but no "
+                        "tool_defs or tool_mapper provided",
+                    )
+                result = await self._provider.chat(
+                    model=self._role.model,
+                    system=self._system,
+                    user=user,
+                    temperature=self._role.temperature,
+                    json_mode=False,
+                    tools=self._tool_defs,
+                    tool_choice="auto",
+                )
+                usage = result.usage
+                response = self._tool_mapper(
+                    result.tool_calls or [], self.agent_id, tick, inbox_ids
+                )
+                return response.model_copy(update={"usage": usage})
+            else:
+                result = await self._provider.chat(
+                    model=self._role.model,
+                    system=self._system,
+                    user=user,
+                    temperature=self._role.temperature,
+                    json_mode=True,
+                )
+                usage = result.usage
+                text = result.text
         except Exception as exc:  # spec: act() must never raise (DESIGN.md:450)
             return AgentResponse(
                 agent_id=self.agent_id,

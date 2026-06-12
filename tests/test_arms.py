@@ -158,6 +158,7 @@ def test_swarm_temperatures() -> None:
 
 def test_swarm_uses_default_resolver() -> None:
     from aftershock.kernel.negotiation import DefaultResolver
+
     setup = build_arm("swarm", _SEED, _mock())
     assert isinstance(setup.resolver, DefaultResolver)
 
@@ -175,6 +176,7 @@ def test_swarm_society_uses_town_society() -> None:
 def test_swarm_contracts_no_proposals_schema() -> None:
     """Swarm contracts must not contain proposals or responses schema fields."""
     from aftershock.llm.agent import LLMAgent
+
     setup = build_arm("swarm", _SEED, _mock())
     for agent_id, agent in setup.agents.items():
         assert isinstance(agent, LLMAgent)
@@ -191,6 +193,7 @@ def test_swarm_contracts_no_proposals_schema() -> None:
 def test_swarm_contracts_no_proposals_rule() -> None:
     """Swarm contracts must contain the no-proposals hard rule."""
     from aftershock.llm.agent import LLMAgent
+
     setup = build_arm("swarm", _SEED, _mock())
     for agent_id, agent in setup.agents.items():
         assert isinstance(agent, LLMAgent)
@@ -219,7 +222,11 @@ def test_solo_all_five_decisions() -> None:
     setup = build_arm("solo", _SEED, _mock())
     role = setup.roles["solo"]
     assert set(role.allowed_decisions) == {
-        "dispatch", "recall", "set_priority", "repair_road", "broadcast"
+        "dispatch",
+        "recall",
+        "set_priority",
+        "repair_road",
+        "broadcast",
     }
 
 
@@ -235,6 +242,7 @@ def test_solo_temperature() -> None:
 
 def test_solo_uses_default_resolver() -> None:
     from aftershock.kernel.negotiation import DefaultResolver
+
     setup = build_arm("solo", _SEED, _mock())
     assert isinstance(setup.resolver, DefaultResolver)
 
@@ -247,6 +255,7 @@ def test_solo_timeout() -> None:
 def test_solo_contract_no_proposals_schema() -> None:
     """Solo contract must not contain proposals or responses schema fields."""
     from aftershock.llm.agent import LLMAgent
+
     setup = build_arm("solo", _SEED, _mock())
     agent = setup.agents["solo"]
     assert isinstance(agent, LLMAgent)
@@ -258,6 +267,7 @@ def test_solo_contract_no_proposals_schema() -> None:
 def test_solo_contract_no_proposals_rule() -> None:
     """Solo contract must contain the no-proposals hard rule."""
     from aftershock.llm.agent import LLMAgent
+
     setup = build_arm("solo", _SEED, _mock())
     agent = setup.agents["solo"]
     assert isinstance(agent, LLMAgent)
@@ -283,7 +293,12 @@ def test_society_six_agents() -> None:
 def test_society_agent_ids() -> None:
     setup = build_arm("society", _SEED, _mock())
     assert set(setup.agents) == {
-        "commander", "comms", "fire", "infrastructure", "medical", "rescue"
+        "commander",
+        "comms",
+        "fire",
+        "infrastructure",
+        "medical",
+        "rescue",
     }
 
 
@@ -301,17 +316,22 @@ def test_society_uses_town_resolver() -> None:
 
 
 def test_society_contracts_include_proposals_schema() -> None:
-    """Society contracts must contain proposals and responses schema fields."""
+    """Society contracts must contain tool-calling guidance (tool mode) or proposals
+    and responses schema fields (JSON mode)."""
     from aftershock.llm.agent import LLMAgent
+
     setup = build_arm("society", _SEED, _mock())
     for agent_id, agent in setup.agents.items():
         assert isinstance(agent, LLMAgent)
         contract = agent._system
-        assert '"proposals"' in contract, (
-            f"society agent {agent_id!r} contract must contain proposals schema"
+        assert "no_op" in contract, (
+            f"society agent {agent_id!r} contract must mention no_op idle tool"
         )
-        assert '"responses"' in contract, (
-            f"society agent {agent_id!r} contract must contain responses schema"
+        assert "propose_resource_request" in contract, (
+            f"society agent {agent_id!r} contract must mention proposal tools"
+        )
+        assert "accept_proposal" in contract, (
+            f"society agent {agent_id!r} contract must mention inbox response tools"
         )
 
 

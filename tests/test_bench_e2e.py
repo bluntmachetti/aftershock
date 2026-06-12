@@ -32,9 +32,7 @@ from aftershock.llm.provider import MockProvider  # noqa: F401 — used via _pat
 def _parse_missions_from_text(text: str) -> list[dict[str, Any]]:
     """Parse mission rows from the rendered observation text."""
     missions: list[dict[str, Any]] = []
-    row_re = re.compile(
-        r"^\s+(m\d+)\s+(\S+)\s+\S+\s+(\d+)\s+\d+\s+(-?\d+)\s+(\d+)\s+(.*?)$"
-    )
+    row_re = re.compile(r"^\s+(m\d+)\s+(\S+)\s+\S+\s+(\d+)\s+\d+\s+(-?\d+)\s+(\d+)\s+(.*?)$")
     for line in text.splitlines():
         m = row_re.match(line)
         if m:
@@ -52,14 +50,16 @@ def _parse_missions_from_text(text: str) -> list[dict[str, Any]]:
                     with contextlib.suppress(ValueError):
                         assigned[res] = int(got_s)
                         required[res] = int(need_s)
-            missions.append({
-                "id": mid,
-                "kind": kind,
-                "deadline_in": dl_in,
-                "priority": pri,
-                "assigned": assigned,
-                "required": required,
-            })
+            missions.append(
+                {
+                    "id": mid,
+                    "kind": kind,
+                    "deadline_in": dl_in,
+                    "priority": pri,
+                    "assigned": assigned,
+                    "required": required,
+                }
+            )
     return missions
 
 
@@ -134,35 +134,41 @@ def _build_mock_response(model: str, system: str, user: str) -> str:  # noqa: AR
                     pid = prop_m.group(1)
                     kind_str = prop_m.group(2)
                     if "escalation" in kind_str.lower():
-                        responses.append({
-                            "proposal_id": pid,
-                            "accept": True,
-                            "note": "acknowledged",
-                        })
+                        responses.append(
+                            {
+                                "proposal_id": pid,
+                                "accept": True,
+                                "note": "acknowledged",
+                            }
+                        )
 
         for m in missions:
             if m["priority"] == 0:
                 dl_in = m["deadline_in"]
                 urgency_bonus = 2 if dl_in <= 6 else 0
                 priority = min(10, 4 + urgency_bonus)
-                decisions.append({
-                    "decision_type": "set_priority",
-                    "params": {"mission_id": m["id"], "priority": priority},
-                    "rationale": "initial triage",
-                })
+                decisions.append(
+                    {
+                        "decision_type": "set_priority",
+                        "params": {"mission_id": m["id"], "priority": priority},
+                        "rationale": "initial triage",
+                    }
+                )
 
     elif agent_role == "comms":
         if panic > 0.4:
-            decisions.append({
-                "decision_type": "broadcast",
-                "params": {
-                    "message": (
-                        "Emergency services are responding. "
-                        "Please remain calm and follow instructions."
-                    ),
-                },
-                "rationale": "reduce panic",
-            })
+            decisions.append(
+                {
+                    "decision_type": "broadcast",
+                    "params": {
+                        "message": (
+                            "Emergency services are responding. "
+                            "Please remain calm and follow instructions."
+                        ),
+                    },
+                    "rationale": "reduce panic",
+                }
+            )
 
     elif agent_role == "infrastructure":
         for m in missions:
@@ -175,24 +181,28 @@ def _build_mock_response(model: str, system: str, user: str) -> str:  # noqa: AR
                     qty = min(needed, avail)
                     dl_in = m["deadline_in"]
                     urgency = 10 if dl_in <= 2 else (8 if dl_in <= 4 else 5)
-                    proposals.append({
-                        "kind": "resource_request",
-                        "recipient": None,
-                        "body": {
-                            "mission_id": m["id"],
-                            "resource": res,
-                            "qty": qty,
-                            "urgency": urgency,
-                        },
-                    })
+                    proposals.append(
+                        {
+                            "kind": "resource_request",
+                            "recipient": None,
+                            "body": {
+                                "mission_id": m["id"],
+                                "resource": res,
+                                "qty": qty,
+                                "urgency": urgency,
+                            },
+                        }
+                    )
         repair_avail = pools.get("repair_crew", 0)
         for district in sorted(blocked):
             if repair_avail > 0:
-                decisions.append({
-                    "decision_type": "repair_road",
-                    "params": {"district_id": district},
-                    "rationale": "unblock road",
-                })
+                decisions.append(
+                    {
+                        "decision_type": "repair_road",
+                        "params": {"district_id": district},
+                        "rationale": "unblock road",
+                    }
+                )
                 repair_avail -= 1
 
     else:
@@ -219,30 +229,82 @@ def _build_mock_response(model: str, system: str, user: str) -> str:  # noqa: AR
                     qty = min(needed, avail)
                     dl_in = m["deadline_in"]
                     urgency = 10 if dl_in <= 2 else (8 if dl_in <= 4 else 5)
-                    proposals.append({
-                        "kind": "resource_request",
-                        "recipient": None,
-                        "body": {
-                            "mission_id": m["id"],
-                            "resource": res,
-                            "qty": qty,
-                            "urgency": urgency,
-                        },
-                    })
+                    proposals.append(
+                        {
+                            "kind": "resource_request",
+                            "recipient": None,
+                            "body": {
+                                "mission_id": m["id"],
+                                "resource": res,
+                                "qty": qty,
+                                "urgency": urgency,
+                            },
+                        }
+                    )
 
     for pid in inbox_ids:
         if not any(r["proposal_id"] == pid for r in responses):
-            responses.append({
-                "proposal_id": pid,
-                "accept": True,
-                "note": "acknowledged",
-            })
+            responses.append(
+                {
+                    "proposal_id": pid,
+                    "accept": True,
+                    "note": "acknowledged",
+                }
+            )
 
-    return json.dumps({
-        "decisions": decisions,
-        "proposals": proposals,
-        "responses": responses,
-    })
+    tool_calls: list[dict[str, Any]] = []
+
+    for decision in decisions:
+        tool_calls.append(
+            {
+                "function": {
+                    "name": decision["decision_type"],
+                    "arguments": json.dumps(
+                        {
+                            **decision["params"],
+                            "rationale": decision.get("rationale", ""),
+                        }
+                    ),
+                }
+            }
+        )
+
+    for proposal in proposals:
+        tool_calls.append(
+            {
+                "function": {
+                    "name": f"propose_{proposal['kind']}",
+                    "arguments": json.dumps(proposal["body"]),
+                }
+            }
+        )
+
+    for response in responses:
+        tool_calls.append(
+            {
+                "function": {
+                    "name": "accept_proposal",
+                    "arguments": json.dumps(
+                        {
+                            "proposal_id": response["proposal_id"],
+                            "note": response.get("note", ""),
+                        }
+                    ),
+                }
+            }
+        )
+
+    if not tool_calls:
+        tool_calls.append(
+            {
+                "function": {
+                    "name": "no_op",
+                    "arguments": json.dumps({"rationale": "nothing to do"}),
+                }
+            }
+        )
+
+    return {"tool_calls": tool_calls}
 
 
 # ---------------------------------------------------------------------------

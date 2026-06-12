@@ -49,6 +49,11 @@ Four arms, identical seeded worlds (5 paired seeds × 60-tick budget), real Qwen
 calls. Full tables in [bench/results/2026-06-11/](bench/results/2026-06-11/RESULTS.md);
 reproduce with `aftershock bench`.
 
+*Note: As of 2026-06-12, the society arm uses Qwen Cloud native function calling
+(tools/tool_choice) instead of JSON-mode prompting. The benchmark results above were
+produced with JSON-mode prompting (pre-tool-calling). A re-benchmark with the new
+tool-calling path is pending.*
+
 | arm | coordination | models | lives saved (mean±sd) | missions failed | cost/run | lives per $ |
 |---|---|---|---|---|---|---|
 | **society** | negotiation protocol | flash ×5 + plus commander | 103.2 ± 23.6 | 0.4 | $0.042 | **2441** |

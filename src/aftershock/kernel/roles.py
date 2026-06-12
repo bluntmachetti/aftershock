@@ -24,6 +24,7 @@ class RoleSpec(Frozen):
     system_prompt: str = ""
     model: str = ""
     temperature: float = 0.3
+    use_tools: bool = False
 
 
 def load_roles(path: Path) -> dict[str, RoleSpec]:
