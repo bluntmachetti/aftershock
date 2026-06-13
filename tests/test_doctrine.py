@@ -23,13 +23,25 @@ DOCTRINE_YAML = Path(__file__).parent.parent / "src" / "aftershock" / "town" / "
 # ---------------------------------------------------------------------------
 
 EXPECTED_IDS = {
-    "T1", "T2", "T3", "T4", "T5", "T6",
-    "C1", "C2", "C3",
-    "M1", "M2",
-    "R1", "R2",
-    "F1", "F2",
-    "I1", "I2",
-    "X1", "X2",
+    "T1",
+    "T2",
+    "T3",
+    "T4",
+    "T5",
+    "T6",
+    "C1",
+    "C2",
+    "C3",
+    "M1",
+    "M2",
+    "R1",
+    "R2",
+    "F1",
+    "F2",
+    "I1",
+    "I2",
+    "X1",
+    "X2",
 }
 
 # T1..T6 (6) + C1..C3 (3) + M1..M2 (2) + R1..R2 (2) + F1..F2 (2) + I1..I2 (2) + X1..X2 (2) = 19
@@ -232,9 +244,8 @@ def test_build_llm_agents_commander_system_prompt_has_contract(roles: dict) -> N
     agents = build_llm_agents(roles, provider, arm="society")
     commander_agent = agents["commander"]
     system = commander_agent._system  # type: ignore[attr-defined]
-    # Contract always contains "JSON" (DashScope requirement) and "Hard Rules"
-    assert "JSON" in system
-    assert "Hard Rules" in system
+    assert "no_op" in system
+    assert "propose_resource_request" in system
 
 
 def test_build_llm_agents_commander_system_prompt_has_lessons(roles: dict) -> None:
@@ -256,7 +267,7 @@ def test_build_llm_agents_lessons_order_doctrine_then_lessons_then_contract(role
     system = agents["commander"]._system  # type: ignore[attr-defined]
     doctrine_pos = system.index("TEAM DOCTRINE:")
     lessons_pos = system.index("LESSONS FROM PREVIOUS DISASTERS")
-    contract_pos = system.index("## Output Format")
+    contract_pos = system.index("## How to Act")
     assert doctrine_pos < lessons_pos < contract_pos, (
         "Expected order: doctrine < lessons < contract"
     )

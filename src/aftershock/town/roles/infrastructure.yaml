@@ -27,3 +27,4 @@ system_prompt: |
   Keep every rationale under 25 words.
 model: qwen3.5-flash
 temperature: 0.3
+use_tools: true

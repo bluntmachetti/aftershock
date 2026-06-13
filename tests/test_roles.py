@@ -159,3 +159,33 @@ def test_load_roles_full_spec(tmp_path: Path) -> None:
     assert spec.system_prompt == "You manage fire missions."
     assert spec.model == "qwen-plus"
     assert spec.temperature == 0.1
+
+
+def test_use_tools_defaults_false() -> None:
+    spec = RoleSpec(name="test")
+    assert spec.use_tools is False
+
+
+def test_use_tools_loads_from_yaml(tmp_path: Path) -> None:
+    write_role(
+        tmp_path,
+        "tool_role.yaml",
+        {
+            "name": "tool_role",
+            "use_tools": True,
+        },
+    )
+    roles = load_roles(tmp_path)
+    assert roles["tool_role"].use_tools is True
+
+
+def test_use_tools_loads_false_from_yaml(tmp_path: Path) -> None:
+    write_role(
+        tmp_path,
+        "plain_role.yaml",
+        {
+            "name": "plain_role",
+        },
+    )
+    roles = load_roles(tmp_path)
+    assert roles["plain_role"].use_tools is False

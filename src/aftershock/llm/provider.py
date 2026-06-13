@@ -7,6 +7,7 @@ retries, and request shaping live in exactly one place.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -43,6 +44,7 @@ def _compute_cost(model: str, prompt_tokens: int, completion_tokens: int) -> flo
 class ChatResult:
     text: str
     usage: TokenUsage  # cost_usd computed from MODEL_PRICES (unknown model -> 0.0)
+    tool_calls: list[dict] | None = None
 
 
 class Provider(Protocol):
@@ -54,6 +56,8 @@ class Provider(Protocol):
         user: str,
         temperature: float,
         json_mode: bool = True,
+        tools: list[dict] | None = None,
+        tool_choice: str | None = None,
     ) -> ChatResult: ...
 
 
@@ -101,6 +105,8 @@ class QwenProvider:
         user: str,
         temperature: float,
         json_mode: bool = True,
+        tools: list[dict] | None = None,
+        tool_choice: str | None = None,
     ) -> ChatResult:
         body: dict[str, Any] = {
             "model": model,
@@ -110,8 +116,12 @@ class QwenProvider:
             ],
             "temperature": temperature,
         }
-        if json_mode:
-            # DashScope JSON-mode rules: response_format + disable thinking; never max_tokens
+        if tools:
+            body["tools"] = tools
+            body["tool_choice"] = tool_choice or "auto"
+            body["parallel_tool_calls"] = True
+            body["enable_thinking"] = False
+        elif json_mode:
             body["response_format"] = {"type": "json_object"}
             body["enable_thinking"] = False
 
@@ -138,12 +148,12 @@ class QwenProvider:
                     continue
 
                 if resp.status_code != 200:
-                    raise ProviderError(
-                        f"Unexpected HTTP {resp.status_code}: {resp.text[:200]}"
-                    )
+                    raise ProviderError(f"Unexpected HTTP {resp.status_code}: {resp.text[:200]}")
 
                 data = resp.json()
-                text: str = data["choices"][0]["message"]["content"]
+                message = data["choices"][0]["message"]
+                tool_calls: list[dict] | None = message.get("tool_calls")
+                text: str = "" if tool_calls else (message.get("content", "") or "")
                 usage_data = data.get("usage", {})
                 prompt_tokens: int = usage_data.get("prompt_tokens", 0)
                 completion_tokens: int = usage_data.get("completion_tokens", 0)
@@ -154,7 +164,7 @@ class QwenProvider:
                     cost_usd=cost,
                     model=model,
                 )
-                return ChatResult(text=text, usage=usage)
+                return ChatResult(text=text, usage=usage, tool_calls=tool_calls)
 
         raise ProviderError(
             f"All {self._max_retries + 1} attempts failed. Last error: {last_error}"
@@ -164,7 +174,9 @@ class QwenProvider:
 class MockProvider:
     """Scripted provider for offline tests. Records every call in .calls."""
 
-    def __init__(self, script: list[str] | Callable[[str, str, str], str]) -> None:
+    def __init__(
+        self, script: list[str | dict] | Callable[[str, str, str], str | dict]
+    ) -> None:
         self._script = script
         self._index = 0
         self.calls: list[tuple[str, str, str]] = []
@@ -177,20 +189,31 @@ class MockProvider:
         user: str,
         temperature: float,  # noqa: ARG002
         json_mode: bool = True,  # noqa: ARG002
+        tools: list[dict] | None = None,  # noqa: ARG002
+        tool_choice: str | None = None,  # noqa: ARG002
     ) -> ChatResult:
         self.calls.append((model, system, user))
 
         if callable(self._script):
-            text = self._script(model, system, user)
+            entry = self._script(model, system, user)
         else:
             if self._index >= len(self._script):
                 raise ProviderError("MockProvider script exhausted")
-            text = self._script[self._index]
+            entry = self._script[self._index]
             self._index += 1
 
-        # Fabricate plausible token counts: len//4 each for prompt and completion
-        prompt_tokens = len(system) // 4
-        completion_tokens = len(text) // 4
+        if isinstance(entry, dict) and "tool_calls" in entry:
+            tool_calls = entry["tool_calls"]
+            text = ""
+            prompt_tokens = len(system) // 4
+            completion_tokens = (
+                sum(len(json.dumps(tc)) for tc in tool_calls) // 4 if tool_calls else 1
+            )
+        else:
+            text = str(entry) if isinstance(entry, str) else json.dumps(entry)
+            tool_calls = None
+            prompt_tokens = len(system) // 4
+            completion_tokens = len(text) // 4
         cost = _compute_cost(model, prompt_tokens, completion_tokens)
         usage = TokenUsage(
             prompt_tokens=prompt_tokens,
@@ -198,4 +221,4 @@ class MockProvider:
             cost_usd=cost,
             model=model,
         )
-        return ChatResult(text=text, usage=usage)
+        return ChatResult(text=text, usage=usage, tool_calls=tool_calls)

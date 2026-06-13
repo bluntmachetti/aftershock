@@ -13,6 +13,7 @@ import pytest
 
 from aftershock.kernel.agents import Agent
 from aftershock.kernel.protocol import (
+    AgentResponse,
     Observation,
     Proposal,
     ProposalKind,
@@ -31,10 +32,12 @@ _ROLES_DIR = Path(__file__).parent.parent / "src" / "aftershock" / "town" / "rol
 
 def _make_role(
     name: str = "medical",
+    *,
     allowed_decisions: tuple[str, ...] = ("recall",),
     model: str = "qwen3.5-flash",
     temperature: float = 0.3,
     system_prompt: str = "You are a test agent.",
+    use_tools: bool = False,
 ) -> RoleSpec:
     return RoleSpec(
         name=name,
@@ -44,6 +47,7 @@ def _make_role(
         system_prompt=system_prompt,
         model=model,
         temperature=temperature,
+        use_tools=use_tools,
     )
 
 
@@ -94,17 +98,19 @@ def _valid_json_response(**extra: Any) -> str:
 @pytest.mark.asyncio
 async def test_valid_response_decisions_mapped() -> None:
     """LLMAgent maps decisions with correct ids and forced agent_id."""
-    response_json = json.dumps({
-        "decisions": [
-            {
-                "decision_type": "recall",
-                "params": {"mission_id": "m1", "resource": "ambulance", "qty": 1},
-                "rationale": "no longer needed",
-            },
-        ],
-        "proposals": [],
-        "responses": [],
-    })
+    response_json = json.dumps(
+        {
+            "decisions": [
+                {
+                    "decision_type": "recall",
+                    "params": {"mission_id": "m1", "resource": "ambulance", "qty": 1},
+                    "rationale": "no longer needed",
+                },
+            ],
+            "proposals": [],
+            "responses": [],
+        }
+    )
     provider = MockProvider(script=[response_json])
     role = _make_role()
     agent = LLMAgent("medical", role, provider, "")
@@ -125,17 +131,19 @@ async def test_valid_response_decisions_mapped() -> None:
 @pytest.mark.asyncio
 async def test_valid_response_proposals_mapped() -> None:
     """LLMAgent maps proposals with correct ids and forced sender."""
-    response_json = json.dumps({
-        "decisions": [],
-        "proposals": [
-            {
-                "kind": "resource_request",
-                "recipient": None,
-                "body": {"mission_id": "m2", "resource": "ambulance", "qty": 1, "urgency": 7},
-            },
-        ],
-        "responses": [],
-    })
+    response_json = json.dumps(
+        {
+            "decisions": [],
+            "proposals": [
+                {
+                    "kind": "resource_request",
+                    "recipient": None,
+                    "body": {"mission_id": "m2", "resource": "ambulance", "qty": 1, "urgency": 7},
+                },
+            ],
+            "responses": [],
+        }
+    )
     provider = MockProvider(script=[response_json])
     role = _make_role()
     agent = LLMAgent("medical", role, provider, "")
@@ -162,14 +170,16 @@ async def test_inbox_filtering_drops_unknown_proposal_ids() -> None:
         kind=ProposalKind.ESCALATION,
         body={"mission_id": "m1", "why": "urgent"},
     )
-    response_json = json.dumps({
-        "decisions": [],
-        "proposals": [],
-        "responses": [
-            {"proposal_id": "commander-t1-p0", "accept": True, "note": "ok"},
-            {"proposal_id": "invented-id-99", "accept": False, "note": "bad"},
-        ],
-    })
+    response_json = json.dumps(
+        {
+            "decisions": [],
+            "proposals": [],
+            "responses": [
+                {"proposal_id": "commander-t1-p0", "accept": True, "note": "ok"},
+                {"proposal_id": "invented-id-99", "accept": False, "note": "bad"},
+            ],
+        }
+    )
     provider = MockProvider(script=[response_json])
     role = _make_role()
     agent = LLMAgent("medical", role, provider, "")
@@ -187,16 +197,18 @@ async def test_inbox_filtering_drops_unknown_proposal_ids() -> None:
 @pytest.mark.asyncio
 async def test_identity_forced_on_decisions() -> None:
     """agent_id is forced on decisions regardless of what LLM emits."""
-    response_json = json.dumps({
-        "decisions": [
-            {
-                "decision_type": "recall",
-                "params": {"mission_id": "m1", "resource": "ambulance", "qty": 1},
-            },
-        ],
-        "proposals": [],
-        "responses": [],
-    })
+    response_json = json.dumps(
+        {
+            "decisions": [
+                {
+                    "decision_type": "recall",
+                    "params": {"mission_id": "m1", "resource": "ambulance", "qty": 1},
+                },
+            ],
+            "proposals": [],
+            "responses": [],
+        }
+    )
     provider = MockProvider(script=[response_json])
     role = _make_role()
     agent = LLMAgent("medical", role, provider, "")
@@ -210,17 +222,19 @@ async def test_identity_forced_on_decisions() -> None:
 @pytest.mark.asyncio
 async def test_identity_forced_on_proposals() -> None:
     """sender is forced on proposals regardless of what LLM emits."""
-    response_json = json.dumps({
-        "decisions": [],
-        "proposals": [
-            {
-                "kind": "resource_request",
-                "recipient": None,
-                "body": {"mission_id": "m1", "resource": "ambulance", "qty": 1, "urgency": 5},
-            },
-        ],
-        "responses": [],
-    })
+    response_json = json.dumps(
+        {
+            "decisions": [],
+            "proposals": [
+                {
+                    "kind": "resource_request",
+                    "recipient": None,
+                    "body": {"mission_id": "m1", "resource": "ambulance", "qty": 1, "urgency": 5},
+                },
+            ],
+            "responses": [],
+        }
+    )
     provider = MockProvider(script=[response_json])
     role = _make_role()
     agent = LLMAgent("medical", role, provider, "")
@@ -290,6 +304,7 @@ async def test_parse_failure_empty_collections() -> None:
 @pytest.mark.asyncio
 async def test_provider_error_returns_error_response() -> None:
     """Provider failure returns AgentResponse with error, no usage."""
+
     def _always_raise(model: str, system: str, user: str) -> str:
         raise ProviderError("connection refused")
 
@@ -307,6 +322,7 @@ async def test_provider_error_returns_error_response() -> None:
 @pytest.mark.asyncio
 async def test_provider_error_never_raises() -> None:
     """LLMAgent.act must never raise, even on provider errors."""
+
     def _explode(model: str, system: str, user: str) -> str:
         raise RuntimeError("unexpected crash")
 
@@ -330,11 +346,13 @@ async def test_unknown_proposal_kind_never_raises() -> None:
     Regression for the pydantic ValidationError that escaped the mapping section
     (Proposal.kind is a frozen StrEnum — constructing Proposal(kind='bogus') raises).
     """
-    response_json = json.dumps({
-        "decisions": [],
-        "proposals": [{"kind": "not_a_kind", "recipient": "fire", "body": {}}],
-        "responses": [],
-    })
+    response_json = json.dumps(
+        {
+            "decisions": [],
+            "proposals": [{"kind": "not_a_kind", "recipient": "fire", "body": {}}],
+            "responses": [],
+        }
+    )
     provider = MockProvider(script=[response_json])
     role = _make_role()
     agent = LLMAgent("medical", role, provider, "")
@@ -348,18 +366,20 @@ async def test_unknown_proposal_kind_never_raises() -> None:
 async def test_unknown_proposal_kind_dropped_valid_kept() -> None:
     """Unknown-kind proposals are dropped individually; valid proposals in the same
     response are preserved (the whole turn must not be discarded)."""
-    response_json = json.dumps({
-        "decisions": [],
-        "proposals": [
-            {"kind": "not_a_kind", "recipient": "fire", "body": {}},
-            {
-                "kind": "resource_request",
-                "recipient": None,
-                "body": {"mission_id": "m1", "resource": "ambulance", "qty": 1, "urgency": 5},
-            },
-        ],
-        "responses": [],
-    })
+    response_json = json.dumps(
+        {
+            "decisions": [],
+            "proposals": [
+                {"kind": "not_a_kind", "recipient": "fire", "body": {}},
+                {
+                    "kind": "resource_request",
+                    "recipient": None,
+                    "body": {"mission_id": "m1", "resource": "ambulance", "qty": 1, "urgency": 5},
+                },
+            ],
+            "responses": [],
+        }
+    )
     provider = MockProvider(script=[response_json])
     role = _make_role()
     agent = LLMAgent("medical", role, provider, "")
@@ -375,15 +395,21 @@ async def test_unknown_proposal_kind_dropped_valid_kept() -> None:
 @pytest.mark.asyncio
 async def test_unknown_proposal_kind_all_bad_returns_empty() -> None:
     """When every proposal has an unknown kind the response is empty but no error."""
-    response_json = json.dumps({
-        "decisions": [{"decision_type": "recall",
-                       "params": {"mission_id": "m1", "resource": "ambulance", "qty": 1}}],
-        "proposals": [
-            {"kind": "bad_kind_1", "recipient": None, "body": {}},
-            {"kind": "bad_kind_2", "recipient": None, "body": {}},
-        ],
-        "responses": [],
-    })
+    response_json = json.dumps(
+        {
+            "decisions": [
+                {
+                    "decision_type": "recall",
+                    "params": {"mission_id": "m1", "resource": "ambulance", "qty": 1},
+                }
+            ],
+            "proposals": [
+                {"kind": "bad_kind_1", "recipient": None, "body": {}},
+                {"kind": "bad_kind_2", "recipient": None, "body": {}},
+            ],
+            "responses": [],
+        }
+    )
     provider = MockProvider(script=[response_json])
     role = _make_role()
     agent = LLMAgent("medical", role, provider, "")
@@ -404,9 +430,7 @@ async def test_unknown_proposal_kind_all_bad_returns_empty() -> None:
 def _parse_missions_from_text(text: str) -> list[dict[str, Any]]:
     """Parse mission rows from the rendered observation text."""
     missions: list[dict[str, Any]] = []
-    row_re = re.compile(
-        r"^\s+(m\d+)\s+(\S+)\s+\S+\s+(\d+)\s+\d+\s+(-?\d+)\s+(\d+)\s+(.*?)$"
-    )
+    row_re = re.compile(r"^\s+(m\d+)\s+(\S+)\s+\S+\s+(\d+)\s+\d+\s+(-?\d+)\s+(\d+)\s+(.*?)$")
     for line in text.splitlines():
         m = row_re.match(line)
         if m:
@@ -424,14 +448,16 @@ def _parse_missions_from_text(text: str) -> list[dict[str, Any]]:
                     with contextlib.suppress(ValueError):
                         assigned[res] = int(got_s)
                         required[res] = int(need_s)
-            missions.append({
-                "id": mid,
-                "kind": kind,
-                "deadline_in": dl_in,
-                "priority": pri,
-                "assigned": assigned,
-                "required": required,
-            })
+            missions.append(
+                {
+                    "id": mid,
+                    "kind": kind,
+                    "deadline_in": dl_in,
+                    "priority": pri,
+                    "assigned": assigned,
+                    "required": required,
+                }
+            )
     return missions
 
 
@@ -509,35 +535,41 @@ def _build_mock_response(model: str, system: str, user: str) -> str:  # noqa: AR
                     pid = prop_m.group(1)
                     kind_str = prop_m.group(2)
                     if "escalation" in kind_str.lower():
-                        responses.append({
-                            "proposal_id": pid,
-                            "accept": True,
-                            "note": "acknowledged",
-                        })
+                        responses.append(
+                            {
+                                "proposal_id": pid,
+                                "accept": True,
+                                "note": "acknowledged",
+                            }
+                        )
 
         for m in missions:
             if m["priority"] == 0:
                 dl_in = m["deadline_in"]
                 urgency_bonus = 2 if dl_in <= 6 else 0
                 priority = min(10, 4 + urgency_bonus)
-                decisions.append({
-                    "decision_type": "set_priority",
-                    "params": {"mission_id": m["id"], "priority": priority},
-                    "rationale": "initial triage",
-                })
+                decisions.append(
+                    {
+                        "decision_type": "set_priority",
+                        "params": {"mission_id": m["id"], "priority": priority},
+                        "rationale": "initial triage",
+                    }
+                )
 
     elif agent_role == "comms":
         if panic > 0.4:
-            decisions.append({
-                "decision_type": "broadcast",
-                "params": {
-                    "message": (
-                        "Emergency services are responding. "
-                        "Please remain calm and follow instructions."
-                    ),
-                },
-                "rationale": "reduce panic",
-            })
+            decisions.append(
+                {
+                    "decision_type": "broadcast",
+                    "params": {
+                        "message": (
+                            "Emergency services are responding. "
+                            "Please remain calm and follow instructions."
+                        ),
+                    },
+                    "rationale": "reduce panic",
+                }
+            )
 
     elif agent_role == "infrastructure":
         for m in missions:
@@ -550,24 +582,28 @@ def _build_mock_response(model: str, system: str, user: str) -> str:  # noqa: AR
                     qty = min(needed, avail)
                     dl_in = m["deadline_in"]
                     urgency = 10 if dl_in <= 2 else (8 if dl_in <= 4 else 5)
-                    proposals.append({
-                        "kind": "resource_request",
-                        "recipient": None,
-                        "body": {
-                            "mission_id": m["id"],
-                            "resource": res,
-                            "qty": qty,
-                            "urgency": urgency,
-                        },
-                    })
+                    proposals.append(
+                        {
+                            "kind": "resource_request",
+                            "recipient": None,
+                            "body": {
+                                "mission_id": m["id"],
+                                "resource": res,
+                                "qty": qty,
+                                "urgency": urgency,
+                            },
+                        }
+                    )
         repair_avail = pools.get("repair_crew", 0)
         for district in sorted(blocked):
             if repair_avail > 0:
-                decisions.append({
-                    "decision_type": "repair_road",
-                    "params": {"district_id": district},
-                    "rationale": "unblock road",
-                })
+                decisions.append(
+                    {
+                        "decision_type": "repair_road",
+                        "params": {"district_id": district},
+                        "rationale": "unblock road",
+                    }
+                )
                 repair_avail -= 1
 
     else:
@@ -594,30 +630,82 @@ def _build_mock_response(model: str, system: str, user: str) -> str:  # noqa: AR
                     qty = min(needed, avail)
                     dl_in = m["deadline_in"]
                     urgency = 10 if dl_in <= 2 else (8 if dl_in <= 4 else 5)
-                    proposals.append({
-                        "kind": "resource_request",
-                        "recipient": None,
-                        "body": {
-                            "mission_id": m["id"],
-                            "resource": res,
-                            "qty": qty,
-                            "urgency": urgency,
-                        },
-                    })
+                    proposals.append(
+                        {
+                            "kind": "resource_request",
+                            "recipient": None,
+                            "body": {
+                                "mission_id": m["id"],
+                                "resource": res,
+                                "qty": qty,
+                                "urgency": urgency,
+                            },
+                        }
+                    )
 
     for pid in inbox_ids:
         if not any(r["proposal_id"] == pid for r in responses):
-            responses.append({
-                "proposal_id": pid,
-                "accept": True,
-                "note": "acknowledged",
-            })
+            responses.append(
+                {
+                    "proposal_id": pid,
+                    "accept": True,
+                    "note": "acknowledged",
+                }
+            )
 
-    return json.dumps({
-        "decisions": decisions,
-        "proposals": proposals,
-        "responses": responses,
-    })
+    tool_calls: list[dict[str, Any]] = []
+
+    for decision in decisions:
+        tool_calls.append(
+            {
+                "function": {
+                    "name": decision["decision_type"],
+                    "arguments": json.dumps(
+                        {
+                            **decision["params"],
+                            "rationale": decision.get("rationale", ""),
+                        }
+                    ),
+                }
+            }
+        )
+
+    for proposal in proposals:
+        tool_calls.append(
+            {
+                "function": {
+                    "name": f"propose_{proposal['kind']}",
+                    "arguments": json.dumps(proposal["body"]),
+                }
+            }
+        )
+
+    for response in responses:
+        tool_calls.append(
+            {
+                "function": {
+                    "name": "accept_proposal",
+                    "arguments": json.dumps(
+                        {
+                            "proposal_id": response["proposal_id"],
+                            "note": response.get("note", ""),
+                        }
+                    ),
+                }
+            }
+        )
+
+    if not tool_calls:
+        tool_calls.append(
+            {
+                "function": {
+                    "name": "no_op",
+                    "arguments": json.dumps({"rationale": "nothing to do"}),
+                }
+            }
+        )
+
+    return {"tool_calls": tool_calls}
 
 
 @pytest.mark.asyncio
@@ -705,7 +793,8 @@ async def test_e2e_mock_society_run() -> None:
 
     # At least 1 auction grant
     total_grants = sum(
-        1 for record in records
+        1
+        for record in records
         for ruling in record.rulings
         if ruling.accepted and ruling.decided_by == "kernel:auction"
     )
@@ -718,3 +807,73 @@ async def test_e2e_mock_society_run() -> None:
     # lives_saved > 0
     lives_saved = summary2.final_scores.get("lives_saved", 0)
     assert lives_saved > 0, f"Expected lives_saved > 0, got {lives_saved}"
+
+
+# ---------------------------------------------------------------------------
+# Tool-mode tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_tool_mode_usage_attached() -> None:
+    tool_calls = [{"function": {"name": "no_op", "arguments": "{}"}}]
+    provider = MockProvider(script=[{"tool_calls": tool_calls}])
+    role = _make_role(use_tools=True)
+    from aftershock.town.tool_contract import map_tool_calls
+
+    agent = LLMAgent(
+        "medical",
+        role,
+        provider,
+        "contract",
+        tool_defs=[{"type": "function", "function": {"name": "no_op", "parameters": {}}}],
+        tool_mapper=map_tool_calls,
+    )
+
+    result = await agent.act(_make_obs())
+
+    assert result.error == ""
+    assert result.usage is not None
+    assert isinstance(result.usage, TokenUsage)
+
+
+@pytest.mark.asyncio
+async def test_tool_mode_no_fallback_to_text() -> None:
+    provider = MockProvider(script=[{"tool_calls": []}])
+    role = _make_role(use_tools=True)
+    from aftershock.town.tool_contract import map_tool_calls
+
+    agent = LLMAgent(
+        "medical",
+        role,
+        provider,
+        "contract",
+        tool_defs=[{"type": "function", "function": {"name": "no_op", "parameters": {}}}],
+        tool_mapper=map_tool_calls,
+    )
+
+    result = await agent.act(_make_obs())
+
+    assert result.error != ""
+    assert "no tool_calls" in result.error
+    assert result.decisions == ()
+
+
+@pytest.mark.asyncio
+async def test_tool_mode_returns_agent_response() -> None:
+    tool_calls = [{"function": {"name": "no_op", "arguments": "{}"}}]
+    provider = MockProvider(script=[{"tool_calls": tool_calls}])
+    role = _make_role(use_tools=True)
+    from aftershock.town.tool_contract import map_tool_calls
+
+    agent = LLMAgent(
+        "medical",
+        role,
+        provider,
+        "contract",
+        tool_defs=[{"type": "function", "function": {"name": "no_op", "parameters": {}}}],
+        tool_mapper=map_tool_calls,
+    )
+
+    result = await agent.act(_make_obs())
+    assert isinstance(result, AgentResponse)

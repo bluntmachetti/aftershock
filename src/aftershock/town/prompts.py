@@ -15,7 +15,18 @@ from aftershock.kernel.roles import RoleSpec
 from aftershock.llm.agent import LLMAgent
 from aftershock.llm.contract import decision_contract
 from aftershock.llm.provider import Provider
+from aftershock.town.decisions import (
+    BroadcastParams,
+    RecallParams,
+    RepairRoadParams,
+    SetPriorityParams,
+)
 from aftershock.town.doctrine import Rule, doctrine_blocks, load_doctrine
+from aftershock.town.tool_contract import (
+    build_role_tools,
+    map_tool_calls,
+    tool_contract,
+)
 
 # ---------------------------------------------------------------------------
 # Decision documentation (one line per handler registered in decisions.py)
@@ -156,20 +167,24 @@ def build_llm_agents(
     # Load doctrine once; failure must raise at build time (not silently skipped)
     rules: list[Rule] = _doctrine_rules if _doctrine_rules is not None else load_doctrine()
 
+    decision_param_schemas = {
+        "recall": RecallParams.model_json_schema(),
+        "set_priority": SetPriorityParams.model_json_schema(),
+        "repair_road": RepairRoadParams.model_json_schema(),
+        "broadcast": BroadcastParams.model_json_schema(),
+    }
+    proposal_param_schemas: dict[str, dict] = {}
+
     agents: dict[str, Agent] = {}
     for agent_id in _TOWN_AGENT_IDS:
         role = roles[agent_id]
 
-        # Build the doctrine block for this role+arm
         blocks = doctrine_blocks(rules, role=agent_id, arm=arm)
 
-        # Compose the system prompt: role prompt + optional doctrine + lessons (commander)
         system_prompt = role.system_prompt
-
         if blocks:
             system_prompt = system_prompt + "\n\n" + blocks
 
-        # Inject lessons into the commander's system prompt only
         if lessons and agent_id == "commander":
             numbered = "\n".join(f"{i + 1}. {lesson}" for i, lesson in enumerate(lessons))
             lessons_block = (
@@ -177,19 +192,36 @@ def build_llm_agents(
             )
             system_prompt = system_prompt + lessons_block
 
-        # RoleSpec is frozen; create a copy with the augmented system_prompt if changed
         if system_prompt != role.system_prompt:
             role = role.model_copy(update={"system_prompt": system_prompt})
 
-        contract = decision_contract(
-            allowed=role.allowed_decisions,
-            decision_docs=DECISION_DOCS,
-            proposal_docs=PROPOSAL_DOCS,
-        )
-        agents[agent_id] = LLMAgent(
-            agent_id=agent_id,
-            role=role,
-            provider=provider,
-            contract=contract,
-        )
+        if role.use_tools:
+            contract = tool_contract(has_proposals=True)
+            tool_defs = build_role_tools(
+                allowed=role.allowed_decisions,
+                decision_docs=DECISION_DOCS,
+                proposal_docs=PROPOSAL_DOCS,
+                decision_param_schemas=decision_param_schemas,
+                proposal_param_schemas=proposal_param_schemas,
+            )
+            agents[agent_id] = LLMAgent(
+                agent_id=agent_id,
+                role=role,
+                provider=provider,
+                contract=contract,
+                tool_defs=tool_defs,
+                tool_mapper=map_tool_calls,
+            )
+        else:
+            contract = decision_contract(
+                allowed=role.allowed_decisions,
+                decision_docs=DECISION_DOCS,
+                proposal_docs=PROPOSAL_DOCS,
+            )
+            agents[agent_id] = LLMAgent(
+                agent_id=agent_id,
+                role=role,
+                provider=provider,
+                contract=contract,
+            )
     return agents
