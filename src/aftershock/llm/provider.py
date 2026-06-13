@@ -174,7 +174,9 @@ class QwenProvider:
 class MockProvider:
     """Scripted provider for offline tests. Records every call in .calls."""
 
-    def __init__(self, script: list[str] | Callable[[str, str, str], str]) -> None:
+    def __init__(
+        self, script: list[str | dict] | Callable[[str, str, str], str | dict]
+    ) -> None:
         self._script = script
         self._index = 0
         self.calls: list[tuple[str, str, str]] = []

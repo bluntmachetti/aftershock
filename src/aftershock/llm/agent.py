@@ -107,10 +107,8 @@ class LLMAgent(Agent):
                 error=f"parse error: {exc!s:.200}",
             )
 
-        # --- Build the inbox proposal_id set for inbox filtering ---
-        inbox_ids: frozenset[str] = frozenset(p.proposal_id for p in observation.inbox)
-
         # --- Map LLMOutput -> protocol types ---
+        # (inbox_ids computed once at the top of act(), reused here for inbox filtering)
         decisions: list[Decision] = []
         proposals: list[Proposal] = []
         responses: list[ProposalResponse] = []

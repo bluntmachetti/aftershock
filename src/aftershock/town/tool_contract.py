@@ -8,6 +8,7 @@ Three exports:
 
 from __future__ import annotations
 
+import copy
 import json
 from typing import Any
 
@@ -133,7 +134,10 @@ def _make_decision_tool(
     name: str, description: str, params_schema: dict[str, Any]
 ) -> dict[str, Any]:
     """Build a single decision tool definition with rationale field added."""
-    params = dict(params_schema)
+    # deepcopy: the same params_schema dict is shared across roles (built once in
+    # prompts.py, passed to build_role_tools per role) — mutating nested "properties"
+    # in place would leak the rationale field back into the caller's schema.
+    params = copy.deepcopy(params_schema)
     props = params.setdefault("properties", {})
     props["rationale"] = {"type": "string", "description": "Under 25 words, why this decision"}
     return {
@@ -227,6 +231,13 @@ def map_tool_calls(
     decisions: list[Decision] = []
     proposals: list[Proposal] = []
     responses: list[ProposalResponse] = []
+    # A call is "recognized" when its name matches a known tool and its arguments
+    # parse — even if the engine later drops it (e.g. an accept_proposal for a
+    # proposal_id not in the inbox). recognized == 0 with a non-empty tool_calls
+    # list means the model emitted only garbage (unknown names / unparsable args /
+    # invalid proposal kinds); without this signal that case is indistinguishable
+    # from a legitimate no_op idle and the failure is silently swallowed.
+    recognized = 0
 
     for i, tc in enumerate(tool_calls):
         fn = tc.get("function", {})
@@ -239,6 +250,7 @@ def map_tool_calls(
             continue
 
         if name in _DECISION_TOOLS:
+            recognized += 1
             decisions.append(
                 Decision(
                     decision_id=f"{agent_id}-t{tick}-d{i}",
@@ -254,6 +266,7 @@ def map_tool_calls(
                 kind = ProposalKind(kind_str)
             except ValueError:
                 continue
+            recognized += 1
             proposals.append(
                 Proposal(
                     proposal_id=f"{agent_id}-t{tick}-p{i}",
@@ -264,6 +277,7 @@ def map_tool_calls(
                 )
             )
         elif name == "accept_proposal":
+            recognized += 1
             pid = args.get("proposal_id", "")
             if pid not in inbox_ids:
                 continue
@@ -276,6 +290,7 @@ def map_tool_calls(
                 )
             )
         elif name == "decline_proposal":
+            recognized += 1
             pid = args.get("proposal_id", "")
             if pid not in inbox_ids:
                 continue
@@ -288,9 +303,15 @@ def map_tool_calls(
                 )
             )
         elif name == "no_op":
-            pass
+            recognized += 1
         else:
             continue
+
+    if recognized == 0:
+        return AgentResponse(
+            agent_id=agent_id,
+            error=f"tool mode: {len(tool_calls)} tool_call(s) but none recognized",
+        )
 
     return AgentResponse(
         agent_id=agent_id,

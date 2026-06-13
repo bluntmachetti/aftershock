@@ -245,6 +245,43 @@ class TestMapToolCalls:
             inbox_ids=frozenset({"real-id"}),
         )
         assert result.responses == ()
+        # A recognized-but-inbox-filtered call is NOT a model failure: the model
+        # emitted a valid accept_proposal; the engine dropped it. No error.
+        assert result.error == ""
+
+    def test_all_unrecognized_calls_returns_error(self) -> None:
+        # Non-empty tool_calls where every call is garbage (unknown name + unparsable
+        # args + invalid proposal kind) must surface an error, not masquerade as a
+        # clean no_op idle.
+        result = map_tool_calls(
+            tool_calls=[
+                _make_tool_call("bogus_tool", {"x": 1}),
+                {"function": {"name": "set_priority", "arguments": "not json!!"}},
+                _make_tool_call("propose_nonsense", {"foo": "bar"}),
+            ],
+            agent_id="medical",
+            tick=4,
+            inbox_ids=frozenset(),
+        )
+        assert result.error != ""
+        assert "none recognized" in result.error
+        assert result.decisions == ()
+        assert result.proposals == ()
+        assert result.responses == ()
+
+    def test_no_op_suppresses_unrecognized_error(self) -> None:
+        # An explicit no_op alongside garbage is a deliberate idle, not a failure.
+        result = map_tool_calls(
+            tool_calls=[
+                _make_tool_call("bogus_tool", {"x": 1}),
+                _make_tool_call("no_op", {"rationale": "nothing to do"}),
+            ],
+            agent_id="medical",
+            tick=4,
+            inbox_ids=frozenset(),
+        )
+        assert result.error == ""
+        assert result.decisions == ()
 
     def test_invalid_json_dropped_individually(self) -> None:
         result = map_tool_calls(
@@ -318,3 +355,63 @@ class TestMapToolCalls:
             assert d.agent_id == "fire"
         for p in result.proposals:
             assert p.sender == "fire"
+
+
+class TestRealSchemaToolDefs:
+    """Exercise build_role_tools with the SAME real pydantic schemas and docs that
+    prompts.build_llm_agents feeds it — the synthetic-schema unit tests above never
+    touch the real model_json_schema() output that ships to the provider."""
+
+    def _real_tools(self) -> list[dict]:
+        from aftershock.town.decisions import (
+            BroadcastParams,
+            RecallParams,
+            RepairRoadParams,
+            SetPriorityParams,
+        )
+        from aftershock.town.prompts import DECISION_DOCS, PROPOSAL_DOCS
+
+        return build_role_tools(
+            allowed=("set_priority", "recall", "repair_road", "broadcast", "dispatch"),
+            decision_docs=DECISION_DOCS,
+            proposal_docs=PROPOSAL_DOCS,
+            decision_param_schemas={
+                "recall": RecallParams.model_json_schema(),
+                "set_priority": SetPriorityParams.model_json_schema(),
+                "repair_road": RepairRoadParams.model_json_schema(),
+                "broadcast": BroadcastParams.model_json_schema(),
+            },
+            proposal_param_schemas={},
+        )
+
+    def test_real_tools_are_well_formed_openai_function_specs(self) -> None:
+        tools = self._real_tools()
+        assert tools, "expected non-empty tool list from real schemas"
+        for t in tools:
+            assert t["type"] == "function"
+            fn = t["function"]
+            assert isinstance(fn["name"], str) and fn["name"]
+            assert isinstance(fn["description"], str)
+            params = fn["parameters"]
+            assert params["type"] == "object"
+            assert isinstance(params["properties"], dict)
+
+    def test_real_schema_dispatch_excluded_and_rationale_added(self) -> None:
+        tools = self._real_tools()
+        by_name = {t["function"]["name"]: t for t in tools}
+        # dispatch is allowed but must never be emitted as a tool (auction-only).
+        assert "dispatch" not in by_name
+        assert "no_op" in by_name
+        # rationale is injected onto decision tools without mutating the source schema.
+        assert "rationale" in by_name["broadcast"]["function"]["parameters"]["properties"]
+
+    def test_real_decision_schema_not_mutated_by_build(self) -> None:
+        # Building tools must not leak the injected "rationale" field back into the
+        # shared pydantic schema (deepcopy guard in _make_decision_tool).
+        from aftershock.town.decisions import BroadcastParams
+
+        before = BroadcastParams.model_json_schema()
+        self._real_tools()
+        after = BroadcastParams.model_json_schema()
+        assert "rationale" not in before.get("properties", {})
+        assert before == after

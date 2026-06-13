@@ -369,6 +369,22 @@ def test_bench_e2e_offline_llm_arm(monkeypatch: pytest.MonkeyPatch) -> None:
             f"society cell cost_usd should be > 0, got {society_cell['cost']['cost_usd']}"
         )
 
+        # society agents run through the native-tool path (use_tools=true); assert the
+        # whole tool-mode bench cell produced zero agent errors, mirroring the
+        # zero-error contract in test_llm_agent.test_e2e_mock_society_run. Without this
+        # a regression in map_tool_calls (e.g. spurious "none recognized" errors) would
+        # still leave cost_usd > 0 and slip through.
+        from aftershock.kernel.recorder import load_run
+
+        _, society_records, _worlds = load_run(out_dir / "society-seed42")
+        society_errors = [
+            (record.tick, resp.agent_id, resp.error)
+            for record in society_records
+            for resp in record.responses
+            if resp.error
+        ]
+        assert society_errors == [], f"society tool-mode agent errors: {society_errors[:5]}"
+
         # summary.json written for both cells
         for arm in ("scripted", "society"):
             summary_path = out_dir / f"{arm}-seed42" / "summary.json"
