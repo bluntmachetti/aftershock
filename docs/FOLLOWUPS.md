@@ -2,10 +2,13 @@
 
 Short list of known project tasks that are not part of the current deployment path.
 
-## Mission Control observatory redesign — MERGED to main (pending staging deploy)
+## Mission Control observatory redesign — MERGED + DEPLOYED (staging + prod, live)
 
-**PR #3 squash-merged** (commit `11e99ab`; Codex P2 on contention-link attribution resolved in-PR).
-All 3 open questions answered: **Tiles + contention
+**PR #3 squash-merged** (commit `11e99ab`; Codex P2 on contention-link attribution resolved in-PR)
+and **deployed through the full promotion gate: k12 staging (.153) → Alicloud prod
+(43.98.166.22) → live at <https://aftershock.redoubtlabs.dev>** (HTTP 200, identical bundle
+`index-B_zrmfmx.js` local→staging→prod; contention overlay confirmed rendering on the live
+society run). All 3 open questions answered: **Tiles + contention
 overlay committed · Map-tab only · Ida stays on Map with provenance.** Contract: `docs/DESIGN.md`
 §"Mission Control map". Plan/prototype: `.omc/plans/mission-control-redesign.md`,
 `.omc/mission-control-prototype/` (live result shots in `rendered/live/`).
@@ -19,7 +22,8 @@ overlay committed · Map-tab only · Ida stays on Map with provenance.** Contrac
   PASS · 1080p shots of Map (overlay on `seed42-society`), Compare (unaffected), and the **NYC-Ida
   provenance path** (`seed91-scripted`: borough names + DataChip + RealityStrip + REAL·NYC IDA
   badges + caveat). 6-agent adversarial review: 4 APPROVE / 2 COMMENT, 2 real defects fixed.
-- **Remaining:** **k12 staging → Kenny approval → Alicloud prod** (promotion gate untouched).
+- **Deployed 2026-06-14:** staging (`.153:~/aftershock-deploy`, rsync + compose up) and prod
+  (`43.98.166.22:/root/aftershock-deploy`, git pull + compose up) — both verified.
   Note: the society arm on Ida (`seed91-society`) shows the shortage *textually* in the negotiation
   feed but draws no map contention links — NYC-Ida demand mass-exhausts pools (no winner-vs-loser
   contest); the winner/loser overlay is demoed on synthetic `seed42-society`.
