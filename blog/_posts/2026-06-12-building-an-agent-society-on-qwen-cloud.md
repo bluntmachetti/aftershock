@@ -3,6 +3,15 @@ layout: post
 title: "When does a society of small Qwen models beat one big model? Building Aftershock."
 date: 2026-06-12 09:00:00 -0700
 description: "The build journey of Aftershock — cost-tiered cognition on Qwen Cloud, a +28-lives coordination result, the honest negative results, and a real NYC Hurricane Ida scenario."
+log: "001"
+read: "9 min"
+summary: "The founding question and the architecture behind it — splitting a disaster response across six specialized agents that negotiate scarce resources, and the seeded-world harness that decides whether the society actually pays for itself."
+flags:
+  - text: Architecture
+    kind: ok
+  - text: Benchmark
+    kind: warn
+  - text: Foundations
 ---
 
 Most multi-agent demos are theater. Agents take turns talking, politely agree with each

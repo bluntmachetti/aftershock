@@ -3,6 +3,16 @@ layout: post
 title: "We added native function calling. The benchmark told us to turn it off."
 date: 2026-06-14 09:00:00 -0700
 description: "An honest ablation: we added Qwen Cloud native function calling to the Aftershock agent society, benchmarked it on identical seeded worlds, and found it cost ~2× for no lives benefit. Why per-call tool-schema overhead dominates in high-frequency multi-agent systems — and why JSON contracts stayed the default."
+log: "002"
+read: "6 min"
+summary: "An honest ablation: native Qwen Cloud function calling, benchmarked on identical seeded worlds, cost ~2× for no lives benefit. Why per-call tool-schema overhead dominates in high-frequency multi-agent systems — and why JSON contracts stayed the default."
+flags:
+  - text: Negative result
+    kind: crit
+  - text: Ablation
+    kind: warn
+  - text: Cost · latency
+  - text: Multi-agent
 ---
 
 A confession about hackathon incentives. The Qwen Cloud judging rubric weights *"sophisticated
@@ -36,10 +46,36 @@ byte. Only the calling convention differs.
 
 ## The numbers
 
-| society mode | lives saved (mean ± sd) | missions failed | cost/run | latency/run |
-|---|---|---|---|---|
-| **JSON contracts (default)** | **103.2 ± 23.6** | **0.4** | **$0.042** | 120 s |
-| native function calling | 98.2 ± 23.2 | 0.8 | $0.083 | 297 s |
+<div class="readout-table">
+  <div class="rt-cap"><span class="sq"></span>Society mode · 5 paired seeds</div>
+  <table class="rt">
+    <thead>
+      <tr>
+        <th>Society mode</th>
+        <th>Lives saved (μ ± σ)</th>
+        <th>Missions failed</th>
+        <th>Cost / run</th>
+        <th>Latency / run</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="win">
+        <td>JSON contracts <span class="win-badge">default</span></td>
+        <td><strong>103.2 ± 23.6</strong></td>
+        <td><strong>0.4</strong></td>
+        <td><strong>$0.042</strong></td>
+        <td>120 s</td>
+      </tr>
+      <tr class="lose">
+        <td>Native function calling</td>
+        <td>98.2 ± 23.2</td>
+        <td>0.8</td>
+        <td>$0.083</td>
+        <td>297 s</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
 
 Read that top to bottom. Tool calling held lives saved **within the noise** — 98.2 vs 103.2 sits
 comfortably inside one standard deviation (±23) — while **cost roughly doubled and latency rose

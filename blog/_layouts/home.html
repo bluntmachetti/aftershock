@@ -1,0 +1,51 @@
+---
+layout: default
+---
+<div class="wrap">
+  <section class="hero">
+    <div class="hero-kicker">
+      <span class="rule"></span>
+      <span class="hero-status"><span class="dot"></span>Build log · active</span>
+    </div>
+    <h1>Aftershock <span class="accent">build log</span></h1>
+    <p class="hero-lead">
+      The build journey of <strong>Aftershock</strong> — a disaster-response society of Qwen agents
+      built for the Qwen Cloud Global AI Hackathon. Progress, architecture decisions, and what the
+      numbers (including the negative results) actually said.
+    </p>
+    <div class="hero-meta">
+      <span class="tagchip"><span class="sw" style="background:#46b6f0"></span>Qwen Cloud</span>
+      <span class="tagchip"><span class="sw" style="background:#f6a723"></span>Agent society</span>
+      <span class="tagchip"><span class="sw" style="background:#34d399"></span>Honest benchmarks</span>
+    </div>
+  </section>
+</div>
+
+<div class="wrap">
+  <section class="log">
+    <div class="log-head">
+      <h2>Dispatches</h2>
+      {% assign n = site.posts | size %}
+      <span class="count">{% if n < 10 %}0{% endif %}{{ n }} LOGGED</span>
+      <span class="rule"></span>
+    </div>
+
+    {% for post in site.posts %}
+    <a class="entry" href="{{ post.url | relative_url }}">
+      <div class="entry-idx">
+        <span class="entry-num">LOG-{{ post.log }}</span>
+        <span class="entry-date">{{ post.date | date: "%Y.%m.%d" }}</span>
+        <span class="entry-read">{{ post.read | upcase }}</span>
+      </div>
+      <div class="entry-body">
+        <div class="entry-flags">
+          {% for f in post.flags %}<span class="flag {{ f.kind }}">{{ f.text }}</span>{% endfor %}
+        </div>
+        <h3 class="entry-title">{{ post.title }}</h3>
+        <p class="entry-excerpt">{{ post.summary | default: post.description }}</p>
+        <span class="entry-more">Read dispatch <span class="arr">→</span></span>
+      </div>
+    </a>
+    {% endfor %}
+  </section>
+</div>

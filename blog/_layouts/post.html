@@ -1,0 +1,29 @@
+---
+layout: default
+---
+<div class="wrap-narrow">
+  <article class="reader">
+    <a class="backlink" href="{{ '/' | relative_url }}"><span class="arr">←</span> Field Log</a>
+
+    <header class="art-head">
+      <div class="art-meta">
+        <span class="art-code">LOG-{{ page.log }}</span>
+        <span class="m">{{ page.date | date: "%Y.%m.%d" }}</span>
+        <span class="sep">·</span>
+        <span class="m">{{ page.read }} read</span>
+        <span class="sep">·</span>
+        <span class="m">{{ site.author.name }}</span>
+      </div>
+      <h1 class="art-title">{{ page.title }}</h1>
+      {% if page.flags %}
+      <div class="art-tags">
+        {% for f in page.flags %}<span class="flag {{ f.kind }}">{{ f.text }}</span>{% endfor %}
+      </div>
+      {% endif %}
+    </header>
+
+    <div class="prose">
+      {{ content }}
+    </div>
+  </article>
+</div>

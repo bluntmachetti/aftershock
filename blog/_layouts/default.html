@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+{% seo %}
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="{{ '/assets/css/blog.css' | relative_url }}" />
+{% feed_meta %}
+</head>
+<body>
+
+<header class="nav">
+  <a class="brand" href="{{ '/' | relative_url }}">
+    <svg class="brand-mark" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" stroke="#46b6f0" stroke-width="1.4" opacity="0.45" />
+      <circle cx="12" cy="12" r="5" stroke="#46b6f0" stroke-width="1.4" />
+      <circle cx="12" cy="12" r="1.7" fill="#46b6f0" />
+    </svg>
+    <span class="brand-text">
+      <span class="brand-name">AFTERSHOCK</span>
+      <span class="brand-tag">FIELD LOG</span>
+    </span>
+  </a>
+  <div class="nav-spacer"></div>
+  <nav class="nav-links">
+    <a class="nav-link primary" href="{{ site.links.demo }}" target="_blank" rel="noopener">Live demo <span class="ext">↗</span></a>
+    <a class="nav-link" href="{{ site.links.repo }}" target="_blank" rel="noopener">Code <span class="ext">↗</span></a>
+    <a class="nav-link" href="{{ '/feed.xml' | relative_url }}">RSS</a>
+  </nav>
+  {% if page.layout == 'post' %}<div class="nav-progress" id="progress"></div>{% endif %}
+</header>
+
+<main>
+  {{ content }}
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <div class="foot-brand">
+          <svg class="brand-mark" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="#46b6f0" stroke-width="1.4" opacity="0.45" />
+            <circle cx="12" cy="12" r="5" stroke="#46b6f0" stroke-width="1.4" />
+            <circle cx="12" cy="12" r="1.7" fill="#46b6f0" />
+          </svg>
+          <span class="foot-name">AFTERSHOCK</span>
+        </div>
+        <p class="foot-desc">{{ site.description | strip_newlines }}</p>
+      </div>
+      <div class="foot-right">
+        <div class="foot-row"><span class="foot-label">Author</span><span class="foot-val">{{ site.author.name }}</span></div>
+        <div class="foot-row"><span class="foot-label">Demo</span><span class="foot-val"><a href="{{ site.links.demo }}" target="_blank" rel="noopener">aftershock.redoubtlabs.dev ↗</a></span></div>
+        <div class="foot-row"><span class="foot-label">Code</span><span class="foot-val"><a href="{{ site.links.repo }}" target="_blank" rel="noopener">github.com/bluntmachetti ↗</a></span></div>
+        <div class="foot-row"><span class="foot-label">Feed</span><span class="foot-val"><a href="{{ '/feed.xml' | relative_url }}">Subscribe via RSS</a></span></div>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span class="micro">© 2026 Redoubt Labs · Field Log</span>
+      <span class="micro">Built with Qwen Cloud · DashScope · Alibaba Cloud ECS</span>
+    </div>
+  </div>
+</footer>
+
+{% if page.layout == 'post' %}
+<script>
+  (function () {
+    var bar = document.getElementById('progress');
+    if (!bar) return;
+    function update() {
+      var h = document.documentElement;
+      var max = h.scrollHeight - h.clientHeight;
+      var p = max > 0 ? (h.scrollTop || document.body.scrollTop) / max : 0;
+      bar.style.width = (p * 100) + '%';
+    }
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    update();
+  })();
+</script>
+{% endif %}
+
+</body>
+</html>

@@ -1,19 +1,23 @@
-title: "Aftershock — build blog"
+title: "Aftershock — Field Log"
 description: >-
-  Building a disaster-response society of Qwen agents for the Qwen Cloud Global AI Hackathon —
-  progress, architecture decisions, and what the numbers (including the negative results) said.
-theme: minima
-minima:
-  skin: dark
+  The build journey of Aftershock — a disaster-response society of Qwen agents for the Qwen Cloud
+  Global AI Hackathon. Progress, architecture decisions, and what the numbers (including the
+  negative results) said.
 # Publish posts even if their timestamp is ahead of the build clock (timezone-safe).
 future: true
 url: "https://bluntmachetti.github.io"
 baseurl: "/aftershock"
 author:
   name: "Kenny Ademolu"
+# External links used by the nav + footer (the GitHub/Pages handle stays bluntmachetti — it is
+# the account address; the displayed author name is Kenny Ademolu).
+links:
+  demo: "https://aftershock.redoubtlabs.dev"
+  repo: "https://github.com/bluntmachetti/aftershock"
 plugins:
   - jekyll-feed
   - jekyll-seo-tag
-# README.md is for the GitHub folder view; the live site home is index.md.
+# README.md is for the GitHub folder view; the live site home is index.md. No theme — the
+# Field Log uses custom layouts in _layouts/ + assets/css/blog.css.
 exclude:
   - README.md
