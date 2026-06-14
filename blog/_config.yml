@@ -10,7 +10,7 @@ future: true
 url: "https://bluntmachetti.github.io"
 baseurl: "/aftershock"
 author:
-  name: "bluntmachetti"
+  name: "Kenny Ademolu"
 plugins:
   - jekyll-feed
   - jekyll-seo-tag
