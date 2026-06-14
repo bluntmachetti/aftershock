@@ -316,11 +316,12 @@ def test_society_uses_town_resolver() -> None:
 
 
 def test_society_contracts_include_proposals_schema() -> None:
-    """Society contracts must contain tool-calling guidance (tool mode) or proposals
-    and responses schema fields (JSON mode)."""
+    """With the function-calling opt-in (society_tools=True), every society agent's
+    system prompt carries the tool-mode contract: the no_op idle tool, proposal
+    tools, and inbox-response tools."""
     from aftershock.llm.agent import LLMAgent
 
-    setup = build_arm("society", _SEED, _mock())
+    setup = build_arm("society", _SEED, _mock(), society_tools=True)
     for agent_id, agent in setup.agents.items():
         assert isinstance(agent, LLMAgent)
         contract = agent._system
@@ -333,6 +334,32 @@ def test_society_contracts_include_proposals_schema() -> None:
         assert "accept_proposal" in contract, (
             f"society agent {agent_id!r} contract must mention inbox response tools"
         )
+
+
+def test_society_default_is_json_mode() -> None:
+    """build_arm society default (society_tools=False) builds JSON-mode agents:
+    no tool defs, and the tool-mode no_op marker is absent from the contract."""
+    from aftershock.llm.agent import LLMAgent
+
+    setup = build_arm("society", _SEED, _mock())
+    for agent in setup.agents.values():
+        assert isinstance(agent, LLMAgent)
+        assert agent._role.use_tools is False
+        assert agent._tool_defs is None
+        assert "no_op" not in agent._system
+
+
+def test_society_tools_opt_in_builds_tool_mode() -> None:
+    """build_arm society with society_tools=True flips every agent into native
+    function-calling mode: tool defs present and the tool_mapper is wired."""
+    from aftershock.llm.agent import LLMAgent
+
+    setup = build_arm("society", _SEED, _mock(), society_tools=True)
+    for agent in setup.agents.values():
+        assert isinstance(agent, LLMAgent)
+        assert agent._role.use_tools is True
+        assert agent._tool_defs is not None and len(agent._tool_defs) > 0
+        assert agent._tool_mapper is not None
 
 
 def test_society_timeout() -> None:

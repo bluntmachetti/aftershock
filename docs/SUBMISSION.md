@@ -188,6 +188,17 @@ Aftershock uses Qwen Cloud compatible chat completions for the LLM arms:
 The benchmark reports token usage and cost per run, so Qwen usage is visible in the results rather
 than hidden behind the demo.
 
+**Native function calling — implemented and measured.** Beyond strict-JSON contracts, the society
+also speaks Qwen Cloud **native function calling**: per-role `tools`, `tool_choice="auto"`,
+`parallel_tool_calls`, and a `no_op` idle tool (`aftershock run --arm society --society-tools`).
+We didn't just bolt it on — we benchmarked it on the same paired seeds and found native tools held
+lives saved within noise (98.2 vs 103.2) but cost ~2× more and ran ~2.5× slower, because the
+~1k-token tool schema is re-sent on every one of ~240 agent calls per run. So the cost-optimal
+**default** is JSON contracts, with function calling available and measured as an ablation
+([bench/results/2026-06-13-tool-ablation/](../bench/results/2026-06-13-tool-ablation/RESULTS.md),
+[docs/FIELD-NOTES.md §12](FIELD-NOTES.md)). The point isn't to chase the fanciest API — it's to
+measure when it actually pays.
+
 ### Alibaba Cloud deployment
 
 The live demo runs on Alibaba Cloud ECS:

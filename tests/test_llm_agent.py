@@ -725,7 +725,9 @@ async def test_e2e_mock_society_run() -> None:
 
     provider = MockProvider(script=_build_mock_response)
     roles = load_roles(_ROLES_DIR)
-    agents: dict[str, Agent] = build_llm_agents(roles, provider)
+    # force_tools=True: this e2e exercises the native function-calling opt-in (the mock
+    # emits tool_calls). JSON-mode (the default) is covered by test_e2e_mock_society_run_json.
+    agents: dict[str, Agent] = build_llm_agents(roles, provider, force_tools=True)
 
     expected_ids = {"commander", "comms", "fire", "infrastructure", "medical", "rescue"}
     assert set(agents.keys()) == expected_ids
@@ -759,7 +761,7 @@ async def test_e2e_mock_society_run() -> None:
     # Second run to collect tick records for assertions
     provider2 = MockProvider(script=_build_mock_response)
     roles2 = load_roles(_ROLES_DIR)
-    agents2: dict[str, Agent] = build_llm_agents(roles2, provider2)
+    agents2: dict[str, Agent] = build_llm_agents(roles2, provider2, force_tools=True)
     world2 = new_town(seed)
     society2 = TownSociety(max_ticks=ticks)
     registry2 = DecisionRegistry()
@@ -807,6 +809,71 @@ async def test_e2e_mock_society_run() -> None:
     # lives_saved > 0
     lives_saved = summary2.final_scores.get("lives_saved", 0)
     assert lives_saved > 0, f"Expected lives_saved > 0, got {lives_saved}"
+
+
+@pytest.mark.asyncio
+async def test_e2e_mock_society_run_json_mode() -> None:
+    """Full Engine run of the DEFAULT (JSON-mode) society: all six LLMAgents in
+    JSON-contract mode (no force_tools), a MockProvider returning valid JSON, zero
+    agent errors. This covers the cost-optimal default path that the published
+    benchmark uses; the rich JSON decision/proposal mapping is unit-tested above."""
+    from aftershock.kernel.engine import Engine
+    from aftershock.kernel.recorder import Recorder, load_run
+    from aftershock.kernel.registry import DecisionRegistry
+    from aftershock.kernel.roles import load_roles
+    from aftershock.town.decisions import register_all
+    from aftershock.town.prompts import build_llm_agents
+    from aftershock.town.society import TownResolver, TownSociety
+    from aftershock.town.state import new_town
+
+    seed = 42
+    ticks = 8
+
+    def _json_mock(model: str, system: str, user: str) -> str:  # noqa: ARG001
+        # Valid empty-action JSON for every call: proves the JSON parse -> map ->
+        # engine path integrates end-to-end without agent errors.
+        return '{"decisions": [], "proposals": [], "responses": []}'
+
+    provider = MockProvider(script=_json_mock)
+    roles = load_roles(_ROLES_DIR)
+    agents: dict[str, Agent] = build_llm_agents(roles, provider)  # default: JSON mode
+
+    # The default really is JSON mode (no tools), not the function-calling opt-in.
+    for agent in agents.values():
+        assert isinstance(agent, LLMAgent)
+        assert agent._role.use_tools is False  # type: ignore[attr-defined]
+        assert agent._tool_defs is None  # type: ignore[attr-defined]
+
+    world = new_town(seed)
+    society = TownSociety(max_ticks=ticks)
+    registry = DecisionRegistry()
+    register_all(registry)
+
+    with tempfile.TemporaryDirectory() as td:
+        recorder = Recorder(Path(td), "test-e2e-json", {"seed": seed, "arm": "society"})
+        engine = Engine(
+            world=world,
+            society=society,
+            agents=agents,
+            registry=registry,
+            roles=roles,
+            resolver=TownResolver(),
+            recorder=recorder,
+            seed=seed,
+            max_ticks=ticks,
+            agent_timeout_s=30.0,
+        )
+        await engine.run()
+        _, records, _worlds = load_run(Path(td) / "test-e2e-json")
+
+    errors = [
+        (record.tick, resp.agent_id, resp.error)
+        for record in records
+        for resp in record.responses
+        if resp.error
+    ]
+    assert errors == [], f"Unexpected JSON-mode agent errors: {errors[:5]}"
+    assert len(records) == ticks
 
 
 # ---------------------------------------------------------------------------

@@ -330,14 +330,17 @@ def test_bench_e2e_offline_llm_arm(monkeypatch: pytest.MonkeyPatch) -> None:
     # Track build_arm call count for resume assertion
     build_arm_calls: list[str] = []
 
-    def _patched_build_arm(arm: str, seed: int, provider: Any) -> Any:
+    def _patched_build_arm(
+        arm: str, seed: int, provider: Any, society_tools: bool = False
+    ) -> Any:
         build_arm_calls.append(arm)
         if arm == "society":
-            # Build with a MockProvider instead of the passed provider
+            # Build with a MockProvider instead of the passed provider.
+            # society_tools is forwarded so the cell honors the tool/JSON mode.
             mock_provider = MockProvider(script=_build_mock_response)
-            return real_build_arm(arm, seed, mock_provider)
+            return real_build_arm(arm, seed, mock_provider, society_tools=society_tools)
         # scripted: provider is None, pass through
-        return real_build_arm(arm, seed, provider)
+        return real_build_arm(arm, seed, provider, society_tools=society_tools)
 
     monkeypatch.setattr(bench_mod, "build_arm", _patched_build_arm)
 
@@ -349,8 +352,9 @@ def test_bench_e2e_offline_llm_arm(monkeypatch: pytest.MonkeyPatch) -> None:
             "arms": ["scripted", "society"],
         }
 
-        # First run: both cells should execute
-        cells = run_bench(manifest, provider=None, out_dir=out_dir)
+        # First run: both cells should execute. society_tools=True because the society
+        # mock emits tool_calls — this e2e covers the native function-calling bench path.
+        cells = run_bench(manifest, provider=None, out_dir=out_dir, society_tools=True)
 
         assert len(cells) == 2, f"Expected 2 cells, got {len(cells)}: {cells}"
 
@@ -402,7 +406,7 @@ def test_bench_e2e_offline_llm_arm(monkeypatch: pytest.MonkeyPatch) -> None:
 
         # Resume: second run_bench must skip all cells
         calls_before_resume = len(build_arm_calls)
-        cells2 = run_bench(manifest, provider=None, out_dir=out_dir)
+        cells2 = run_bench(manifest, provider=None, out_dir=out_dir, society_tools=True)
         calls_after_resume = len(build_arm_calls)
 
         assert calls_after_resume == calls_before_resume, (

@@ -213,7 +213,7 @@ def test_resume_skips_existing_cell(monkeypatch: pytest.MonkeyPatch) -> None:
 
     call_count = {"n": 0}
 
-    def _fake_build_arm(arm: str, seed: int, provider: Any) -> Any:
+    def _fake_build_arm(arm: str, seed: int, provider: Any, society_tools: bool = False) -> Any:
         call_count["n"] += 1
         raise AssertionError("build_arm should not be called for a resumed cell")
 
@@ -363,7 +363,7 @@ def test_resume_reruns_on_tick_budget_mismatch(monkeypatch: pytest.MonkeyPatch) 
 
     call_count = {"n": 0}
 
-    def _fake_build_arm(arm: str, seed: int, provider: Any) -> Any:
+    def _fake_build_arm(arm: str, seed: int, provider: Any, society_tools: bool = False) -> Any:
         call_count["n"] += 1
         # Return a minimal fake setup that never actually runs
         raise RuntimeError("build_arm called (expected in re-run path)")
@@ -403,7 +403,7 @@ def test_resume_skips_when_ticks_match(monkeypatch: pytest.MonkeyPatch) -> None:
     """A cached cell with matching ticks_requested is skipped."""
     import aftershock.bench as bench_mod
 
-    def _fake_build_arm(arm: str, seed: int, provider: Any) -> Any:
+    def _fake_build_arm(arm: str, seed: int, provider: Any, society_tools: bool = False) -> Any:
         raise AssertionError("build_arm must not be called when ticks match")
 
     monkeypatch.setattr(bench_mod, "build_arm", _fake_build_arm)
@@ -441,7 +441,7 @@ def test_resume_reruns_on_corrupt_summary(monkeypatch: pytest.MonkeyPatch) -> No
 
     call_count = {"n": 0}
 
-    def _fake_build_arm(arm: str, seed: int, provider: Any) -> Any:
+    def _fake_build_arm(arm: str, seed: int, provider: Any, society_tools: bool = False) -> Any:
         call_count["n"] += 1
         raise RuntimeError("re-run triggered")
 

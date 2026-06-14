@@ -134,6 +134,7 @@ def build_llm_agents(
     lessons: list[str] | None = None,
     arm: str = "society",
     _doctrine_rules: list[Rule] | None = None,
+    force_tools: bool = False,
 ) -> dict[str, Agent]:
     """Build one LLMAgent per town role, sharing the same provider instance.
 
@@ -156,6 +157,10 @@ def build_llm_agents(
         arm: the benchmark arm name used to filter doctrine rules (default "society").
         _doctrine_rules: pre-loaded rules list; if None, load_doctrine() is called.
                          Exposed for testing only.
+        force_tools: opt-in switch (CLI --society-tools). When True, every role is
+                     built in native Qwen function-calling mode regardless of its
+                     YAML default (which is JSON). Default False keeps JSON mode —
+                     the cost-optimal default the published benchmark uses.
 
     Returns:
         dict mapping agent_id -> LLMAgent for all six town agents.
@@ -192,8 +197,16 @@ def build_llm_agents(
             )
             system_prompt = system_prompt + lessons_block
 
+        updates: dict[str, object] = {}
         if system_prompt != role.system_prompt:
-            role = role.model_copy(update={"system_prompt": system_prompt})
+            updates["system_prompt"] = system_prompt
+        # force_tools is the opt-in switch (CLI --society-tools): flip every role
+        # into native function-calling mode regardless of its YAML default, which
+        # is now JSON. The role's YAML use_tools is honored when force_tools is off.
+        if force_tools and not role.use_tools:
+            updates["use_tools"] = True
+        if updates:
+            role = role.model_copy(update=updates)
 
         if role.use_tools:
             contract = tool_contract(has_proposals=True)

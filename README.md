@@ -49,10 +49,11 @@ Four arms, identical seeded worlds (5 paired seeds × 60-tick budget), real Qwen
 calls. Full tables in [bench/results/2026-06-11/](bench/results/2026-06-11/RESULTS.md);
 reproduce with `aftershock bench`.
 
-*Note: As of 2026-06-12, the society arm uses Qwen Cloud native function calling
-(tools/tool_choice) instead of JSON-mode prompting. The benchmark results above were
-produced with JSON-mode prompting (pre-tool-calling). A re-benchmark with the new
-tool-calling path is pending.*
+*Note: the society arm runs in JSON-contract mode by default — the cost-optimal path these
+numbers reflect. Native Qwen function calling (`tools`/`tool_choice`) is implemented and
+benchmarked as an opt-in (`--society-tools`); see
+[Native Qwen function calling](#native-qwen-function-calling-measured-ablation) below for the
+measured cost tradeoff.*
 
 | arm | coordination | models | lives saved (mean±sd) | missions failed | cost/run | lives per $ |
 |---|---|---|---|---|---|---|
@@ -79,6 +80,27 @@ most of the outcome. That is the point of the project.
 
 Everything we've learned about agent behavior along the way — including the negative
 results — is logged with evidence in [docs/FIELD-NOTES.md](docs/FIELD-NOTES.md).
+
+### Native Qwen function calling (measured ablation)
+
+The society also speaks Qwen Cloud **native function calling** — per-role `tools`, `tool_choice`,
+`parallel_tool_calls`, and a `no_op` idle tool — as an opt-in:
+`aftershock run --arm society --society-tools` (or `aftershock bench --society-tools`). We
+benchmarked it on the same 5 paired seeds
+([bench/results/2026-06-13-tool-ablation/](bench/results/2026-06-13-tool-ablation/RESULTS.md)):
+
+| society mode | lives saved (mean±sd) | missions failed | cost/run | latency/run | lives per $ |
+|---|---|---|---|---|---|
+| **JSON contracts (default)** | 103.2 ± 23.6 | 0.4 | **$0.042** | 120 s | **2441** |
+| native function calling | 98.2 ± 23.2 | 0.8 | $0.083 | 297 s | 1188 |
+
+**Finding:** native tool calling held decision quality within noise (98.2 vs 103.2 lives —
+well inside ±23 SD) but cost ~2× more and ran ~2.5× slower. The cause is structural, not
+tuning: the ~1k-token tool schema is re-sent on *every* one of ~240 agent calls per run, and
+trimming schemas/descriptions to the bone still only reaches ~$0.069/run — above the JSON path.
+So Aftershock's cost-optimal default is JSON contracts, with function calling implemented,
+benchmarked, and available behind `--society-tools`. Full write-up in
+[docs/FIELD-NOTES.md](docs/FIELD-NOTES.md).
 
 ## Real-data scenarios (sim vs reality)
 

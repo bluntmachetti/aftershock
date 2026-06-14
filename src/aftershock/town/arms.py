@@ -68,6 +68,7 @@ def build_arm(
     provider: Any | None,
     lessons: list[str] | None = None,
     scenario: ScenarioPack | None = None,
+    society_tools: bool = False,
 ) -> ArmSetup:
     """Build all components for one (arm, seed) benchmark cell.
 
@@ -111,7 +112,9 @@ def build_arm(
     if arm == "scripted":
         return _build_scripted(world, registry, seed)
     if arm == "society":
-        return _build_society(world, registry, seed, provider, lessons=lessons)
+        return _build_society(
+            world, registry, seed, provider, lessons=lessons, use_tools=society_tools
+        )
     if arm == "swarm":
         return _build_swarm(world, registry, seed, provider)
     if arm == "solo":
@@ -163,12 +166,15 @@ def _build_society(
     seed: int,  # noqa: ARG001
     provider: Any,
     lessons: list[str] | None = None,
+    use_tools: bool = False,
 ) -> ArmSetup:
     roles = load_roles(_TOWN_DIR / "roles")
     _six = ("commander", "comms", "fire", "infrastructure", "medical", "rescue")
     roster = {aid: aid for aid in _six}
     society = TownSociety(roster=roster)
-    agents = build_llm_agents(roles, provider, lessons=lessons, arm="society")
+    agents = build_llm_agents(
+        roles, provider, lessons=lessons, arm="society", force_tools=use_tools
+    )
     return ArmSetup(
         world=world,
         society=society,
