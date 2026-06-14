@@ -32,8 +32,11 @@ Aftershock is a working end-to-end prototype:
   `society`.
 - Qwen-backed agent society using DashScope models, with token/cost accounting and after-action
   reporting.
-- React observatory served by FastAPI, including map replay, live runs, benchmark comparison,
-  scenario provenance, and real-vs-sim latency strips.
+- React observatory served by FastAPI — a "Mission Control / EOC" command map with a live
+  **contention overlay** that draws the resource auction on the map (contested districts linked,
+  losing/winning incidents flagged) plus a deadline/severity/panic-driven condition state,
+  alongside run replay, live runs, benchmark comparison, scenario provenance, and real-vs-sim
+  latency strips.
 - MCP spectator server for browsing run records and injecting live events.
 - Real-data scenario packs committed under `scenarios/`, including the headline NYC Hurricane Ida
   pack.
