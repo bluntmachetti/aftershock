@@ -2,28 +2,31 @@
 
 Short list of known project tasks that are not part of the current deployment path.
 
-## NEXT SESSION — Mission Control observatory redesign (submission polish)
+## Mission Control observatory redesign — SHIPPED to PR (pending review + staging)
 
-The next tranche. **Full plan + decision + porting sequence:** `.omc/plans/mission-control-redesign.md`
-(local scratch). **Prototype + rendered style screenshots:** `.omc/mission-control-prototype/` (local scratch).
+**PR #3** (`mission-control-map` branch). All 3 open questions answered: **Tiles + contention
+overlay committed · Map-tab only · Ida stays on Map with provenance.** Contract: `docs/DESIGN.md`
+§"Mission Control map". Plan/prototype: `.omc/plans/mission-control-redesign.md`,
+`.omc/mission-control-prototype/` (live result shots in `rendered/live/`).
 
-- **Decision (CCG-synthesized — Claude + Codex + Gemini):** redesign the observatory **Map tab** into
-  the "Mission Control / EOC" command-center shell, with the **③ Tiles** map (geographic tiles +
-  kind-iconed mission pins) **+ a contention overlay** ported from the ① Sector style (dashed
-  "RPR contested" links / pin halos on contesting districts during auction events). **Committed —
-  not switchable.** Same dark design language as the new blog (`blog/assets/css/blog.css`).
-- **Scope (MVP):** Map tab only; one production `MissionControlMap` wired to **live** run data; one
-  contested-resource overlay; polished NYC Ida path. Frontend-only → zero engine/determinism risk.
-- **Invariants to preserve:** `web/src/lib/palette.ts` single hex-source (society=cyan, baseline=amber);
-  `RealityStrip` + REAL/MAPPED/INFERRED/SYNTHETIC provenance honesty; `WorldState`/`MissionState`
-  shapes; scrubber/tabs semantics; `vitest` green; live FastAPI data (not just the canned demo).
-- **OPEN QUESTIONS — confirm with Kenny before building (asked, not yet answered):**
-  1. Confirm **Tiles + contention overlay, committed** (vs straight ① Sector / vs keep switchable).
-  2. **Map tab only** (recommended) vs full-observatory reskin before July 9.
-  3. Keep the real-Ida story **on the Map** (with provenance) vs move it to **Compare/Bench**.
-- **Execution model when approved:** fold the contract into `docs/DESIGN.md` §"Mission Control map"
-  first → disjoint-surface workflow (shell / tile-map / overlay / rails-restyle) → adversarial review
-  → verify (tsc/vitest/build + 1080p) → staging→prod promotion gate.
+- **Built (frontend-only):** `MissionControlShell` (EOC header band — CONDITION + saved/lost/active/
+  at-risk + op clock), `MissionControlMap` (schematic tile backdrop + the existing rich markers +
+  contention overlay from `lib/contention.ts`), `lib/{condition,resources}.ts`, `mapShared.tsx`
+  (extracted markers/popover — `TownMap` untouched ⇒ Compare unaffected). Palette frozen; additive
+  `CONTENTION_COLOR` + `CONDITION_COLORS` only.
+- **Verified:** tsc · vitest 123/123 (7 new) · build · grep-gate · `aftershock verify` determinism
+  PASS · 1080p shots of Map (overlay on `seed42-society`), Compare (unaffected), and the **NYC-Ida
+  provenance path** (`seed91-scripted`: borough names + DataChip + RealityStrip + REAL·NYC IDA
+  badges + caveat). 6-agent adversarial review: 4 APPROVE / 2 COMMENT, 2 real defects fixed.
+- **Remaining:** merge PR #3 → **k12 staging → Kenny approval → Alicloud prod** (gate untouched).
+  Note: the society arm on Ida (`seed91-society`) shows the shortage *textually* in the negotiation
+  feed but draws no map contention links — NYC-Ida demand mass-exhausts pools (no winner-vs-loser
+  contest); the winner/loser overlay is demoed on synthetic `seed42-society`.
+- **Deferred follow-ups surfaced:** adopt the prototype's refined GLOBAL palette (deeper surfaces +
+  tuned signals incl. society→#46b6f0) across all tabs; denser per-prototype rail restyle.
+- **Server papercut observed (pre-existing, not this PR):** `aftershock serve` snapshots the runs
+  list at startup, so a scenario run generated while the server is up shows `scenario=null` until
+  restart — restart `serve` to surface a freshly-generated pack's provenance.
 
 ## Shipped this session (2026-06-14)
 

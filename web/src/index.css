@@ -82,6 +82,34 @@ html, body {
   box-shadow: 0 0 6px #4ade8040, 0 0 12px #4ade8020;
 }
 
+/* Mission Control — contention overlay animations (CSS-only, reduced-motion
+   safe; no layout from these). The dashed "contested" link crawls toward the
+   winning district; the contested-pin halo gently pulses. */
+@keyframes mc-contest-dash {
+  to { stroke-dashoffset: -18; }
+}
+@keyframes mc-contest-halo {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 0.35; }
+}
+.mc-contest-link {
+  animation: mc-contest-dash 0.9s linear infinite;
+}
+.mc-contest-halo {
+  animation: mc-contest-halo 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* The redesign's own contention animations, plus the decorative Tailwind
+     glow/pulse animations (open-mission ping, inject pulse, status dots) — all
+     paint-only and safe to drop entirely when the user opts out of motion. */
+  .mc-contest-link,
+  .mc-contest-halo,
+  .animate-ping,
+  .animate-pulse {
+    animation: none !important;
+  }
+}
+
 /* Scan line overlay effect */
 .scanlines::after {
   content: '';

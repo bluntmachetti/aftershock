@@ -25,7 +25,9 @@ import {
   buildFirstArrivalMap,
 } from '../lib/scenario'
 import { ARM_COLORS } from '../lib/palette'
-import { TownMap } from './TownMap'
+import { deriveContention } from '../lib/contention'
+import { MissionControlMap } from './MissionControlMap'
+import { MissionControlShell } from './MissionControlShell'
 import { RealityStrip } from './RealityStrip'
 import { PanicGauge } from './PanicGauge'
 import { ResourcePoolSidebar } from './ResourcePoolSidebar'
@@ -62,7 +64,7 @@ export function MapTab({
   // reference_aggregates / caveat_line / tick_minutes (for the RealityStrip
   // footer); `scenarioPack` carries reference.missions (per-mission baseline)
   // for the kept popover lines. Both stay null for a synthetic run, so the
-  // RealityStrip renders nothing and TownMap gets no scenario props — behavior
+  // RealityStrip renders nothing and the map gets no scenario props — behavior
   // unchanged with no scenario.
   const [scenarioBlock, setScenarioBlock] = useState<ScenarioManifestBlock | null>(null)
   const [scenarioPack, setScenarioPack] = useState<ScenarioPack | null>(null)
@@ -177,6 +179,11 @@ export function MapTab({
     return out
   }, [tick])
 
+  // Contention overlay — contested missions + cross-district links derived from
+  // this tick's resource auction (proposals + rulings). Empty on ticks with no
+  // contested resource, so the map renders identically when nothing is contested.
+  const contest = useMemo(() => deriveContention(tick, world), [tick, world])
+
   // ---- Scenario reality wiring (task #4) ----
   // All of the below are inert (null/empty) on a synthetic run.
 
@@ -254,8 +261,19 @@ export function MapTab({
     }
   }
 
+  const activeRun = runs.find((r) => r.run_id === timeline.runId)
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      {/* Mission Control command band — CONDITION + run identity + op clock +
+          saved/lost/active/at-risk counters. */}
+      <MissionControlShell
+        world={world ?? null}
+        tickNumber={tick?.tick ?? null}
+        totalTicks={timeline.total}
+        arm={activeRun?.arm ?? null}
+        seed={activeRun?.seed ?? null}
+      />
       {/* Main area */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left sidebar: run picker + resource pools */}
@@ -273,20 +291,6 @@ export function MapTab({
               <PanicGauge panic={world.panic} />
               <div className="border-t border-eoc-border" />
               <ResourcePoolSidebar pools={world.pools} />
-              <div className="border-t border-eoc-border" />
-              <div className="flex flex-col gap-1">
-                <div className="text-[11px] font-mono uppercase tracking-widest text-eoc-secondary">
-                  Totals
-                </div>
-                <div className="flex justify-between text-xs font-mono tabular-nums">
-                  <span className="text-eoc-secondary">Saved</span>
-                  <span className="text-signal-green font-semibold">{world.lives_saved}</span>
-                </div>
-                <div className="flex justify-between text-xs font-mono tabular-nums">
-                  <span className="text-eoc-secondary">Lost</span>
-                  <span className="text-signal-red font-semibold">{world.lives_lost}</span>
-                </div>
-              </div>
             </>
           )}
         </div>
@@ -310,7 +314,7 @@ export function MapTab({
           )}
           {world && (
             <div className="flex-1 relative overflow-hidden scanlines">
-              <TownMap
+              <MissionControlMap
                 world={world}
                 selectedMissionId={selectedMission}
                 onSelectMission={setSelectedMission}
@@ -319,6 +323,7 @@ export function MapTab({
                 scenarioRefForMission={scenarioRefForMission}
                 agentFirstArrivalForMission={agentFirstArrivalForMission}
                 tickMinutes={tickMinutes}
+                contest={contest}
               />
               {/* Dismissible legend overlay (self-suppresses via localStorage) */}
               <Legend />

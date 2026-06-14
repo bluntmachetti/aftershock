@@ -4,47 +4,54 @@ import type {
   MissionState,
   ScenarioReferenceMission,
 } from '../types'
-import { MISSION_KIND_COLORS, STATUS_COLORS, FALLBACK_COLOR } from '../lib/palette'
+import { MISSION_KIND_COLORS, STATUS_COLORS, FALLBACK_COLOR, CONTENTION_COLOR } from '../lib/palette'
+import type { ContentionResult } from '../lib/contention'
+import { resourceCode } from '../lib/resources'
 import {
   DISTRICT_LAYOUT,
   GRID_Y,
   SVG_W,
   SVG_H,
   EOC_GROUND,
-  EOC_SURFACE,
   EOC_BORDER,
-  EOC_GRID,
   BLOCKED_FILL,
   BLOCKED_BADGE_FILL,
+  districtCenter,
   MissionMarker,
   MissionPopover,
   type Effects,
 } from './mapShared'
 
+// Token-driven backdrop fills (no hex; read EOC RGB-channel vars at low alpha so
+// the schematic water/roads/tiles read as an ops map without fighting the pins).
+const TILE_FILL = 'rgb(var(--eoc-surface) / 0.55)'
+const ROAD_FILL = 'rgb(var(--text-eoc-faint) / 0.18)'
+const WATER_FILL = 'rgb(var(--signal-cyan) / 0.08)'
+const WATER_EDGE = 'rgb(var(--signal-cyan) / 0.22)'
+
 interface Props {
   world: WorldState
   selectedMissionId: string | null
   onSelectMission: (id: string | null) => void
-  /** 'quiet' (compare mode) disables animate-ping + selected drop-shadow. */
+  /** 'quiet' disables animation/glow (kept for parity with TownMap; the Map tab
+   *  always passes 'normal'). */
   effects?: Effects
-  /** District ids to briefly highlight (inject pulse) — keyed by district. */
+  /** District ids to briefly highlight (inject pulse). */
   pulseDistricts?: string[]
   /** agent_id → mission_id this tick (most recent resource requester per mission). */
   missionRequesters?: Record<string, string>
-  /** Scenario reality baseline lookup for the selected mission (delta #8). MapTab
-   *  resolves it via the injection-safe index→mission map (lib/scenario.ts) and
-   *  passes a per-mission-id getter — TownMap stays presentational (no fetch, no
-   *  index computation). Absent/returns null on a synthetic run → no scenario lines. */
+  /** Scenario reality baseline lookup for the selected mission (popover lines). */
   scenarioRefForMission?: (missionId: string) => ScenarioReferenceMission | null
-  /** First-arrival tick lookup for the selected mission (feeds the sim latency).
-   *  Returns null when no unit has arrived yet → sim line shows the em-dash. */
+  /** First-arrival tick lookup for the selected mission (sim latency line). */
   agentFirstArrivalForMission?: (missionId: string) => number | null
-  /** Pack tick length in minutes — only set on a scenario run. Required (with a
-   *  resolved scenarioRef) for the popover's real-vs-sim latency lines to render. */
+  /** Pack tick length in minutes — only set on a scenario run. */
   tickMinutes?: number | null
+  /** Contention overlay for the current tick (derived in MapTab from proposals +
+   *  rulings). Absent → renders nothing extra, identical to a plain tile map. */
+  contest?: ContentionResult | null
 }
 
-function TownMapImpl({
+function MissionControlMapImpl({
   world,
   selectedMissionId,
   onSelectMission,
@@ -54,20 +61,19 @@ function TownMapImpl({
   scenarioRefForMission,
   agentFirstArrivalForMission,
   tickMinutes,
+  contest,
 }: Props) {
   const quiet = effects === 'quiet'
 
-  // Place missions: spread within district rect. Memoized on the missions map
-  // so two synced compare maps don't recompute layout every 125ms at 8×.
+  // Same mission-position logic as TownMap (spread within each district tile),
+  // memoized on the missions map so playback stays cheap.
   const missionPositions = useMemo(() => {
     const positions: Record<string, { cx: number; cy: number }> = {}
     const districtMissions: Record<string, MissionState[]> = {}
-
     for (const m of Object.values(world.missions)) {
       if (!districtMissions[m.district_id]) districtMissions[m.district_id] = []
       districtMissions[m.district_id].push(m)
     }
-
     for (const [distId, missions] of Object.entries(districtMissions)) {
       const layout = DISTRICT_LAYOUT[distId]
       if (!layout) continue
@@ -85,6 +91,8 @@ function TownMapImpl({
   }, [world.missions])
 
   const pulseSet = useMemo(() => new Set(pulseDistricts ?? []), [pulseDistricts])
+  const contestedMissions = contest?.contestedMissions
+  const contestPairs = contest?.pairs ?? []
 
   const selected = selectedMissionId ? world.missions[selectedMissionId] : undefined
   const selectedPos = selectedMissionId ? missionPositions[selectedMissionId] : undefined
@@ -96,7 +104,23 @@ function TownMapImpl({
       preserveAspectRatio="xMidYMid meet"
       style={{ background: EOC_GROUND, display: 'block' }}
     >
-      {/* District blocks */}
+      <defs>
+        <marker id="mc-arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L7,4 L0,8 Z" fill={CONTENTION_COLOR} />
+        </marker>
+      </defs>
+
+      {/* ---- Schematic ops backdrop (static; reads as a geographic tile map) ---- */}
+      {/* Water — fills the top margin directly above the harbor column, with a
+          lit edge meeting the harbor tile so it reads as the coastline. */}
+      <rect x={160} y={2} width={180} height={46} fill={WATER_FILL} />
+      <rect x={160} y={46} width={180} height={2} fill={WATER_EDGE} />
+      {/* Road grid — muted bands under the column/row boundaries, drawn behind tiles. */}
+      <rect x={158} y={GRID_Y} width={4} height={280} fill={ROAD_FILL} />
+      <rect x={338} y={GRID_Y} width={4} height={280} fill={ROAD_FILL} />
+      <rect x={0} y={GRID_Y + 128} width={SVG_W} height={4} fill={ROAD_FILL} />
+
+      {/* ---- District tiles ---- */}
       {Object.entries(DISTRICT_LAYOUT).map(([id, d]) => {
         const dist = world.districts[id]
         const blocked = dist?.road_blocked ?? false
@@ -108,20 +132,19 @@ function TownMapImpl({
               y={d.y + 2}
               width={d.w - 4}
               height={d.h - 4}
-              rx={4}
-              fill={blocked ? BLOCKED_FILL : EOC_SURFACE}
+              rx={5}
+              fill={blocked ? BLOCKED_FILL : TILE_FILL}
               stroke={blocked ? STATUS_COLORS.failed : EOC_BORDER}
               strokeWidth={blocked ? 2 : 1}
               strokeDasharray={blocked ? '6 3' : undefined}
             />
-            {/* Inject-pulse overlay — fades after ~2s via animate-ping on the district */}
             {pulsing && (
               <rect
                 x={d.x + 2}
                 y={d.y + 2}
                 width={d.w - 4}
                 height={d.h - 4}
-                rx={4}
+                rx={5}
                 fill="none"
                 stroke={MISSION_KIND_COLORS.medical_surge}
                 strokeWidth={2}
@@ -129,9 +152,6 @@ function TownMapImpl({
                 style={{ animationDuration: '1s' }}
               />
             )}
-            {/* District label — prefer the world/pack display name (P0, delta 1:
-                so nyc-ida-2021 renders "Manhattan", not "Old Town"). Geometry
-                stays keyed by canonical id; only the label text is overridden. */}
             <text
               x={d.x + 8}
               y={d.y + 14}
@@ -142,7 +162,6 @@ function TownMapImpl({
             >
               {(dist?.name ?? d.label).toUpperCase()}
             </text>
-            {/* Blocked road indicator — corner badge */}
             {blocked && (
               <g>
                 <rect
@@ -172,12 +191,58 @@ function TownMapImpl({
         )
       })}
 
-      {/* Grid lines — vertical columns and horizontal row separator */}
-      <line x1={160} y1={GRID_Y} x2={160} y2={GRID_Y + 280} stroke={EOC_GRID} strokeWidth={1} />
-      <line x1={340} y1={GRID_Y} x2={340} y2={GRID_Y + 280} stroke={EOC_GRID} strokeWidth={1} />
-      <line x1={0} y1={GRID_Y + 130} x2={SVG_W} y2={GRID_Y + 130} stroke={EOC_GRID} strokeWidth={1} />
+      {/* ---- Contention links (district-center → district-center), below pins ---- */}
+      {!quiet &&
+        contestPairs.map((p) => {
+          const a = districtCenter(p.loserDistrict)
+          const b = districtCenter(p.winnerDistrict)
+          if (!a || !b) return null
+          const mx = (a.x + b.x) / 2
+          const my = (a.y + b.y) / 2
+          const label = `${p.resources.map(resourceCode).join('+')} CONTESTED`
+          // Badge width tracks the (mono) label so combined labels never clip.
+          const bw = label.length * 5.6 + 14
+          return (
+            <g key={`${p.loserDistrict}->${p.winnerDistrict}`}>
+              <line
+                x1={a.x}
+                y1={a.y}
+                x2={b.x}
+                y2={b.y}
+                stroke={CONTENTION_COLOR}
+                strokeWidth={1.5}
+                strokeDasharray="5 4"
+                opacity={0.85}
+                markerEnd="url(#mc-arrow)"
+                className="mc-contest-link"
+              />
+              <rect
+                x={mx - bw / 2}
+                y={my - 9}
+                width={bw}
+                height={18}
+                rx={3}
+                fill={EOC_GROUND}
+                stroke={CONTENTION_COLOR}
+                strokeWidth={1}
+                opacity={0.96}
+              />
+              <text
+                x={mx}
+                y={my + 4}
+                textAnchor="middle"
+                fontSize={9}
+                fontFamily="'JetBrains Mono', monospace"
+                fill={CONTENTION_COLOR}
+                letterSpacing={1}
+              >
+                {label}
+              </text>
+            </g>
+          )
+        })}
 
-      {/* Mission markers */}
+      {/* ---- Mission markers (rich; shared with TownMap) ---- */}
       {Object.values(world.missions).map((m) => {
         const pos = missionPositions[m.id]
         if (!pos) return null
@@ -189,14 +254,13 @@ function TownMapImpl({
             cy={pos.cy}
             selected={selectedMissionId === m.id}
             effects={effects}
-            onSelect={() =>
-              onSelectMission(selectedMissionId === m.id ? null : m.id)
-            }
+            contested={contestedMissions?.has(m.id) ?? false}
+            onSelect={() => onSelectMission(selectedMissionId === m.id ? null : m.id)}
           />
         )
       })}
 
-      {/* Pending arrival indicators */}
+      {/* ---- Pending arrivals ---- */}
       {world.pending.map((pa, i) => {
         const layout = DISTRICT_LAYOUT[pa.district_id]
         if (!layout) return null
@@ -210,7 +274,7 @@ function TownMapImpl({
         )
       })}
 
-      {/* Mission popover — rendered last so it sits above markers */}
+      {/* ---- Popover (top) ---- */}
       {selected && selectedPos && (
         <MissionPopover
           mission={selected}
@@ -226,4 +290,4 @@ function TownMapImpl({
   )
 }
 
-export const TownMap = React.memo(TownMapImpl)
+export const MissionControlMap = React.memo(MissionControlMapImpl)

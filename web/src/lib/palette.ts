@@ -115,3 +115,27 @@ export const PROVENANCE_COLORS: Record<
 export function isRealProvenance(label: ProvenanceLabel): boolean {
   return label === 'real'
 }
+
+// ---------------------------------------------------------------------------
+// Mission Control map (Map-tab redesign) — ADDITIVE tokens only. Everything
+// above (MISSION_KIND/STATUS/ARM/PROVENANCE + hazard) is frozen byte-for-byte,
+// so every other tab and the arm-color/provenance contracts stay identical.
+// ---------------------------------------------------------------------------
+
+/** Contention-overlay accent — the prototype's `--caution` yellow. Deliberately
+ *  NOT baseline amber (#f59e0b): a contested link must never read as "the
+ *  baseline arm". Drives the dashed RPR link, arrowhead, label, and pin halo.
+ *  The one genuinely-new hex in this file. */
+export const CONTENTION_COLOR = '#ffd24a'
+
+/** Condition-state (EOC header) colors. Mapped onto the EXISTING signals — no
+ *  new hues: red=critical, amber=urgent/open, blue=society/info, green=nominal. */
+export const CONDITION_COLORS = {
+  red: STATUS_COLORS.failed, // #ef4444
+  amber: STATUS_COLORS.open, // #f59e0b
+  blue: ARM_COLORS.society, // #22d3ee
+  green: STATUS_COLORS.resolved, // #4ade80
+} as const
+
+/** EOC condition levels, brightest (most urgent) first. */
+export type ConditionLevel = keyof typeof CONDITION_COLORS
