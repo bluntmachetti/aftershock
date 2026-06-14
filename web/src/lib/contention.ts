@@ -36,14 +36,8 @@ function strField(body: Record<string, unknown> | undefined, key: string): strin
   return typeof v === 'string' ? v : ''
 }
 
-interface Side {
-  mid: string
-  district: string
-}
-
 /** Compute the per-tick contention overlay. Returns an empty result for a null
- *  tick/world, a tick with no auction rulings, or a tick where no resource has
- *  both a winner and a loser (i.e. no genuine contention to show). */
+ *  tick/world or a tick with no winner-vs-loser auction contest to show. */
 export function deriveContention(
   tick: TickRecord | null | undefined,
   world: WorldState | null | undefined,
@@ -57,51 +51,48 @@ export function deriveContention(
     for (const p of resp.proposals) byId[p.proposal_id] = p
   }
 
-  const winners: Record<string, Side[]> = {}
-  const losers: Record<string, Side[]> = {}
-
+  // Group contested links by loser→winner district axis, collecting every
+  // resource contested along it, so the same axis renders one combined badge
+  // instead of stacking a badge per resource at the identical midpoint. Each
+  // loser is linked to the SPECIFIC winner named in its auction reason — the
+  // marginal grab the pool ran out on — not an assumed "top" winner, so a
+  // partially-exhausted pool (m1 wins 2, m2 wins the last 1, m3 loses to m2)
+  // points m3 at m2's district, never m1's.
+  const contestedMissions = new Set<string>()
+  const pairMap = new Map<string, ContestPair>()
   for (const ruling of tick.rulings) {
-    if (ruling.decided_by !== 'kernel:auction') continue
+    if (ruling.decided_by !== 'kernel:auction' || ruling.accepted) continue
     const p = byId[ruling.proposal_id]
     if (!p || p.kind !== 'resource_request') continue
     const resource = strField(p.body, 'resource')
-    const mid = strField(p.body, 'mission_id')
-    if (!resource || !mid) continue
-    // District is authoritative from world state, not the proposal body.
-    const district = world.missions[mid]?.district_id ?? ''
-    if (!district) continue // injected/unknown mission with no world entry
-    if (ruling.accepted) {
-      ;(winners[resource] ||= []).push({ mid, district })
-    } else if (ruling.reason.startsWith('pool exhausted')) {
-      ;(losers[resource] ||= []).push({ mid, district })
+    const loserMid = strField(p.body, 'mission_id')
+    if (!resource || !loserMid) continue
+    // Parse the winner the loser actually lost to from the auction reason:
+    //   "pool exhausted: <resource> granted to <winnerMid> (priority N)".
+    // The "has N available, need M" variant has no named winner (the pool was
+    // already empty), so there is nothing to link to — skip it.
+    const m = /granted to (.+?) \(priority/.exec(ruling.reason)
+    if (!m) continue
+    const winnerMid = m[1]
+    // Districts are authoritative from world state, not the proposal body.
+    const loserDistrict = world.missions[loserMid]?.district_id ?? ''
+    const winnerDistrict = world.missions[winnerMid]?.district_id ?? ''
+    if (!loserDistrict || !winnerDistrict) continue // injected/unknown mission
+    contestedMissions.add(loserMid)
+    contestedMissions.add(winnerMid)
+    if (loserDistrict === winnerDistrict) continue
+    const key = `${loserDistrict}->${winnerDistrict}`
+    let entry = pairMap.get(key)
+    if (!entry) {
+      entry = { loserDistrict, winnerDistrict, resources: [] }
+      pairMap.set(key, entry)
     }
+    if (!entry.resources.includes(resource)) entry.resources.push(resource)
   }
 
-  // Only a resource that has BOTH a winner and a loser is genuinely contended.
-  // Group contested links by loser→winner district axis, collecting every
-  // resource contested along it, so the same axis renders one combined badge
-  // instead of stacking a badge per resource at the identical midpoint.
-  const contestedMissions = new Set<string>()
-  const pairMap = new Map<string, ContestPair>()
-  for (const resource of Object.keys(losers).sort()) {
-    const ws = winners[resource]
-    if (!ws || ws.length === 0) continue
-    // The auction emits winners priority-first, so ws[0] is the top winner.
-    const winner = ws[0]
-    for (const loser of losers[resource]) {
-      contestedMissions.add(loser.mid)
-      contestedMissions.add(winner.mid)
-      if (loser.district === winner.district) continue
-      const key = `${loser.district}->${winner.district}`
-      let entry = pairMap.get(key)
-      if (!entry) {
-        entry = { loserDistrict: loser.district, winnerDistrict: winner.district, resources: [] }
-        pairMap.set(key, entry)
-      }
-      if (!entry.resources.includes(resource)) entry.resources.push(resource)
-    }
-  }
-
+  // Stable resource order within each link (rulings arrive priority-sorted, not
+  // resource-sorted) so the combined "AMB+RSC" badge is deterministic.
+  for (const entry of pairMap.values()) entry.resources.sort()
   const pairs = [...pairMap.values()]
   if (contestedMissions.size === 0 && pairs.length === 0) return EMPTY
   return { contestedMissions, pairs }

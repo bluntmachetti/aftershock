@@ -129,6 +129,35 @@ describe('deriveContention', () => {
     expect([...r.contestedMissions].sort()).toEqual(['m1', 'm3', 'm4'])
   })
 
+  it('links a loser to the winner NAMED in its reason, not the first winner', () => {
+    // Partial exhaustion: m1 (harbor) and m2 (market) both win ambulance; m3
+    // (queens) loses the last unit to m2. The link must point queens→market
+    // (the named winner), NOT queens→harbor (the first winner).
+    const w = world([
+      mission('m1', 'harbor'),
+      mission('m2', 'market'),
+      mission('m3', 'residential_north'),
+    ])
+    const t = tick(
+      [
+        proposal('p1', 'medical', 'ambulance', 'm1'),
+        proposal('p2', 'medical', 'ambulance', 'm2'),
+        proposal('p3', 'medical', 'ambulance', 'm3'),
+      ],
+      [
+        ruling('p1', true),
+        ruling('p2', true),
+        ruling('p3', false, 'pool exhausted: ambulance granted to m2 (priority 6)'),
+      ],
+    )
+    const r = deriveContention(t, w)
+    expect(r.pairs).toEqual([
+      { loserDistrict: 'residential_north', winnerDistrict: 'market', resources: ['ambulance'] },
+    ])
+    // only the loser and the winner it actually lost to are highlighted (not m1)
+    expect([...r.contestedMissions].sort()).toEqual(['m2', 'm3'])
+  })
+
   it('marks both missions contested but draws no link when they share a district', () => {
     const w = world([mission('m1', 'harbor'), mission('m2', 'harbor')])
     const t = tick(

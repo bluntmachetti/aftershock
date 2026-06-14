@@ -849,13 +849,15 @@ current tick (no history):
 ```ts
 deriveContention(tick, world):
   byId = { proposal_id → proposal } over tick.responses[].proposals   // same map NegotiationFeed builds
-  for ruling in tick.rulings where ruling.decided_by === 'kernel:auction':
+  for ruling in tick.rulings where decided_by === 'kernel:auction' AND NOT accepted:
     p = byId[ruling.proposal_id];  if p?.kind !== 'resource_request' continue
-    res = p.body.resource;  mid = p.body.mission_id;  district = world.missions[mid]?.district_id
-    accepted → winners[res].push({mid, district});  loser (reason starts 'pool exhausted') → losers[res].push(...)
-  contestMap = Set(all loser + winner mids)            // both endpoints get the halo (matches prototype)
-  contestPairs = for each res, each loser×top-winner with loser.district !== winner.district
-                 → {loserDistrict, winnerDistrict, resource}   // deduped
+    res = p.body.resource;  loserMid = p.body.mission_id
+    winnerMid = ruling.reason.match(/granted to (.+?) \(priority/)   // the SPECIFIC winner this loser lost
+    if no winnerMid continue                                        // "has N available" = empty pool, nothing to link
+    loserDist = world.missions[loserMid]?.district_id; winnerDist = world.missions[winnerMid]?.district_id
+    if either district missing (injected mission) continue
+    contestMap.add(loserMid); contestMap.add(winnerMid)             // both endpoints get the halo (matches prototype)
+    if loserDist !== winnerDist: pairs[loserDist→winnerDist].resources += res   // group per axis
 ```
 
 Render: dashed animated `RPR CONTESTED` link (district-center → district-center, CSS
