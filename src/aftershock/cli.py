@@ -176,7 +176,10 @@ def cmd_run(args: argparse.Namespace) -> int:
         lessons = load_lessons(memory_path) or None  # keep None when empty
 
     run_id = _run_id(seed, arm)
-    setup = build_arm(arm, seed, provider, lessons=lessons, scenario=scenario)
+    setup = build_arm(
+        arm, seed, provider, lessons=lessons, scenario=scenario,
+        society_tools=getattr(args, "society_tools", False),
+    )
 
     manifest: dict[str, Any] = {
         "run_id": run_id,
@@ -308,7 +311,10 @@ def cmd_bench(args: argparse.Namespace) -> int:
                 if cell_dir.exists():
                     shutil.rmtree(cell_dir)
 
-    cells = run_bench(manifest, provider=provider, out_dir=out_dir)
+    cells = run_bench(
+        manifest, provider=provider, out_dir=out_dir,
+        society_tools=getattr(args, "society_tools", False),
+    )
     agg = aggregate(cells)
     md = render_markdown(agg)
 
@@ -758,6 +764,15 @@ def main() -> None:
             "and generate AAR + append lessons afterwards."
         ),
     )
+    p_run.add_argument(
+        "--society-tools",
+        action="store_true",
+        help=(
+            "Society arm only: use native Qwen function calling (tools/tool_choice) "
+            "instead of JSON-mode prompting. Opt-in; default is JSON mode (the "
+            "cost-optimal path the published benchmark uses)."
+        ),
+    )
 
     # bench
     p_bench = sub.add_parser("bench", help="Run the benchmark suite")
@@ -773,6 +788,15 @@ def main() -> None:
                          help="Output directory override")
     p_bench.add_argument("--fresh", action="store_true",
                          help="Wipe cell dirs before running (force re-run)")
+    p_bench.add_argument(
+        "--society-tools",
+        action="store_true",
+        help=(
+            "Run the society arm with native Qwen function calling (tools) instead "
+            "of JSON-mode prompting. Opt-in ablation; default JSON. Write to a "
+            "distinct --out so it never overwrites the JSON-mode benchmark."
+        ),
+    )
     p_bench.add_argument(
         "--scenario", default=None,
         help="REJECTED — bench refuses scenario packs (invariant 3)",

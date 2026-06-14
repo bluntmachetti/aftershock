@@ -155,3 +155,32 @@ making rates 0-or-1), rules applied to arms whose protocol makes them impossible
 calibration test that passed vacuously because 16 of 19 rules never occurred in the
 calibration scenario. Measuring agent behavior is as bug-prone as the behavior itself;
 our anti-vacuity guard now asserts the calibration actually exercises its rules.
+
+## 12. Native function calling cost ~2× for statistically-equal lives (2026-06-14)
+
+**Observed:** we re-ran the full 4-arm benchmark with the society arm switched from
+JSON-contract prompting to Qwen Cloud native function calling (per-role `tools`,
+`tool_choice="auto"`, `parallel_tool_calls`, a `no_op` idle tool). On the same 5 paired
+seeds the society held lives saved within noise (98.2 ± 23.2 vs 103.2 ± 23.6) and missions
+failed near-flat (0.8 vs 0.4), but **cost roughly doubled ($0.042 → $0.083/run) and latency
+rose ~2.5× (120 s → 297 s/run)**. The control arm `scripted` reproduced byte-identically
+across both runs, so the harness — not sampling — is sound; the LLM-arm drift (solo 104→110,
+swarm 76→77) is ordinary run-to-run variance. Cost breakdown for `society-seed42`: the
+qwen3.5-plus commander was 59% of cost (55.5k prompt + 10.2k completion tokens), the five
+flash workers 41% (290.8k prompt tokens — schema-dominated).
+
+**Interpretation:** the premium is structural, not a tuning miss. A role's tool schema is
+~1,000 tokens and is re-sent on *every* one of ~240 agent calls per run; in JSON mode the
+equivalent action vocabulary lives in a ~450-token prose contract. We projected every trim
+strategy — stripping pydantic `title`/`default` noise, compacting descriptions, even gutting
+them to empty — and the floor is ~$0.069/run, still above both the JSON society ($0.042) and
+the qwen3-max solo baseline ($0.061). For a high-frequency multi-agent society, per-call
+schema overhead dominates; you cannot schema-trim your way under the JSON path.
+
+**Decision:** JSON contracts stay the cost-optimal **default** (and the path the published
+benchmark headline reflects). Native function calling is kept implemented, tested, and
+benchmarked as an opt-in behind `--society-tools` / `build_llm_agents(force_tools=True)`,
+with its numbers published as an ablation
+([bench/results/2026-06-13-tool-ablation/](../bench/results/2026-06-13-tool-ablation/RESULTS.md)).
+The lesson generalizes: "use the fancier API" is not free — for societies that call the model
+hundreds of times per run, measure the per-call overhead before adopting it by default.

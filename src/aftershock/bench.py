@@ -31,6 +31,7 @@ def run_bench(
     manifest: dict[str, Any],
     provider: Any | None,
     out_dir: Path,
+    society_tools: bool = False,
 ) -> list[dict[str, Any]]:
     """Run all (arm, seed) cells from *manifest*, writing results under *out_dir*.
 
@@ -81,7 +82,7 @@ def run_bench(
                     )
 
             # Run this cell
-            setup = build_arm(arm, seed, provider)
+            setup = build_arm(arm, seed, provider, society_tools=society_tools)
             run_id = f"{arm}-seed{seed}"
             manifest_rec: dict[str, Any] = {
                 "arm": arm,

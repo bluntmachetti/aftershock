@@ -241,7 +241,9 @@ def test_build_llm_agents_commander_system_prompt_has_doctrine(roles: dict) -> N
 
 def test_build_llm_agents_commander_system_prompt_has_contract(roles: dict) -> None:
     provider = MockProvider(script=["{}"])
-    agents = build_llm_agents(roles, provider, arm="society")
+    # force_tools=True: the no_op / propose_resource_request markers are tool-mode
+    # contract strings. JSON mode (the default) uses decision_contract instead.
+    agents = build_llm_agents(roles, provider, arm="society", force_tools=True)
     commander_agent = agents["commander"]
     system = commander_agent._system  # type: ignore[attr-defined]
     assert "no_op" in system
@@ -263,7 +265,9 @@ def test_build_llm_agents_lessons_order_doctrine_then_lessons_then_contract(role
     """Doctrine blocks come before lessons, lessons before contract."""
     provider = MockProvider(script=["{}"])
     lessons = ["Some lesson."]
-    agents = build_llm_agents(roles, provider, arm="society", lessons=lessons)
+    # force_tools=True so the contract marker ("## How to Act") is the tool_contract
+    # header; the doctrine<lessons<contract ordering logic is mode-independent.
+    agents = build_llm_agents(roles, provider, arm="society", lessons=lessons, force_tools=True)
     system = agents["commander"]._system  # type: ignore[attr-defined]
     doctrine_pos = system.index("TEAM DOCTRINE:")
     lessons_pos = system.index("LESSONS FROM PREVIOUS DISASTERS")
