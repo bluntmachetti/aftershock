@@ -772,6 +772,132 @@ unchanged (compare is additive). Backend, determinism, and the `OBSERVATORY_TOKE
 behaviour untouched. **Deferred (explicit non-goals for the video):** full sans-serif font
 migration, mission-marker redesign, design-system migration of every last component.
 
+## Mission Control map (Map-tab redesign — submission polish)
+
+Reskins the **Map tab only** into a "Mission Control / EOC" command-center: an
+operations map that sells a real disaster-response surface in the first five seconds,
+with the negotiation/contention the project's core differentiator made *visible on the
+map*. **Pure `web/` work; zero engine, API, type, or determinism change.** Picks up the
+"mission-marker redesign" that task #3 explicitly deferred. Provenance: CCG (Claude +
+Codex + Gemini) decision, synthesized in `.omc/plans/mission-control-redesign.md`; the
+runnable mockup is `.omc/mission-control-prototype/` (rendered styles in `rendered/`).
+
+**Decision (committed, not switchable):** the **③ Tiles** map — a schematic geographic
+backdrop (water / road grid / district zones) under the *existing rich* mission markers —
+**plus a contention overlay** (dashed "RPR CONTESTED" links between contesting districts +
+halos on contesting pins during auctions) ported from the ① Sector prototype. One map
+implementation; the real-NYC-Ida story stays on the Map with provenance intact.
+
+**Marker richness is kept, not downgraded.** The prototype's pins are simpler than
+production's `MissionMarker`/`MissionPopover` (progress arcs, staffing pips, the real-vs-sim
+latency popover that *is* the Ida honesty receipt). The port adds the tile backdrop +
+overlay *under/over* those markers; it does not replace them.
+
+### Surfaces (disjoint file ownership; serial foundation then fan-out)
+
+| Surface | Owns (exclusive write) | Seam / export |
+|---|---|---|
+| **A · Tokens** (serial, first) | `src/lib/palette.ts` (+`CONTENTION_COLOR`, `CONDITION_COLORS`), `src/index.css` (overlay keyframes) | new semantic tokens |
+| **B · Map shared** | `src/components/mapShared.tsx` (NEW — extracted `MissionMarker`/`MissionPopover`/`DISTRICT_LAYOUT`/`MISSION_ICON_PATHS`/helpers) | imported by both maps |
+| **C · Mission Control map** | `src/components/MissionControlMap.tsx` (NEW) | `<MissionControlMap/>` (same props as `TownMap` + `contest*`) |
+| **D · Contention derivation** | `src/lib/contention.ts` (NEW), `src/lib/resources.ts` (NEW), `src/lib/__tests__/contention.test.ts` (NEW) | `deriveContention(tick, world)`, `RESOURCE_CODES` |
+| **E · EOC shell** | `src/components/MissionControlShell.tsx` (NEW — header: CONDITION + lives counters), restyle within `MapTab.tsx` | wraps current `MapTab` data flow |
+| **Integration** | `src/components/MapTab.tsx` (wires C/D/E; data flow unchanged) | — |
+
+`TownMap.tsx` is **re-pointed to import from `mapShared`** (pure extraction, no behaviour
+change) and is **otherwise untouched** — so **CompareTab's two `quiet` maps are provably
+unaffected** (Map-tab-only scope is enforced by construction, not discipline).
+
+### A — Tokens (freeze the contract palette; add only what's new)
+
+The existing palette is **frozen**: `ARM_COLORS` (`society=#22d3ee` cyan, `baseline=#f59e0b`
+amber), `MISSION_KIND_COLORS`, `STATUS_COLORS`, `PROVENANCE_COLORS`, and every `--eoc-*` /
+`--signal-*` / `--text-*` value stay byte-identical — so **every other tab is pixel-identical
+and the arm-color/provenance invariants are untouched.** The command-center *feel* is carried
+by **structure** (header, condition state, tile backdrop, overlay, spacing/typography), not by
+the prototype's ~2–3 % hue shifts. Additive only:
+
+- `CONTENTION_COLOR = '#ffd24a'` — the prototype's `--caution` yellow, **distinct from baseline
+  amber** so a contested link never reads as "the baseline arm". Used for the dashed link,
+  arrowhead, label, and pin halo.
+- `CONDITION_COLORS: Record<'red'|'amber'|'blue'|'green', string>` — maps onto the **existing**
+  signals (`red→signal-red`, `amber→signal-amber`, `blue→signal-cyan`, `green→signal-green`);
+  no new hues.
+
+DoD gate unchanged: `grep -rE '#[0-9a-fA-F]{6}' web/src --include='*.tsx'` returns only
+`palette.ts`. **Deferred (explicit, surfaced to Kenny):** adopting the prototype's *refined
+global palette* (deeper surfaces + tuned signals incl. `society→#46b6f0`) across all four tabs
+is a clean, separate opt-in — not done here.
+
+### C — Mission Control map (tile backdrop + rich markers)
+
+Same `viewBox`/coordinate system and `DISTRICT_LAYOUT` (the 2×3 grid from `mapShared`); same
+mission-position memo (`useMemo` on `[world.missions]`). Adds **under** the markers a static,
+animation-free backdrop layer: water rect (harbor), a faint road grid, and per-district zone
+outlines — schematic, not cartographic (no lat/lon; geometry is the existing fixed grid). The
+markers, popover, pending-arrival badges, inject-pulse, and the `effects:'normal'|'quiet'`
+contract are reused verbatim from `mapShared`. Props = `TownMap`'s props **+** optional
+`contest?: ContentionResult` (renders nothing when absent → identical to TownMap if unused).
+
+### D — Contention overlay (100 % derived from existing tick data; no engine change)
+
+The auction lives in `town/society.py`: resource requests are grouped by resource, winners get
+`ProposalRuling{accepted:true, decided_by:'kernel:auction', reason:''}`, losers get
+`accepted:false, reason:'pool exhausted: <res> granted to <mN> (priority p)'`. So per the
+current tick (no history):
+
+```ts
+deriveContention(tick, world):
+  byId = { proposal_id → proposal } over tick.responses[].proposals   // same map NegotiationFeed builds
+  for ruling in tick.rulings where ruling.decided_by === 'kernel:auction':
+    p = byId[ruling.proposal_id];  if p?.kind !== 'resource_request' continue
+    res = p.body.resource;  mid = p.body.mission_id;  district = world.missions[mid]?.district_id
+    accepted → winners[res].push({mid, district});  loser (reason starts 'pool exhausted') → losers[res].push(...)
+  contestMap = Set(all loser + winner mids)            // both endpoints get the halo (matches prototype)
+  contestPairs = for each res, each loser×top-winner with loser.district !== winner.district
+                 → {loserDistrict, winnerDistrict, resource}   // deduped
+```
+
+Render: dashed animated `RPR CONTESTED` link (district-center → district-center, CSS
+`stroke-dashoffset` only, `prefers-reduced-motion`-safe, **suppressed in `quiet`**), midpoint
+resource-code badge (`RESOURCE_CODES`: ambulance→AMB, rescue_crew→RSC, fire_engine→ENG,
+repair_crew→RPR, supply_truck→SUP), and a `CONTENTION_COLOR`-colored halo on contesting pins.
+Multiple resources contested along the same loser→winner axis collapse into one link + one
+combined badge (`AMB+RSC CONTESTED`) rather than stacking. Link
+endpoints anchor to the **memoized mission/district positions** (fixed grid — no
+ResizeObserver/DOM-measure; the prototype's measure loop is replaced with precomputed centers).
+
+### E — EOC shell + condition state
+
+A presentational `MissionControlShell` header above the existing three-column body:
+brand + **CONDITION** chip + **lives saved / lost / active(open) / at-risk** counters + the
+run identity (`seed-N · ARM` + LIVE chip) — all read from the *current* `world`/`runs`, no new
+state. Condition (ported from prototype `conditionFor`):
+
+- **RED** — any open mission with `deadline_tick − tick ≤ 2`, or `panic ≥ 0.6`.
+- **AMBER** — any open with `deadline_tick − tick ≤ 5` or `severity ≥ 4`, or `panic ≥ 0.3`.
+- **BLUE** — any open missions remain. **GREEN** — none open.
+
+Left rail (RunPicker/PanicGauge/ResourcePoolSidebar), right rail (NegotiationFeed/
+AgentInspector), RealityStrip footer, Scrubber, AarDrawer: **reused as-is** — they already
+consume the `eoc.*`/`signal.*` tokens, so they sit under the new band/map unchanged (same
+props, data, semantics). The left-rail "Totals" block is dropped (saved/lost now live in the
+band). A denser per-prototype rail restyle is a deferred follow-up, not part of this MVP.
+
+### Preserve (non-negotiable) + DoD
+
+`palette.ts` single `#rrggbb` source; **RealityStrip + DataChip + ProvenancePanel honesty**
+(REAL/MAPPED/INFERRED/SYNTHETIC, grey-real-vs-arm baseline, never-fabricated null latency,
+always-visible caveat line) intact and first-class on the Map; the popover's real-vs-sim
+latency lines + INFERRED badge **kept**; `WorldState`/`MissionState`/`TickRecord` shapes and
+all `dispatch` actions unchanged; scrubber + tabs semantics survive; `CompareTab` untouched.
+DoD: `npx tsc --noEmit` clean · `vitest run` green (existing specs **+** new
+`contention.test.ts` for the derivation, incl. an injected-mission and a no-proposals tick) ·
+`npm run build` · 1080p screenshot parity vs the rendered prototype on a synthetic run **and**
+the NYC-Ida path with provenance visible · `aftershock verify --seed 42 --ticks 60` as a guard
+(must stay green — frontend-only, so it cannot regress). Promotion: build+verify → **k12
+staging** → explicit Kenny approval → **Alicloud prod**.
+
 ## Real-data scenario packs (task #4 — engine/data + observatory)
 
 Run the existing agent society on scenarios compiled from **real open incident data**, with
