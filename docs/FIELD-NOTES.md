@@ -184,3 +184,54 @@ with its numbers published as an ablation
 ([bench/results/2026-06-13-tool-ablation/](../bench/results/2026-06-13-tool-ablation/RESULTS.md)).
 The lesson generalizes: "use the fancier API" is not free — for societies that call the model
 hundreds of times per run, measure the per-call overhead before adopting it by default.
+
+## 13. DashScope ignores the sampling seed — the LLM arms can't be made reproducible (2026-06-14)
+
+**Observed:** Tier-0 experiment M1 added an opt-in `--seed-sampler` that sends a deterministic
+per-`(engine_seed, agent_id, tick)` `seed` on every DashScope call (the OpenAI-compatible endpoint
+accepts a top-level `seed`). We ran `society` seed 42 × 30 ticks **twice with** the sampler and
+**twice without**, then compared the recorded decision streams. All four runs diverge at **tick 1**
+in decision content (and tick 6 in the world trajectory); the seeded pair landed 96 vs 99 lives, the
+unseeded pair 90 vs 98 — **the seeded pair is no more alike than the unseeded baseline.** DashScope
+accepts `seed` in the request body but does not honor it for reproducibility (at temperature 0.3).
+
+**Interpretation:** the LLM arms are irreducibly stochastic run-to-run on this provider, so the
+published `±` genuinely *is* sampling noise (confirmed, not assumed). Note the trajectory holds
+identical for ~5 ticks after the decisions first differ: early divergences are rationale/free-text or
+proposals that resolve to the same grants — simulation-inert until they accumulate into a different
+world by tick 6. Reproducibility-by-seed is off the table for Qwen Cloud.
+
+**Decision:** keep `--seed-sampler` as a documented **no-op opt-in** (harmless; it would activate for
+free if a future provider honors `seed`) and lean on the measurement levers that *don't* need
+reproducibility — paired ablations (M3, which difference out the world variance), K-repeats variance
+decomposition (M2), and deterministic conformance as the low-variance optimization target. The
+engine stays byte-deterministic (the scripted anchor reproduces exactly); **only the model layer is
+stochastic** — a distinction now made explicit rather than assumed.
+
+## 14. The world, not the model, is most of the variance — so pair (2026-06-14)
+
+**Observed:** Tier-0 experiment M2 ran the society arm at 3 seeds × 3 repeats (30 ticks, 9 runs) and
+decomposed lives-saved variance with a one-way random-effects model (`bench --repeat-seeds`). Result:
+mean 110.7, **σ_within (LLM sampling) = 7.75, σ_between (world) = 14.87, σ_total = 16.76, ICC = 0.79.**
+Per-seed means spread 95.7 / 109.7 / 126.7 — the seeds differ far more than the repeats do. (Cross-check:
+the four seed-42 runs from M1, which are i.i.d. since the seed is ignored, give a within-seed σ of 4.0,
+consistent with the pooled 7.75.)
+
+**Interpretation:** ~**79% of run-to-run variance is the scenario, only ~21% is model stochasticity.**
+That reframes the whole measurement problem: throwing repeats at a fixed seed buys down only the small
+LLM component; the dominant term is *which world you drew*. The high-leverage move is **pairing** — run
+control and treatment on the *same* seeds so the world variance cancels, leaving only the arms' LLM
+noise. Concretely, the paired-difference SD is √2·σ_within ≈ 11.0, versus an unpaired contrast's
+√2·σ_total ≈ 23.7. Seeds needed for 80% power (α=0.05), from `stats.required_n_for_effect`:
+
+| effect | paired (M3) | unpaired |
+|---|---|---|
+| +5 lives | 38 | 177 |
+| +10 lives | 10 | 45 |
+| +15 lives | 5 | 20 |
+
+**Decision:** every agent-tuning result goes through the paired ablation harness (M3,
+`aftershock ablation`), never a raw mean-vs-mean. ~10 paired seeds make a +10-life effect visible;
+chasing a +5 is not worth it until the task is made harder (Tier 4 · D2) to widen the gap. These σ are
+at 30 ticks; the published headline σ≈23.6 is 60-tick between-seed spread (variance grows as the
+scenario plays out), so it is the same story at larger scale — not re-validated tick-for-tick here.
