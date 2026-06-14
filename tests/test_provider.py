@@ -392,6 +392,84 @@ async def test_tool_calls_parsed_from_response() -> None:
     assert result.usage.cost_usd > 0
 
 
+# ---------------------------------------------------------------------------
+# M1: seed forwarding
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_seed_added_to_body_when_set() -> None:
+    """A non-None seed is forwarded as a top-level body field (JSON mode)."""
+    captured: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(json.loads(request.content))
+        return _ok_response()
+
+    transport = httpx.MockTransport(handler)
+    provider = QwenProvider(api_key="key", transport=transport, max_retries=0)
+
+    with patch("asyncio.sleep"):
+        await provider.chat(
+            model="qwen3.5-flash", system="s", user="u", temperature=0.3, seed=123456
+        )
+
+    assert captured[0]["seed"] == 123456
+
+
+@pytest.mark.asyncio
+async def test_seed_omitted_when_none() -> None:
+    """No seed key in the body when seed is None (the legacy default)."""
+    captured: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(json.loads(request.content))
+        return _ok_response()
+
+    transport = httpx.MockTransport(handler)
+    provider = QwenProvider(api_key="key", transport=transport, max_retries=0)
+
+    with patch("asyncio.sleep"):
+        await provider.chat(model="qwen3.5-flash", system="s", user="u", temperature=0.3)
+
+    assert "seed" not in captured[0]
+
+
+@pytest.mark.asyncio
+async def test_seed_added_in_tool_mode() -> None:
+    """Seed is forwarded in tool mode as well (harmless if the model ignores it)."""
+    captured: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(json.loads(request.content))
+        return _tool_ok_response()
+
+    transport = httpx.MockTransport(handler)
+    provider = QwenProvider(api_key="key", transport=transport, max_retries=0)
+
+    with patch("asyncio.sleep"):
+        await provider.chat(
+            model="qwen3.5-flash", system="s", user="u", temperature=0.3,
+            json_mode=False,
+            tools=[{"type": "function", "function": {"name": "t", "parameters": {}}}],
+            seed=777,
+        )
+
+    assert captured[0]["seed"] == 777
+
+
+@pytest.mark.asyncio
+async def test_mock_provider_records_seed_calls() -> None:
+    """MockProvider records seeds in .seed_calls without disturbing .calls shape."""
+    provider = MockProvider(script=["r1", "r2"])
+    await provider.chat(model="m", system="s", user="u", temperature=0.3, seed=5)
+    await provider.chat(model="m", system="s", user="u", temperature=0.3)
+
+    assert provider.seed_calls == [5, None]
+    # .calls keeps its pinned 3-tuple shape
+    assert provider.calls[0] == ("m", "s", "u")
+
+
 @pytest.mark.asyncio
 async def test_mock_provider_accepts_tool_calls_dict() -> None:
     tool_calls = [

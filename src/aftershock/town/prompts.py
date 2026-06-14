@@ -135,6 +135,7 @@ def build_llm_agents(
     arm: str = "society",
     _doctrine_rules: list[Rule] | None = None,
     force_tools: bool = False,
+    engine_seed: int | None = None,
 ) -> dict[str, Agent]:
     """Build one LLMAgent per town role, sharing the same provider instance.
 
@@ -161,6 +162,9 @@ def build_llm_agents(
                      built in native Qwen function-calling mode regardless of its
                      YAML default (which is JSON). Default False keeps JSON mode —
                      the cost-optimal default the published benchmark uses.
+        engine_seed: M1 opt-in (CLI --seed-sampler). When set, every agent sends a
+                     deterministic per-tick provider seed derived from this value;
+                     None (default) sends no seed (legacy behaviour).
 
     Returns:
         dict mapping agent_id -> LLMAgent for all six town agents.
@@ -224,6 +228,7 @@ def build_llm_agents(
                 contract=contract,
                 tool_defs=tool_defs,
                 tool_mapper=map_tool_calls,
+                engine_seed=engine_seed,
             )
         else:
             contract = decision_contract(
@@ -236,5 +241,6 @@ def build_llm_agents(
                 role=role,
                 provider=provider,
                 contract=contract,
+                engine_seed=engine_seed,
             )
     return agents

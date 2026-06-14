@@ -58,6 +58,7 @@ class Provider(Protocol):
         json_mode: bool = True,
         tools: list[dict] | None = None,
         tool_choice: str | None = None,
+        seed: int | None = None,
     ) -> ChatResult: ...
 
 
@@ -107,6 +108,7 @@ class QwenProvider:
         json_mode: bool = True,
         tools: list[dict] | None = None,
         tool_choice: str | None = None,
+        seed: int | None = None,
     ) -> ChatResult:
         body: dict[str, Any] = {
             "model": model,
@@ -116,6 +118,13 @@ class QwenProvider:
             ],
             "temperature": temperature,
         }
+        # M1: forward a deterministic sampling seed when one is supplied. The
+        # OpenAI-compatible DashScope endpoint accepts a top-level `seed`; whether
+        # it makes sampling reproducible is the open empirical question (verify
+        # with two re-runs → byte-identical decision records). Harmless when
+        # ignored, so it is sent in both JSON and tool modes.
+        if seed is not None:
+            body["seed"] = seed
         if tools:
             body["tools"] = tools
             body["tool_choice"] = tool_choice or "auto"
@@ -180,6 +189,9 @@ class MockProvider:
         self._script = script
         self._index = 0
         self.calls: list[tuple[str, str, str]] = []
+        # M1: seeds passed per call, parallel to .calls (kept separate so the
+        # pinned (model, system, user) tuple shape stays unchanged for callers).
+        self.seed_calls: list[int | None] = []
 
     async def chat(
         self,
@@ -191,8 +203,10 @@ class MockProvider:
         json_mode: bool = True,  # noqa: ARG002
         tools: list[dict] | None = None,  # noqa: ARG002
         tool_choice: str | None = None,  # noqa: ARG002
+        seed: int | None = None,
     ) -> ChatResult:
         self.calls.append((model, system, user))
+        self.seed_calls.append(seed)
 
         if callable(self._script):
             entry = self._script(model, system, user)

@@ -368,6 +368,68 @@ def test_society_timeout() -> None:
 
 
 # ---------------------------------------------------------------------------
+# M1: seed_sampler threads the engine seed into the LLM agents (all arms)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("arm", ["society", "swarm", "solo"])
+def test_seed_sampler_threads_engine_seed(arm: str) -> None:
+    """build_arm(seed_sampler=True) gives every LLM agent engine_seed == seed.
+
+    Covers arms.py's `engine_seed = seed if seed_sampler else None` AND the
+    per-builder engine_seed= wiring for society/swarm/solo — a regression that
+    dropped it (or gated on the wrong flag) would leave the arm unseeded.
+    """
+    from aftershock.llm.agent import LLMAgent
+
+    setup = build_arm(arm, _SEED, _mock(), seed_sampler=True)
+    for agent in setup.agents.values():
+        assert isinstance(agent, LLMAgent)
+        assert agent._engine_seed == _SEED
+
+
+@pytest.mark.parametrize("arm", ["society", "swarm", "solo"])
+def test_seed_sampler_off_leaves_engine_seed_none(arm: str) -> None:
+    from aftershock.llm.agent import LLMAgent
+
+    setup = build_arm(arm, _SEED, _mock())  # default seed_sampler=False
+    for agent in setup.agents.values():
+        assert isinstance(agent, LLMAgent)
+        assert agent._engine_seed is None
+
+
+def test_seed_sampler_reaches_provider_through_engine() -> None:
+    """End-to-end: build_arm(seed_sampler=True) -> Engine tick -> provider gets the
+    correct non-None sample_seed(seed, agent_id, tick) on every call."""
+    import asyncio
+
+    from aftershock.kernel.engine import Engine
+    from aftershock.kernel.recorder import Recorder
+    from aftershock.llm.agent import sample_seed
+
+    provider = MockProvider(script=lambda m, s, u: '{"decisions": []}')
+    setup = build_arm("society", _SEED, provider, seed_sampler=True)
+
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as td:
+        recorder = Recorder(Path(td), "m1", {"seed": _SEED, "arm": "society"})
+        engine = Engine(
+            world=setup.world, society=setup.society, agents=setup.agents,
+            registry=setup.registry, roles=setup.roles, resolver=setup.resolver,
+            recorder=recorder, seed=_SEED, max_ticks=1, agent_timeout_s=30.0,
+        )
+        asyncio.run(engine.run())
+
+    assert provider.seed_calls, "provider was never called"
+    assert all(s is not None for s in provider.seed_calls)
+    # Tick 0: each of the six agents sent sample_seed(seed, agent_id, 0).
+    expected = {sample_seed(_SEED, aid, 0) for aid in setup.agents}
+    assert set(provider.seed_calls) == expected
+
+
+# ---------------------------------------------------------------------------
 # Unknown arm
 # ---------------------------------------------------------------------------
 

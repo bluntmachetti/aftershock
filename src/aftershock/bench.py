@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from aftershock import stats
 from aftershock.kernel.engine import Engine
 from aftershock.kernel.recorder import Recorder
 from aftershock.town.arms import build_arm
@@ -27,11 +28,99 @@ def _cell_dir(out_dir: Path, arm: str, seed: int) -> Path:
     return out_dir / f"{arm}-seed{seed}"
 
 
+def _execute_cell(
+    out_dir: Path,
+    arm: str,
+    seed: int,
+    ticks: int,
+    provider: Any | None,
+    run_id: str,
+    *,
+    society_tools: bool = False,
+    seed_sampler: bool = False,
+    extra_fields: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build + run one (arm, seed) cell and write its summary.json.
+
+    Shared by run_bench and run_repeat_seeds. ``run_id`` is the cell directory
+    name (``{arm}-seed{seed}`` for bench, ``...-r{k}`` for repeats). Conformance
+    failure is logged but never blocks summary.json from being written.
+    """
+    setup = build_arm(
+        arm, seed, provider, society_tools=society_tools, seed_sampler=seed_sampler
+    )
+    manifest_rec: dict[str, Any] = {
+        "arm": arm,
+        "seed": seed,
+        "ticks": ticks,
+        "run_id": run_id,
+    }
+    recorder = Recorder(out_dir, run_id, manifest_rec)
+
+    engine = Engine(
+        world=setup.world,
+        society=setup.society,
+        agents=setup.agents,
+        registry=setup.registry,
+        roles=setup.roles,
+        resolver=setup.resolver,
+        recorder=recorder,
+        seed=seed,
+        max_ticks=ticks,
+        agent_timeout_s=setup.default_timeout_s,
+    )
+
+    # time.monotonic() is used ONLY for wall_s — it never feeds simulation state,
+    # so Invariant 1 (determinism) is preserved.
+    t0 = time.monotonic()
+    summary_run = asyncio.run(engine.run())
+    wall_s = time.monotonic() - t0
+
+    models: list[str] = sorted(summary_run.cost.get("by_model", {}).keys())
+
+    cell_summary: dict[str, Any] = {
+        "arm": arm,
+        "seed": seed,
+        "ticks_requested": ticks,
+        "ticks_run": summary_run.ticks_run,
+        "scores": summary_run.final_scores,
+        "cost": summary_run.cost,
+        "wall_s": wall_s,
+        "models": models,
+    }
+    if extra_fields:
+        cell_summary.update(extra_fields)
+
+    cell_dir = out_dir / run_id
+    # Conformance metrics: attach team_alignment / role_conformance. Failure must
+    # never prevent summary.json from being written.
+    try:
+        from aftershock.town.conformance import check_run as _check_run
+
+        conf = _check_run(cell_dir)
+        cell_summary["team_alignment"] = conf.get("team_alignment")
+        cell_summary["role_conformance"] = conf.get("role_conformance")
+    except Exception as exc:  # noqa: BLE001
+        import sys
+
+        print(
+            f"warning: conformance check failed for {cell_dir.name}: {exc!r}",
+            file=sys.stderr,
+        )
+
+    (cell_dir / "summary.json").write_text(
+        json.dumps(cell_summary, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return cell_summary
+
+
 def run_bench(
     manifest: dict[str, Any],
     provider: Any | None,
     out_dir: Path,
     society_tools: bool = False,
+    seed_sampler: bool = False,
 ) -> list[dict[str, Any]]:
     """Run all (arm, seed) cells from *manifest*, writing results under *out_dir*.
 
@@ -82,70 +171,15 @@ def run_bench(
                     )
 
             # Run this cell
-            setup = build_arm(arm, seed, provider, society_tools=society_tools)
-            run_id = f"{arm}-seed{seed}"
-            manifest_rec: dict[str, Any] = {
-                "arm": arm,
-                "seed": seed,
-                "ticks": ticks,
-                "run_id": run_id,
-            }
-            recorder = Recorder(out_dir, run_id, manifest_rec)
-
-            engine = Engine(
-                world=setup.world,
-                society=setup.society,
-                agents=setup.agents,
-                registry=setup.registry,
-                roles=setup.roles,
-                resolver=setup.resolver,
-                recorder=recorder,
-                seed=seed,
-                max_ticks=ticks,
-                agent_timeout_s=setup.default_timeout_s,
-            )
-
-            # time.monotonic() is used ONLY for wall_s — it never feeds simulation
-            # state, so Invariant 1 (determinism) is preserved.
-            t0 = time.monotonic()
-            summary_run = asyncio.run(engine.run())
-            wall_s = time.monotonic() - t0
-
-            # Collect model names from cost breakdown
-            models: list[str] = sorted(summary_run.cost.get("by_model", {}).keys())
-
-            cell_summary: dict[str, Any] = {
-                "arm": arm,
-                "seed": seed,
-                "ticks_requested": ticks,
-                "ticks_run": summary_run.ticks_run,
-                "scores": summary_run.final_scores,
-                "cost": summary_run.cost,
-                "wall_s": wall_s,
-                "models": models,
-            }
-
-            # Conformance metrics: run check_run and attach team_alignment / role_conformance.
-            # Failure must never prevent summary.json from being written.
-            try:
-                from aftershock.town.conformance import check_run as _check_run
-
-                conf = _check_run(cell_dir)
-                cell_summary["team_alignment"] = conf.get("team_alignment")
-                cell_summary["role_conformance"] = conf.get("role_conformance")
-            except Exception as exc:  # noqa: BLE001
-                # Keys absent -> aggregate treats them as null; but never silently:
-                # a conformance failure on a fresh cell is a bug worth seeing.
-                import sys
-
-                print(
-                    f"warning: conformance check failed for {cell_dir.name}: {exc!r}",
-                    file=sys.stderr,
-                )
-
-            summary_path.write_text(
-                json.dumps(cell_summary, indent=2, sort_keys=True),
-                encoding="utf-8",
+            cell_summary = _execute_cell(
+                out_dir,
+                arm,
+                seed,
+                ticks,
+                provider,
+                run_id=f"{arm}-seed{seed}",
+                society_tools=society_tools,
+                seed_sampler=seed_sampler,
             )
             cells.append(cell_summary)
 
@@ -351,4 +385,318 @@ def render_markdown(agg: dict[str, Any]) -> str:
 
         lines.append("")
 
+    return "\n".join(lines) + "\n"
+
+
+# ===========================================================================
+# M3 — Paired ablation harness + power curve
+# ===========================================================================
+
+# Effect sizes (lives) the power curve answers "how many seeds do I need?" for.
+DEFAULT_EFFECT_GRID: tuple[float, ...] = (2.0, 5.0, 10.0, 15.0, 20.0)
+# Fixed bootstrap seed so ABLATION.md is byte-stable across re-runs of the analysis.
+_ABLATION_BOOTSTRAP_SEED = 20260614
+
+
+def _lives_by_seed(cells: list[dict[str, Any]], arm: str) -> dict[int, float]:
+    """Map seed -> lives_saved for one arm (last cell wins on duplicate seeds)."""
+    out: dict[int, float] = {}
+    for c in cells:
+        if c.get("arm") == arm:
+            out[int(c["seed"])] = float(c.get("scores", {}).get("lives_saved", 0.0))
+    return out
+
+
+def analyze_ablation(
+    cells: list[dict[str, Any]],
+    control: str,
+    treatment: str,
+    *,
+    effect_grid: tuple[float, ...] = DEFAULT_EFFECT_GRID,
+    power_target: float = 0.8,
+    alpha: float = 0.05,
+) -> dict[str, Any]:
+    """Paired control-vs-treatment analysis over their common seeds (pure).
+
+    Pairing per seed removes the world variance that dominates the raw ±, so a
+    small but consistent effect becomes visible. Reports the paired Δ, an exact
+    sign test, a bootstrap CI, and a power curve (required seeds per effect size).
+    """
+    ctrl = _lives_by_seed(cells, control)
+    treat = _lives_by_seed(cells, treatment)
+    common = sorted(set(ctrl) & set(treat))
+    if not common:
+        raise ValueError(
+            f"no common seeds between control={control!r} and treatment={treatment!r}"
+        )
+
+    per_seed = [
+        {"seed": s, "control": ctrl[s], "treatment": treat[s], "delta": treat[s] - ctrl[s]}
+        for s in common
+    ]
+    diffs = [row["delta"] for row in per_seed]
+    n = len(diffs)
+    mean_delta = stats.mean(diffs)
+    sd_delta = stats.sample_sd(diffs)
+
+    ci = stats.bootstrap_ci(
+        diffs, confidence=1.0 - alpha, rng_seed=_ABLATION_BOOTSTRAP_SEED
+    )
+    observed_power = (
+        stats.power_for_n(mean_delta, sd_delta, n, alpha) if mean_delta != 0.0 else None
+    )
+
+    power_curve = [
+        {
+            "effect": eff,
+            "required_n": stats.required_n_for_effect(
+                eff, sd_delta, power=power_target, alpha=alpha
+            ),
+            "power_at_current_n": stats.power_for_n(eff, sd_delta, n, alpha),
+        }
+        for eff in effect_grid
+    ]
+
+    return {
+        "control": control,
+        "treatment": treatment,
+        "n": n,
+        "seeds": common,
+        "per_seed": per_seed,
+        "mean_control": stats.mean([ctrl[s] for s in common]),
+        "mean_treatment": stats.mean([treat[s] for s in common]),
+        "mean_delta": mean_delta,
+        "sd_delta": sd_delta,
+        "n_positive": sum(1 for d in diffs if d > 0),
+        "n_negative": sum(1 for d in diffs if d < 0),
+        "n_tied": sum(1 for d in diffs if d == 0),
+        "sign_test_p": stats.sign_test_p(diffs),
+        "ci": {
+            "lower": ci.lower,
+            "upper": ci.upper,
+            "confidence": ci.confidence,
+            "n_resamples": ci.n_resamples,
+        },
+        "observed_power": observed_power,
+        "power_target": power_target,
+        "alpha": alpha,
+        "power_curve": power_curve,
+    }
+
+
+def run_ablation(
+    control: str,
+    treatment: str,
+    seeds: list[int],
+    ticks: int,
+    provider: Any | None,
+    out_dir: Path,
+    *,
+    society_tools: bool = False,
+    seed_sampler: bool = False,
+    effect_grid: tuple[float, ...] = DEFAULT_EFFECT_GRID,
+    power_target: float = 0.8,
+    alpha: float = 0.05,
+) -> dict[str, Any]:
+    """Run (or resume) control + treatment over ``seeds`` and analyze the pair.
+
+    Reuses run_bench, so completed cells are skipped — re-running the analysis on
+    existing cells costs $0. Returns the analyze_ablation result dict.
+    """
+    arms = [control] if control == treatment else [control, treatment]
+    manifest: dict[str, Any] = {"ticks": ticks, "seeds": list(seeds), "arms": arms}
+    cells = run_bench(
+        manifest, provider=provider, out_dir=out_dir,
+        society_tools=society_tools, seed_sampler=seed_sampler,
+    )
+    return analyze_ablation(
+        cells, control, treatment,
+        effect_grid=effect_grid, power_target=power_target, alpha=alpha,
+    )
+
+
+def render_ablation_markdown(result: dict[str, Any]) -> str:
+    """Render an ABLATION.md from an analyze_ablation result."""
+    lines: list[str] = []
+    ctrl = result["control"]
+    treat = result["treatment"]
+    lines.append(f"# Ablation — {treat} vs {ctrl} (paired)")
+    lines.append("")
+    lines.append(
+        f"**n={result['n']} paired seeds** · "
+        f"mean {ctrl}={result['mean_control']:.2f} · "
+        f"mean {treat}={result['mean_treatment']:.2f}"
+    )
+    lines.append("")
+    conf_pct = int(round(result["ci"]["confidence"] * 100))
+    lines.append(
+        f"**Δ lives = {result['mean_delta']:+.2f}** "
+        f"(sd {result['sd_delta']:.2f}) · "
+        f"{conf_pct}% bootstrap CI "
+        f"[{result['ci']['lower']:+.2f}, {result['ci']['upper']:+.2f}] · "
+        f"sign test p={result['sign_test_p']:.4f} "
+        f"({result['n_positive']}+/{result['n_negative']}-/{result['n_tied']}=)"
+    )
+    op = result["observed_power"]
+    if op is not None:
+        lines.append("")
+        lines.append(
+            f"Observed power to detect this Δ at n={result['n']}: **{op:.2f}** "
+            f"(α={result['alpha']})."
+        )
+
+    # Verdict line — honest about the noise floor.
+    ci_lo = result["ci"]["lower"]
+    ci_hi = result["ci"]["upper"]
+    crosses_zero = ci_lo <= 0.0 <= ci_hi
+    lines.append("")
+    if crosses_zero:
+        lines.append(
+            "> Verdict: **not distinguishable from noise** — the CI includes 0. "
+            "Add seeds (see the power curve) or seed the sampler (M1) before claiming an effect."
+        )
+    else:
+        direction = "improvement" if result["mean_delta"] > 0 else "regression"
+        lines.append(f"> Verdict: **credible {direction}** — the {conf_pct}% CI excludes 0.")
+    lines.append("")
+
+    # Per-seed paired table
+    lines.append("## Per-seed")
+    lines.append("")
+    lines.append(f"| seed | {ctrl} | {treat} | Δ |")
+    lines.append("|---|---|---|---|")
+    for row in result["per_seed"]:
+        lines.append(
+            f"| {row['seed']} | {row['control']:.0f} | "
+            f"{row['treatment']:.0f} | {row['delta']:+.0f} |"
+        )
+    lines.append("")
+
+    # Power curve
+    lines.append("## Power curve")
+    lines.append("")
+    lines.append(
+        f"Paired z-approximation; seeds needed for {int(round(result['power_target'] * 100))}% "
+        f"power at α={result['alpha']}, given the observed Δ sd={result['sd_delta']:.2f}."
+    )
+    lines.append("")
+    lines.append("| effect (lives) | seeds needed | power at current n |")
+    lines.append("|---|---|---|")
+    for pt in result["power_curve"]:
+        lines.append(
+            f"| +{pt['effect']:.0f} | {pt['required_n']} | {pt['power_at_current_n']:.2f} |"
+        )
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+# ===========================================================================
+# M2 — K-repeats-per-seed variance decomposition
+# ===========================================================================
+
+
+def run_repeat_seeds(
+    arms: list[str],
+    seeds: list[int],
+    repeats: int,
+    ticks: int,
+    provider: Any | None,
+    out_dir: Path,
+    *,
+    society_tools: bool = False,
+    seed_sampler: bool = False,
+) -> list[dict[str, Any]]:
+    """Run each (arm, seed) ``repeats`` times into ``{arm}-seed{seed}-r{k}`` cells.
+
+    The engine seed is identical across repeats, so the *world* is byte-identical
+    and the only variation is LLM sampling — exactly the within-seed component M2
+    isolates. Resume-aware (skips cells whose ticks match). For scripted, every
+    repeat is identical (within-variance = 0) — a free correctness check.
+
+    ``seed_sampler`` (M1) is rejected: it sends an identical per-tick provider seed
+    to every repeat, collapsing the within-seed variance this function measures.
+    """
+    if seed_sampler:
+        raise ValueError(
+            "run_repeat_seeds(seed_sampler=True) is contradictory: the seed sampler "
+            "(M1) removes the within-seed LLM variance that repeats (M2) measure."
+        )
+    out_dir.mkdir(parents=True, exist_ok=True)
+    cells: list[dict[str, Any]] = []
+    for arm in arms:
+        for seed in seeds:
+            for k in range(repeats):
+                run_id = f"{arm}-seed{seed}-r{k}"
+                summary_path = out_dir / run_id / "summary.json"
+                if summary_path.exists():
+                    try:
+                        cached = json.loads(summary_path.read_text(encoding="utf-8"))
+                    except (json.JSONDecodeError, OSError):
+                        cached = None
+                    if cached is not None and cached.get("ticks_requested") == ticks:
+                        cells.append(cached)
+                        continue
+                cells.append(
+                    _execute_cell(
+                        out_dir, arm, seed, ticks, provider, run_id=run_id,
+                        society_tools=society_tools, seed_sampler=seed_sampler,
+                        extra_fields={"repeat": k},
+                    )
+                )
+    return cells
+
+
+def analyze_repeats(cells: list[dict[str, Any]]) -> dict[str, Any]:
+    """Per-arm variance decomposition from repeat cells (pure).
+
+    Splits total lives_saved variance into within-seed (LLM sampling) and
+    between-seed (world) components via a one-way random-effects model.
+    """
+    by_arm: dict[str, dict[int, list[float]]] = {}
+    for c in cells:
+        arm = c["arm"]
+        seed = int(c["seed"])
+        lives = float(c.get("scores", {}).get("lives_saved", 0.0))
+        by_arm.setdefault(arm, {}).setdefault(seed, []).append(lives)
+
+    result: dict[str, Any] = {}
+    for arm, seedmap in sorted(by_arm.items()):
+        groups = [seedmap[s] for s in sorted(seedmap)]
+        vc = stats.variance_components(groups)
+        result[arm] = {
+            "n_seeds": vc.n_seeds,
+            "repeats": vc.repeats,
+            "grand_mean": vc.grand_mean,
+            "sd_within": vc.sd_within,
+            "sd_between": vc.sd_between,
+            "sd_total": vc.sd_total,
+            "icc": vc.icc,
+            "per_seed_means": {str(s): stats.mean(seedmap[s]) for s in sorted(seedmap)},
+        }
+    return result
+
+
+def render_repeats_markdown(result: dict[str, Any]) -> str:
+    """Render a REPEATS.md from an analyze_repeats result."""
+    lines: list[str] = []
+    lines.append("# Variance decomposition — repeats per seed")
+    lines.append("")
+    lines.append(
+        "Within-seed σ = LLM sampling noise (identical world); "
+        "between-seed σ = world variance; ICC = world fraction of total variance."
+    )
+    lines.append("")
+    lines.append(
+        "| arm | seeds | repeats | mean | σ_within (LLM) | σ_between (world) "
+        "| σ_total | ICC |"
+    )
+    lines.append("|---|---|---|---|---|---|---|---|")
+    for arm in sorted(result):
+        s = result[arm]
+        lines.append(
+            f"| {arm} | {s['n_seeds']} | {s['repeats']} | {s['grand_mean']:.2f} "
+            f"| {s['sd_within']:.2f} | {s['sd_between']:.2f} | {s['sd_total']:.2f} "
+            f"| {s['icc']:.3f} |"
+        )
+    lines.append("")
     return "\n".join(lines) + "\n"

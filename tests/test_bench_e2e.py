@@ -331,16 +331,23 @@ def test_bench_e2e_offline_llm_arm(monkeypatch: pytest.MonkeyPatch) -> None:
     build_arm_calls: list[str] = []
 
     def _patched_build_arm(
-        arm: str, seed: int, provider: Any, society_tools: bool = False
+        arm: str, seed: int, provider: Any,
+        society_tools: bool = False, seed_sampler: bool = False,
     ) -> Any:
         build_arm_calls.append(arm)
         if arm == "society":
             # Build with a MockProvider instead of the passed provider.
-            # society_tools is forwarded so the cell honors the tool/JSON mode.
+            # society_tools / seed_sampler are forwarded so the cell honors them.
             mock_provider = MockProvider(script=_build_mock_response)
-            return real_build_arm(arm, seed, mock_provider, society_tools=society_tools)
+            return real_build_arm(
+                arm, seed, mock_provider,
+                society_tools=society_tools, seed_sampler=seed_sampler,
+            )
         # scripted: provider is None, pass through
-        return real_build_arm(arm, seed, provider, society_tools=society_tools)
+        return real_build_arm(
+            arm, seed, provider,
+            society_tools=society_tools, seed_sampler=seed_sampler,
+        )
 
     monkeypatch.setattr(bench_mod, "build_arm", _patched_build_arm)
 

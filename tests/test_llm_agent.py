@@ -20,7 +20,7 @@ from aftershock.kernel.protocol import (
     TokenUsage,
 )
 from aftershock.kernel.roles import RoleSpec
-from aftershock.llm.agent import LLMAgent
+from aftershock.llm.agent import LLMAgent, sample_seed
 from aftershock.llm.provider import MockProvider, ProviderError
 
 # ---------------------------------------------------------------------------
@@ -420,6 +420,50 @@ async def test_unknown_proposal_kind_all_bad_returns_empty() -> None:
     assert result.proposals == ()
     # Decisions are unaffected
     assert len(result.decisions) == 1
+
+
+# ---------------------------------------------------------------------------
+# M1: deterministic per-tick sampling seed
+# ---------------------------------------------------------------------------
+
+
+def test_sample_seed_is_deterministic_and_in_range() -> None:
+    """sample_seed is stable (not Python's salted hash) and a 31-bit non-neg int."""
+    s1 = sample_seed(42, "medical", 3)
+    s2 = sample_seed(42, "medical", 3)
+    assert s1 == s2
+    assert 0 <= s1 < 2**31
+
+
+def test_sample_seed_varies_by_agent_and_tick() -> None:
+    base = sample_seed(42, "medical", 3)
+    assert sample_seed(42, "medical", 4) != base  # tick varies
+    assert sample_seed(42, "rescue", 3) != base  # agent varies
+    assert sample_seed(43, "medical", 3) != base  # engine seed varies
+
+
+@pytest.mark.asyncio
+async def test_engine_seed_threaded_to_provider() -> None:
+    """When engine_seed is set, act() sends sample_seed(engine_seed, agent, tick)."""
+    provider = MockProvider(script=[_valid_json_response()])
+    role = _make_role()
+    agent = LLMAgent("medical", role, provider, "", engine_seed=42)
+
+    await agent.act(_make_obs(tick=7))
+
+    assert provider.seed_calls[-1] == sample_seed(42, "medical", 7)
+
+
+@pytest.mark.asyncio
+async def test_no_engine_seed_sends_none() -> None:
+    """Default (no engine_seed) sends seed=None — legacy behaviour preserved."""
+    provider = MockProvider(script=[_valid_json_response()])
+    role = _make_role()
+    agent = LLMAgent("medical", role, provider, "")
+
+    await agent.act(_make_obs(tick=7))
+
+    assert provider.seed_calls[-1] is None
 
 
 # ---------------------------------------------------------------------------

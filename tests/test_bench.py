@@ -20,7 +20,17 @@ from typing import Any
 
 import pytest
 
-from aftershock.bench import aggregate, render_markdown, run_bench
+from aftershock.bench import (
+    aggregate,
+    analyze_ablation,
+    analyze_repeats,
+    render_ablation_markdown,
+    render_markdown,
+    render_repeats_markdown,
+    run_ablation,
+    run_bench,
+    run_repeat_seeds,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -213,7 +223,10 @@ def test_resume_skips_existing_cell(monkeypatch: pytest.MonkeyPatch) -> None:
 
     call_count = {"n": 0}
 
-    def _fake_build_arm(arm: str, seed: int, provider: Any, society_tools: bool = False) -> Any:
+    def _fake_build_arm(
+        arm: str, seed: int, provider: Any,
+        society_tools: bool = False, seed_sampler: bool = False,
+    ) -> Any:
         call_count["n"] += 1
         raise AssertionError("build_arm should not be called for a resumed cell")
 
@@ -363,7 +376,10 @@ def test_resume_reruns_on_tick_budget_mismatch(monkeypatch: pytest.MonkeyPatch) 
 
     call_count = {"n": 0}
 
-    def _fake_build_arm(arm: str, seed: int, provider: Any, society_tools: bool = False) -> Any:
+    def _fake_build_arm(
+        arm: str, seed: int, provider: Any,
+        society_tools: bool = False, seed_sampler: bool = False,
+    ) -> Any:
         call_count["n"] += 1
         # Return a minimal fake setup that never actually runs
         raise RuntimeError("build_arm called (expected in re-run path)")
@@ -403,7 +419,10 @@ def test_resume_skips_when_ticks_match(monkeypatch: pytest.MonkeyPatch) -> None:
     """A cached cell with matching ticks_requested is skipped."""
     import aftershock.bench as bench_mod
 
-    def _fake_build_arm(arm: str, seed: int, provider: Any, society_tools: bool = False) -> Any:
+    def _fake_build_arm(
+        arm: str, seed: int, provider: Any,
+        society_tools: bool = False, seed_sampler: bool = False,
+    ) -> Any:
         raise AssertionError("build_arm must not be called when ticks match")
 
     monkeypatch.setattr(bench_mod, "build_arm", _fake_build_arm)
@@ -441,7 +460,10 @@ def test_resume_reruns_on_corrupt_summary(monkeypatch: pytest.MonkeyPatch) -> No
 
     call_count = {"n": 0}
 
-    def _fake_build_arm(arm: str, seed: int, provider: Any, society_tools: bool = False) -> Any:
+    def _fake_build_arm(
+        arm: str, seed: int, provider: Any,
+        society_tools: bool = False, seed_sampler: bool = False,
+    ) -> Any:
         call_count["n"] += 1
         raise RuntimeError("re-run triggered")
 
@@ -658,3 +680,178 @@ def test_end_to_end_scripted_cell_has_team_alignment() -> None:
         summary_path = out_dir / "scripted-seed42" / "summary.json"
         on_disk = json.loads(summary_path.read_text(encoding="utf-8"))
         assert "team_alignment" in on_disk
+
+
+# ---------------------------------------------------------------------------
+# M3: paired ablation harness
+# ---------------------------------------------------------------------------
+
+
+def _ablation_cells() -> list[dict[str, Any]]:
+    """Control 'base', treatment 'tuned': Δ = [+5, +5, +5, +5, -5] over seeds."""
+    base = {11: 100.0, 23: 100.0, 37: 100.0, 42: 100.0, 57: 100.0}
+    tuned = {11: 105.0, 23: 105.0, 37: 105.0, 42: 105.0, 57: 95.0}
+    cells: list[dict[str, Any]] = []
+    for seed, lives in base.items():
+        cells.append(_make_cell("base", seed, lives, 0.0, 1.0, 0.0, 0.0, 1.0))
+    for seed, lives in tuned.items():
+        cells.append(_make_cell("tuned", seed, lives, 0.0, 1.0, 0.0, 0.0, 1.0))
+    return cells
+
+
+def test_analyze_ablation_paired_delta_and_signtest() -> None:
+    result = analyze_ablation(_ablation_cells(), "base", "tuned")
+    assert result["n"] == 5
+    # mean Δ = (5+5+5+5-5)/5 = 3.0
+    assert math.isclose(result["mean_delta"], 3.0, rel_tol=1e-9)
+    assert result["n_positive"] == 4
+    assert result["n_negative"] == 1
+    # sign test: pos=4 neg=1 n=5 k=1 -> 2*(C(5,0)+C(5,1))*0.5^5 = 2*6/32 = 0.375
+    assert math.isclose(result["sign_test_p"], 0.375, rel_tol=1e-9)
+    assert result["mean_control"] == 100.0
+    assert math.isclose(result["mean_treatment"], 103.0, rel_tol=1e-9)
+
+
+def test_analyze_ablation_power_curve_present() -> None:
+    result = analyze_ablation(_ablation_cells(), "base", "tuned")
+    effects = [pt["effect"] for pt in result["power_curve"]]
+    assert effects == [2.0, 5.0, 10.0, 15.0, 20.0]
+    for pt in result["power_curve"]:
+        assert pt["required_n"] >= 2
+        assert 0.0 <= pt["power_at_current_n"] <= 1.0
+    # Larger effects need fewer seeds (monotone non-increasing).
+    reqs = [pt["required_n"] for pt in result["power_curve"]]
+    assert reqs == sorted(reqs, reverse=True)
+
+
+def test_analyze_ablation_no_common_seeds_raises() -> None:
+    cells = [
+        _make_cell("base", 1, 100.0, 0.0, 1.0, 0.0, 0.0, 1.0),
+        _make_cell("tuned", 2, 105.0, 0.0, 1.0, 0.0, 0.0, 1.0),
+    ]
+    with pytest.raises(ValueError, match="no common seeds"):
+        analyze_ablation(cells, "base", "tuned")
+
+
+def test_analyze_ablation_ci_deterministic() -> None:
+    a = analyze_ablation(_ablation_cells(), "base", "tuned")
+    b = analyze_ablation(_ablation_cells(), "base", "tuned")
+    assert a["ci"] == b["ci"]
+
+
+def test_render_ablation_markdown_has_sections() -> None:
+    md = render_ablation_markdown(analyze_ablation(_ablation_cells(), "base", "tuned"))
+    assert "Per-seed" in md
+    assert "Power curve" in md
+    assert "sign test" in md
+    assert "Verdict" in md
+
+
+def test_run_ablation_scripted_self_is_zero_delta() -> None:
+    """Self-ablation (scripted vs scripted) is deterministic: Δ=0 on every seed."""
+    with tempfile.TemporaryDirectory() as td:
+        result = run_ablation(
+            "scripted", "scripted", seeds=[42, 57], ticks=8,
+            provider=None, out_dir=Path(td),
+        )
+    assert result["n"] == 2
+    assert result["mean_delta"] == 0.0
+    assert result["sd_delta"] == 0.0
+    assert result["sign_test_p"] == 1.0
+    # CI collapses to a point at 0.
+    assert result["ci"]["lower"] == 0.0
+    assert result["ci"]["upper"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# M2: repeats-per-seed variance decomposition
+# ---------------------------------------------------------------------------
+
+
+def test_analyze_repeats_pure() -> None:
+    # arm 'a': seed 1 replicates [10,10], seed 2 replicates [20,20] -> within=0.
+    cells = [
+        _make_cell("a", 1, 10.0, 0.0, 1.0, 0.0, 0.0, 1.0),
+        _make_cell("a", 1, 10.0, 0.0, 1.0, 0.0, 0.0, 1.0),
+        _make_cell("a", 2, 20.0, 0.0, 1.0, 0.0, 0.0, 1.0),
+        _make_cell("a", 2, 20.0, 0.0, 1.0, 0.0, 0.0, 1.0),
+    ]
+    result = analyze_repeats(cells)
+    a = result["a"]
+    assert a["n_seeds"] == 2
+    assert a["repeats"] == 2
+    assert math.isclose(a["sd_within"], 0.0, abs_tol=1e-12)
+    assert math.isclose(a["sd_between"], math.sqrt(50.0), rel_tol=1e-9)
+    assert math.isclose(a["icc"], 1.0, rel_tol=1e-9)
+
+
+def test_run_repeat_seeds_scripted_zero_within_variance() -> None:
+    """Scripted is deterministic: every repeat is identical -> σ_within == 0."""
+    with tempfile.TemporaryDirectory() as td:
+        out_dir = Path(td)
+        cells = run_repeat_seeds(
+            ["scripted"], seeds=[42], repeats=3, ticks=8,
+            provider=None, out_dir=out_dir,
+        )
+        assert len(cells) == 3
+        # Distinct repeat cell dirs were written.
+        for k in range(3):
+            assert (out_dir / f"scripted-seed42-r{k}" / "summary.json").exists()
+        result = analyze_repeats(cells)
+    assert math.isclose(result["scripted"]["sd_within"], 0.0, abs_tol=1e-9)
+
+
+def test_run_repeat_seeds_resumes() -> None:
+    """A second call with matching ticks reuses the cells (no re-run needed)."""
+    with tempfile.TemporaryDirectory() as td:
+        out_dir = Path(td)
+        run_repeat_seeds(
+            ["scripted"], seeds=[42], repeats=2, ticks=8, provider=None, out_dir=out_dir
+        )
+        # Re-run: should resume from summary.json (cells still returned).
+        cells = run_repeat_seeds(
+            ["scripted"], seeds=[42], repeats=2, ticks=8, provider=None, out_dir=out_dir
+        )
+        assert len(cells) == 2
+
+
+def test_render_repeats_markdown_has_columns() -> None:
+    cells = [
+        _make_cell("scripted", 1, 10.0, 0.0, 1.0, 0.0, 0.0, 1.0),
+        _make_cell("scripted", 1, 12.0, 0.0, 1.0, 0.0, 0.0, 1.0),
+    ]
+    md = render_repeats_markdown(analyze_repeats(cells))
+    assert "σ_within" in md
+    assert "σ_between" in md
+    assert "ICC" in md
+    assert "scripted" in md
+
+
+def test_run_repeat_seeds_rejects_seed_sampler() -> None:
+    """M1 (seed sampler) and M2 (repeats) are contradictory — must be rejected."""
+    with (
+        tempfile.TemporaryDirectory() as td,
+        pytest.raises(ValueError, match="contradictory"),
+    ):
+        run_repeat_seeds(
+            ["society"], seeds=[42], repeats=3, ticks=8,
+            provider=None, out_dir=Path(td), seed_sampler=True,
+        )
+
+
+def test_analyze_repeats_nonzero_within_variance() -> None:
+    """Non-zero within-seed spread is captured (the LLM-sampling component M2 exists
+    to measure) — not only the scripted within=0 case."""
+    # seed 1 replicates [10, 14] (mean 12, within spread), seed 2 [30, 34] (mean 32).
+    cells = [
+        _make_cell("a", 1, 10.0, 0.0, 1.0, 0.0, 0.0, 1.0),
+        _make_cell("a", 1, 14.0, 0.0, 1.0, 0.0, 0.0, 1.0),
+        _make_cell("a", 2, 30.0, 0.0, 1.0, 0.0, 0.0, 1.0),
+        _make_cell("a", 2, 34.0, 0.0, 1.0, 0.0, 0.0, 1.0),
+    ]
+    a = analyze_repeats(cells)["a"]
+    # within: each seed has sample sd sqrt(((10-12)^2+(14-12)^2)/1)=sqrt(8); pooled MSW
+    # = (8+8)/2 = 8 -> sd_within = sqrt(8).
+    assert math.isclose(a["sd_within"], math.sqrt(8.0), rel_tol=1e-9)
+    assert a["sd_between"] > 0.0
+    assert 0.0 < a["icc"] < 1.0
