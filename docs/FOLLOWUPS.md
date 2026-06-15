@@ -37,27 +37,29 @@ write-up in `docs/FIELD-NOTES.md` §13–14):**
 - **Not done (optional):** M4 full 60-tick × 5-seed σ≈23.6 re-validation (more $); a first real
   `society`-vs-`swarm` ablation; M2 on the swarm arm.
 
-**Tier 1 so far (2026-06-15):**
-- **S2 (partial-grant auction) is KILLED by measurement** — the backlog's "single biggest lever". The
-  M5 diagnostic found **0 priority inversions** in the default world (9 society runs), and D2's harder
-  world (`--pools tight`, 6 runs) still produced **0** — 133 contested losses across both worlds, every
-  one legitimate (loser priority ≤ winner). The auction's arbitration is sound; the pathology S2 fixes
-  doesn't exist here. **Do not build S2.** (FIELD-NOTES §15; `bench/results/2026-06-15-d2-tight/`.)
+**Tier 1 (2026-06-15) — three results:**
+- **S2 (partial-grant auction) is KILLED by measurement** — the backlog's "single biggest lever".
+  0 priority inversions in the default (9 runs) and `--pools tight` (6 runs) worlds; even on the
+  harshest world (all pools=2) only 6 of 794 losses are inversions (<1%, dwarfed by 443 pure-shortage).
+  The auction's arbitration is sound. **Do not build S2.** (FIELD-NOTES §15–16.)
 - **D2 (configurable pools) is BUILT** — `--pools tight|scarce|kind=N` on run/bench/ablation; default
-  world byte-identical. Tightening raised contention but the task stays ~93% resolved.
+  world byte-identical. Pool sweep (scripted): default 98% resolved → tight 92 → scarce 87 →
+  harsh(all=2) 80 → brutal 54. "harsh" = genuine triage (lives saved ≈ lost).
+- **Coordination buys robustness under triage** — harsh-world society-vs-swarm ablation (5 seeds):
+  society 68.8 vs swarm 52.6, **Δ +16.2**, CI [+3.2,+29.6] excludes 0 **BUT sign test p=0.375, power
+  0.57 — suggestive, not confirmed**. Real signal: society stable 63–72 vs swarm volatile 32–66
+  (collapses on hard seeds). First evidence for the D5 graceful-degradation claim. (FIELD-NOTES §16;
+  `bench/results/2026-06-15-harsh-ablation/`.)
 
-**Resume here → Tier 1, redirected away from auction policy (gate each behind `aftershock ablation`):**
-1. **Bid discipline / S1** — the dominant auction-loss category is `redundant` (50–57/run: agents
-   re-requesting already-satisfied resources) and the infra agent is the only role <0.85 conformance.
-   A conformance/cost lever (harmless to lives, but cleans up churn) — measure via the conformance
-   track, not lives.
-2. **For a lives effect, force genuine triage** — the task is still ~93% resolved even on tight pools,
-   so no lever moves lives until you can't-save-everyone. Push harder than `tight` (`--pools scarce`,
-   or raise mission load via a new harder timeline / D1-style bigger Ida) so *prioritization quality*
-   — not auction mechanics — separates the arms. THEN an ablation can show a real Δ.
+**Resume here → confirm or pivot:**
+1. **Confirm the +16** — add seeds to the harsh ablation (`aftershock ablation --control swarm
+   --treatment society --pools "ambulance=2,rescue_crew=2,fire_engine=2,supply_truck=2,repair_crew=2"
+   --seeds <more> --out runs/d2-harsh-ablation` resumes existing cells) until the CI tightens + sign
+   test reaches significance — power curve says ~11 total seeds for +15. ~$0.5 more.
+2. **Bid discipline / S1** — `redundant` is the dominant loss category (a conformance lever, harmless
+   to lives) + infra agent <0.85 conformance.
 3. Then memory-v2 + an autoresearch loop (optimise *conformance* not lives, gate on held-out seeds).
-   S3 (deadline-sort) and W1 (swarm INFO_SHARE) remain available but are lower priority given the
-   auction is not the bottleneck.
+   S3/W1 remain available but lower priority given the auction is not the bottleneck.
 
 **Constraints (do not violate):** `kernel/protocol.py` + `tests/test_protocol_snapshot.py` are
 FROZEN (no new proposal kinds — tune the auction *policy* in `town/society.py` only); `bench` rejects

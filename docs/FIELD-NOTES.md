@@ -264,4 +264,32 @@ optimize a pathology that isn't there. This is the Tier-0 harness paying for its
 program's headline lever before a line of it was written. Redirect Tier 1 away from auction policy
 (S2/S3) toward bid discipline (the dominant redundant category, a conformance lever) and, if a *lives*
 effect is the goal, a much harsher regime that forces genuine triage (can't-save-everyone) where
-prioritization quality — not auction mechanics — separates the arms.
+prioritization quality — not auction mechanics — separates the arms. (Note 16 ran that harsher regime:
+inversions do finally appear, but stay negligible — S2's verdict holds.)
+
+## 16. Under triage pressure, coordination buys robustness, not just mean lives (2026-06-15)
+
+**Observed:** D2's harshest regime (all pools = 2 → 80% of missions resolved, lives saved ≈ lives lost
+— a genuine can't-save-everyone task) finally lets the arms separate. A paired society-vs-swarm
+ablation (5 seeds, 30 ticks, `aftershock ablation`): **society 68.8 vs swarm 52.6, Δ = +16.2 lives**
+(sd 17.05). Per seed: +31, −3, +6, +10, +37. The standout is *variance*, not the mean: **society's
+lives are stable (63–72 across all five seeds) while swarm's are volatile (32–66)**, collapsing on the
+hard draws (seeds 11, 57 → 39, 32) exactly where society holds ~70.
+
+**Honest statistics:** the 95% bootstrap CI [+3.2, +29.6] excludes 0, but the conservative sign test is
+**p=0.375** (4+/1−) and observed power is only **0.57** — the result is *suggestive, not confirmed*. At
+n=5 the percentile bootstrap is optimistic on a skewed sample; trust the sign test + power. The power
+curve says ~11 seeds for a +15 effect (≈23 for +10) at 80% power, so the mean-Δ claim needs ~2× more
+seeds. The robustness (variance) gap, though, is already visible at n=5. (Lesson for the harness: the
+auto-verdict keys on the CI and can over-claim at small n; the sign test is the guardrail.)
+
+**S2 epilogue:** at this extreme scarcity priority inversions *do* finally appear — but only **6 of 794
+auction losses (<1%)**, dwarfed by 443 pure-shortage (pool empty — partial grants have nothing to
+split). So S2's maximum headroom is ~6 grants; the note-15 verdict (don't build it) stands even on the
+hardest world we can make.
+
+**Decision:** the lives lever that works under triage is the **coordination protocol itself** (already
+shipped), not an auction tweak — and its measured benefit is *graceful degradation* (this is the first
+evidence for the previously-untested D5 "society degrades more gracefully under stress" claim). To
+firm up the +16, add seeds until the harness says the CI is real; the defensible claim today is the
+robustness gap.
