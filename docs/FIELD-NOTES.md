@@ -301,4 +301,25 @@ split). S2's verdict (note 15: don't build it) stands even on the hardest world 
 honest claims that survive: (a) the auction arbitration is sound (notes 15–16), (b) the society's value
 is cost-efficiency + conformance, not a lives edge over swarm under scarcity, and (c) the published
 easy-world "+28 society vs swarm" (note 3) deserves the same paired-power re-check with this harness
-before it is leaned on further.
+before it is leaned on further (done — note 17).
+
+## 17. Re-checking the published +28: direction solid, magnitude soft (2026-06-15)
+
+**Observed:** the harsh-world null (note 16) demanded the same scrutiny of the headline easy-world claim
+(note 3, "a coordination protocol is worth 28 lives"). Running the *original published* n=5 paired data
+(`bench/results/2026-06-11`, 60-tick default world) through the new paired harness: **Δ = +27.6** (sd
+35.2), per-seed [+88, +7, 0, +26, +17]. **Every seed is non-negative** — 4 strictly positive, 1 tie,
+0 negative. 95% bootstrap CI [+6.2, +58.0] excludes 0; **but** sign test **p=0.125** (the seed-37 tie
+drops effective n to 4) and power **0.42**, and the magnitude is dominated by one seed (seed 11 = +88;
+the other four average +12.5).
+
+**Interpretation:** unlike the harsh +16 (note 16) — which had seeds going both ways and vanished at
+n=11 — the easy-world gap is **directionally robust**: society ≥ swarm on *all five* seeds. So note 3's
+*qualitative* claim (the coordination protocol helps on the easy world) survives the re-check. What does
+*not* survive cleanly is the precise number: "+28" is underpowered, sign-test-non-significant at n=5,
+and leveraged by a single seed. A tight CI on the magnitude would need ~25 seeds (power curve).
+
+**Decision:** keep note 3's direction; when the "+28 lives" figure is *quoted* (README, Devpost),
+caveat it as an n=5 paired mean with a wide CI (or add seeds to firm it). Two notes now show the
+`aftershock ablation` auto-verdict ("credible — CI excludes 0") disagreeing with a non-significant sign
+test at n=5 — harden it to require sign-test agreement below ~10 seeds before it prints "credible".

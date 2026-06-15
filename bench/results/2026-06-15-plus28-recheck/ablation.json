@@ -1,0 +1,88 @@
+{
+  "alpha": 0.05,
+  "ci": {
+    "confidence": 0.95,
+    "lower": 6.2,
+    "n_resamples": 10000,
+    "upper": 58.0
+  },
+  "control": "swarm",
+  "mean_control": 75.6,
+  "mean_delta": 27.6,
+  "mean_treatment": 103.2,
+  "n": 5,
+  "n_negative": 0,
+  "n_positive": 4,
+  "n_tied": 1,
+  "observed_power": 0.41860987490797485,
+  "per_seed": [
+    {
+      "control": 52.0,
+      "delta": 88.0,
+      "seed": 11,
+      "treatment": 140.0
+    },
+    {
+      "control": 79.0,
+      "delta": 7.0,
+      "seed": 23,
+      "treatment": 86.0
+    },
+    {
+      "control": 81.0,
+      "delta": 0.0,
+      "seed": 37,
+      "treatment": 81.0
+    },
+    {
+      "control": 72.0,
+      "delta": 26.0,
+      "seed": 42,
+      "treatment": 98.0
+    },
+    {
+      "control": 94.0,
+      "delta": 17.0,
+      "seed": 57,
+      "treatment": 111.0
+    }
+  ],
+  "power_curve": [
+    {
+      "effect": 2.0,
+      "power_at_current_n": 0.03341427287852447,
+      "required_n": 2428
+    },
+    {
+      "effect": 5.0,
+      "power_at_current_n": 0.05028283445859372,
+      "required_n": 389
+    },
+    {
+      "effect": 10.0,
+      "power_at_current_n": 0.09270654781960777,
+      "required_n": 98
+    },
+    {
+      "effect": 15.0,
+      "power_at_current_n": 0.15710574538546085,
+      "required_n": 44
+    },
+    {
+      "effect": 20.0,
+      "power_at_current_n": 0.2455445009288063,
+      "required_n": 25
+    }
+  ],
+  "power_target": 0.8,
+  "sd_delta": 35.17527540759276,
+  "seeds": [
+    11,
+    23,
+    37,
+    42,
+    57
+  ],
+  "sign_test_p": 0.125,
+  "treatment": "society"
+}
