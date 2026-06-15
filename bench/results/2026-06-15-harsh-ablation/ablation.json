@@ -1,0 +1,130 @@
+{
+  "alpha": 0.05,
+  "ci": {
+    "confidence": 0.95,
+    "lower": -4.0,
+    "n_resamples": 10000,
+    "upper": 14.727272727272727
+  },
+  "control": "swarm",
+  "mean_control": 57.09090909090909,
+  "mean_delta": 4.7272727272727275,
+  "mean_treatment": 61.81818181818182,
+  "n": 11,
+  "n_negative": 5,
+  "n_positive": 6,
+  "n_tied": 0,
+  "observed_power": 0.15418716765616966,
+  "per_seed": [
+    {
+      "control": 78.0,
+      "delta": -15.0,
+      "seed": 5,
+      "treatment": 63.0
+    },
+    {
+      "control": 39.0,
+      "delta": 31.0,
+      "seed": 11,
+      "treatment": 70.0
+    },
+    {
+      "control": 50.0,
+      "delta": 5.0,
+      "seed": 13,
+      "treatment": 55.0
+    },
+    {
+      "control": 66.0,
+      "delta": -3.0,
+      "seed": 23,
+      "treatment": 63.0
+    },
+    {
+      "control": 90.0,
+      "delta": -10.0,
+      "seed": 29,
+      "treatment": 80.0
+    },
+    {
+      "control": 64.0,
+      "delta": 6.0,
+      "seed": 37,
+      "treatment": 70.0
+    },
+    {
+      "control": 67.0,
+      "delta": -11.0,
+      "seed": 41,
+      "treatment": 56.0
+    },
+    {
+      "control": 62.0,
+      "delta": 10.0,
+      "seed": 42,
+      "treatment": 72.0
+    },
+    {
+      "control": 43.0,
+      "delta": 7.0,
+      "seed": 53,
+      "treatment": 50.0
+    },
+    {
+      "control": 32.0,
+      "delta": 37.0,
+      "seed": 57,
+      "treatment": 69.0
+    },
+    {
+      "control": 37.0,
+      "delta": -5.0,
+      "seed": 67,
+      "treatment": 32.0
+    }
+  ],
+  "power_curve": [
+    {
+      "effect": 2.0,
+      "power_at_current_n": 0.05917802568702796,
+      "required_n": 545
+    },
+    {
+      "effect": 5.0,
+      "power_at_current_n": 0.1674397779554082,
+      "required_n": 88
+    },
+    {
+      "effect": 10.0,
+      "power_at_current_n": 0.5124849337766237,
+      "required_n": 22
+    },
+    {
+      "effect": 15.0,
+      "power_at_current_n": 0.8477738256778777,
+      "required_n": 10
+    },
+    {
+      "effect": 20.0,
+      "power_at_current_n": 0.9784409601676268,
+      "required_n": 6
+    }
+  ],
+  "power_target": 0.8,
+  "sd_delta": 16.65587529426724,
+  "seeds": [
+    5,
+    11,
+    13,
+    23,
+    29,
+    37,
+    41,
+    42,
+    53,
+    57,
+    67
+  ],
+  "sign_test_p": 1.0,
+  "treatment": "society"
+}

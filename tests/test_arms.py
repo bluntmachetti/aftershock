@@ -368,6 +368,132 @@ def test_society_timeout() -> None:
 
 
 # ---------------------------------------------------------------------------
+# M1: seed_sampler threads the engine seed into the LLM agents (all arms)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("arm", ["society", "swarm", "solo"])
+def test_seed_sampler_threads_engine_seed(arm: str) -> None:
+    """build_arm(seed_sampler=True) gives every LLM agent engine_seed == seed.
+
+    Covers arms.py's `engine_seed = seed if seed_sampler else None` AND the
+    per-builder engine_seed= wiring for society/swarm/solo — a regression that
+    dropped it (or gated on the wrong flag) would leave the arm unseeded.
+    """
+    from aftershock.llm.agent import LLMAgent
+
+    setup = build_arm(arm, _SEED, _mock(), seed_sampler=True)
+    for agent in setup.agents.values():
+        assert isinstance(agent, LLMAgent)
+        assert agent._engine_seed == _SEED
+
+
+@pytest.mark.parametrize("arm", ["society", "swarm", "solo"])
+def test_seed_sampler_off_leaves_engine_seed_none(arm: str) -> None:
+    from aftershock.llm.agent import LLMAgent
+
+    setup = build_arm(arm, _SEED, _mock())  # default seed_sampler=False
+    for agent in setup.agents.values():
+        assert isinstance(agent, LLMAgent)
+        assert agent._engine_seed is None
+
+
+def test_seed_sampler_reaches_provider_through_engine() -> None:
+    """End-to-end: build_arm(seed_sampler=True) -> Engine tick -> provider gets the
+    correct non-None sample_seed(seed, agent_id, tick) on every call."""
+    import asyncio
+
+    from aftershock.kernel.engine import Engine
+    from aftershock.kernel.recorder import Recorder
+    from aftershock.llm.agent import sample_seed
+
+    provider = MockProvider(script=lambda m, s, u: '{"decisions": []}')
+    setup = build_arm("society", _SEED, provider, seed_sampler=True)
+
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as td:
+        recorder = Recorder(Path(td), "m1", {"seed": _SEED, "arm": "society"})
+        engine = Engine(
+            world=setup.world, society=setup.society, agents=setup.agents,
+            registry=setup.registry, roles=setup.roles, resolver=setup.resolver,
+            recorder=recorder, seed=_SEED, max_ticks=1, agent_timeout_s=30.0,
+        )
+        asyncio.run(engine.run())
+
+    assert provider.seed_calls, "provider was never called"
+    assert all(s is not None for s in provider.seed_calls)
+    # Tick 0: each of the six agents sent sample_seed(seed, agent_id, 0).
+    expected = {sample_seed(_SEED, aid, 0) for aid in setup.agents}
+    assert set(provider.seed_calls) == expected
+
+
+# ---------------------------------------------------------------------------
+# D2: configurable pool sizes (harder synthetic worlds)
+# ---------------------------------------------------------------------------
+
+
+def test_new_town_default_byte_identical() -> None:
+    """new_town(seed) and new_town(seed, None) reproduce the canonical world."""
+    from aftershock.town.state import new_town
+
+    assert new_town(42).to_dict() == new_town(42, None).to_dict()
+
+
+def test_new_town_pool_override() -> None:
+    from aftershock.town.state import new_town
+
+    w = new_town(42, {"ambulance": 3})
+    assert w.pools["ambulance"].total == 3
+    assert w.pools["ambulance"].available == 3
+    # untouched kinds keep their defaults
+    assert w.pools["rescue_crew"].total == 3
+    assert w.pools["fire_engine"].total == 3
+
+
+def test_new_town_preset_tight() -> None:
+    from aftershock.town.state import SCARCITY_PRESETS, new_town
+
+    w = new_town(42, SCARCITY_PRESETS["tight"])
+    assert w.pools["ambulance"].total == 3
+    assert w.pools["rescue_crew"].total == 2
+
+
+def test_new_town_unknown_pool_raises() -> None:
+    from aftershock.town.state import new_town
+
+    with pytest.raises(ValueError, match="unknown pool kind"):
+        new_town(42, {"horse": 2})
+
+
+def test_build_arm_threads_pool_sizes() -> None:
+    setup = build_arm("scripted", _SEED, None, pool_sizes={"ambulance": 3})
+    assert setup.world.pools["ambulance"].total == 3
+    # default world is unchanged when no override given
+    assert build_arm("scripted", _SEED, None).world.pools["ambulance"].total == 4
+
+
+def test_parse_pools_preset_and_override() -> None:
+    from aftershock.cli import _parse_pools
+
+    assert _parse_pools(None) is None
+    assert _parse_pools("tight") == {"ambulance": 3, "rescue_crew": 2}
+    assert _parse_pools("ambulance=3,rescue_crew=2") == {"ambulance": 3, "rescue_crew": 2}
+
+
+def test_parse_pools_rejects_bad_input() -> None:
+    from aftershock.cli import _parse_pools
+
+    with pytest.raises(SystemExit):
+        _parse_pools("horse=2")  # unknown kind
+    with pytest.raises(SystemExit):
+        _parse_pools("ambulance=x")  # non-integer
+    with pytest.raises(SystemExit):
+        _parse_pools("ambulance=0")  # must be >= 1
+
+
+# ---------------------------------------------------------------------------
 # Unknown arm
 # ---------------------------------------------------------------------------
 

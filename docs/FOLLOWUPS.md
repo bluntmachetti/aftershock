@@ -2,40 +2,65 @@
 
 Short list of known project tasks that are not part of the current deployment path.
 
-## ▶ NEXT SESSION — resume here: Tier-0 measurement (society/swarm improvement program)
+## ▶ NEXT SESSION — resume here: Tier-1 levers (Tier-0 measurement is DONE)
 
-**Goal:** build the measurement foundation that makes every later agent-tuning experiment
-*believable*, before tuning anything. **Full backlog (44 experiments, 5 tiers, all grounded against
-`docs/FIELD-NOTES.md`):** `.omc/research/improvement-experiments.md` — read it first.
+**Status: the Tier-0 measurement harness is BUILT and VERIFIED (2026-06-14).** Code + tests for
+M1/M2/M3/M5 (committed on branch `tier0-measurement-harness`); full suite green (812 tests), ruff
+clean, `aftershock verify` PASS, frozen `kernel/protocol.py` untouched; 6-dimension adversarial review
+(5 findings fixed); paid M1/M2 verification run (see below). **Full backlog:**
+`.omc/research/improvement-experiments.md`.
 
-**Why measurement first (the framing):** the *engine* is byte-deterministic, but the *LLM arms are
-not* — `llm/provider.py` sends `temperature` (0.3 for all roles) but **no `seed`** to DashScope, so
-`society`/`solo`/`swarm` vary run-to-run (the published `103.2 ± 23.6` is an n=5 mean; that ± *is*
-the sampling noise — scripted's `± 18` is pure world variance). With σ≈24 and n=5, power to detect a
-**+10-life** effect is only ~35% — you currently can't tell a real +5 from noise. Also: scripted
-(106.8) ≈ every LLM arm, so agent tweaks are bounded to ~10–15 lives *until* the world is made harder
-(Tier 4). So Tier 0 = make a +5 statistically visible.
+**What shipped (new surfaces):**
+- **M3 ablation** — `aftershock ablation --control X --treatment Y --seeds 11,23,37,42,57` → paired
+  per-seed Δ, exact sign test, deterministic bootstrap CI, "+X lives needs N seeds" power curve.
+  Writes `ABLATION.md`/`ablation.json`. Pure stats in **`src/aftershock/stats.py`** (no numpy/scipy:
+  hand-rolled norm_cdf/ppf, sign test, bootstrap, power, variance components — all hand-verified).
+- **M5 diagnostics** — `aftershock diagnose <run_dir>...` → auction-loss classification
+  (**priority_inversion** vs displacement vs pure_shortage vs redundant), spawn→request→arrival
+  latency split by outcome, cross-arm conformance calibration (scripted anchor confirmed = 1.000).
+  **`src/aftershock/town/diagnostics.py`**. NOTE: inversion is detected by reconstructing winners
+  (accepted grants) vs losers per (tick,resource) — NOT from the loser's reason string (the review
+  proved the reason-string approach is dead code: real inversions surface as the *shortage* form).
+- **M1 seed sampler** — `--seed-sampler` on `run`/`bench` threads a deterministic per-(seed,agent,
+  tick) SHA-256 seed into the provider body (gated; scripted untouched).
+- **M2 repeats** — `aftershock bench --repeat-seeds N` → within-seed (LLM) vs between-seed (world)
+  variance split + ICC. Rejects `--seed-sampler` (the two are contradictory: M1 removes the variance
+  M2 measures).
 
-**Do these (exact knobs in the backlog doc):**
-1. **M3 — ablation harness + power curve** (`src/aftershock/bench.py`): `run_ablation(control,
-   treatment, common_seeds)` → paired per-seed Δ, sign/bootstrap test, "to detect +X lives need N
-   seeds" curve. **Build this first — no LLM cost**, codifies the tool-ablation pattern (note 12) so
-   every later result is paired + credible.
-2. **M5 — free diagnostics** (post-process existing `runs/*/ticks.ndjson`, $0): auction loss-reason
-   classification (priority-inversion vs pure shortage), proposal→ruling→arrival latency,
-   cross-arm conformance calibration (scripted must read 1.0). Likely shows *where* lives leak.
-3. **M1 — seed the DashScope sampler** (`llm/provider.py:111` chat body): add
-   `seed = hash(engine_seed, agent_id, tick)`; thread the engine seed through `llm/agent.py`. If
-   DashScope honors it → society/swarm become *reproducible* (collapses the variance problem, and is
-   a strong honest story). **Verify** with two re-runs of `society-seed42` → byte-identical decision
-   records; risk: DashScope may ignore `seed` (test on `MockProvider` first, gate behind a flag).
-4. **M2 — K-repeats-per-seed** (`bench.py --repeat-seeds`): split within-seed (LLM) vs between-seed
-   (world) variance; tells you how many seeds you actually need.
+**Paid Tier-0 verification — DONE (2026-06-14, results in `bench/results/2026-06-14-tier0-verification/`,
+write-up in `docs/FIELD-NOTES.md` §13–14):**
+- **M1: DashScope IGNORES `seed`.** Seeded society runs diverge at tick 1 exactly like the unseeded
+  baseline → no reproducibility. `--seed-sampler` kept as a documented no-op. Lean on pairing, not seeds.
+- **M2: the world is ~79% of the variance** (society, 3 seeds × 3 repeats, 30 ticks): σ_within(LLM)=7.75,
+  σ_between(world)=14.87, ICC=0.79. **So pair, don't repeat** — paired-Δ SD ≈ 11 vs unpaired ≈ 23.7;
+  detecting +10 lives at 80% power needs ~10 paired seeds vs ~45 unpaired. Repeats only buy down the 21%.
+- **Not done (optional):** M4 full 60-tick × 5-seed σ≈23.6 re-validation (more $); a first real
+  `society`-vs-`swarm` ablation; M2 on the swarm arm.
 
-**Then** (next tiers, only once the harness exists): S1 fix the infra agent (only role <0.85
-conformance), S2 partial-grant auction (hypothesised +10–15, the big lever), W1 swarm `INFO_SHARE`,
-D2 tighter pools to separate the arms, then memory-v2 + an autoresearch loop (optimise *conformance*
-not lives, gate on held-out seeds).
+**Tier 1 (2026-06-15) — three results:**
+- **S2 (partial-grant auction) is KILLED by measurement** — the backlog's "single biggest lever".
+  0 priority inversions in the default (9 runs) and `--pools tight` (6 runs) worlds; even on the
+  harshest world (all pools=2) only 6 of 794 losses are inversions (<1%, dwarfed by 443 pure-shortage).
+  The auction's arbitration is sound. **Do not build S2.** (FIELD-NOTES §15–16.)
+- **D2 (configurable pools) is BUILT** — `--pools tight|scarce|kind=N` on run/bench/ablation; default
+  world byte-identical. Pool sweep (scripted): default 98% resolved → tight 92 → scarce 87 →
+  harsh(all=2) 80 → brutal 54. "harsh" = genuine triage (lives saved ≈ lost).
+- **No harsh-world lives advantage (a caught false positive)** — society-vs-swarm ablation looked like
+  **Δ +16** at n=5 (CI excluded 0) but **collapsed to +4.7 at n=11** (CI [−4.0,+14.7] includes 0, sign
+  test p=1.0, power 0.15). The n=5 "win" + "robustness" story were small-sample artifacts (two lucky
+  seeds). **No detectable society-vs-swarm lives edge under scarcity.** The harness did its job — it
+  stopped a plausible wrong headline. (FIELD-NOTES §16; `bench/results/2026-06-15-harsh-ablation/`.)
+
+**Resume here:**
+1. **Stop chasing a harsh-world lives lever** — power curve says +10 needs ~22 seeds, the observed +4.7
+   needs ~88; not worth the spend. The auction is sound and the arms don't separate on lives even under
+   triage. The honest society story is **cost-efficiency + conformance**, not a lives edge over swarm.
+2. **Re-check the published "+28 society vs swarm" (note 3)** with this paired harness before leaning on
+   it — the harsh-world null result means the easy-world headline deserves the same power scrutiny.
+3. **Bid discipline / S1** (cheap, deterministic): `redundant` is the dominant loss category + infra
+   agent <0.85 conformance — optimise the conformance signal, gate on held-out lives. Then memory-v2 /
+   autoresearch on conformance. (Harden `aftershock ablation`'s auto-verdict to require sign-test
+   agreement below ~10 seeds — it over-claimed at n=5.)
 
 **Constraints (do not violate):** `kernel/protocol.py` + `tests/test_protocol_snapshot.py` are
 FROZEN (no new proposal kinds — tune the auction *policy* in `town/society.py` only); `bench` rejects

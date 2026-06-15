@@ -11,6 +11,7 @@ Tool mode     = when role.use_tools, calls provider with tools, maps via tool_ma
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 
 from aftershock.kernel.agents import Agent
@@ -29,6 +30,18 @@ from aftershock.llm.parse import LLMParseError, parse_llm_output
 from aftershock.llm.provider import Provider
 
 
+def sample_seed(engine_seed: int, agent_id: str, tick: int) -> int:
+    """Deterministic per-(engine_seed, agent, tick) sampling seed for M1.
+
+    Uses SHA-256, NOT Python's built-in ``hash()`` — string hashing is salted
+    per process (PYTHONHASHSEED), so ``hash()`` would give different seeds on
+    every run and silently defeat reproducibility. Returns a 31-bit non-negative
+    int, comfortably inside the OpenAI/DashScope ``seed`` integer range.
+    """
+    h = hashlib.sha256(f"{engine_seed}:{agent_id}:{tick}".encode()).digest()
+    return int.from_bytes(h[:4], "big") & 0x7FFFFFFF
+
+
 class LLMAgent(Agent):
     """An agent driven by a language model via a Provider."""
 
@@ -40,6 +53,7 @@ class LLMAgent(Agent):
         contract: str,
         tool_defs: list[dict] | None = None,
         tool_mapper: Callable[..., AgentResponse] | None = None,
+        engine_seed: int | None = None,
     ) -> None:
         super().__init__(agent_id, role.name)
         self._role = role
@@ -47,6 +61,9 @@ class LLMAgent(Agent):
         self._system = role.system_prompt + "\n\n" + contract
         self._tool_defs = tool_defs
         self._tool_mapper = tool_mapper
+        # M1: when set (the --seed-sampler opt-in), each provider call gets a
+        # deterministic per-tick seed. None ⇒ no seed sent (the legacy default).
+        self._engine_seed = engine_seed
 
     async def act(self, observation: Observation) -> AgentResponse:
         """Call the provider, parse output, return a fully typed AgentResponse.
@@ -57,6 +74,11 @@ class LLMAgent(Agent):
         tick = observation.tick
         user = render_observation(observation)
         inbox_ids: frozenset[str] = frozenset(p.proposal_id for p in observation.inbox)
+        seed: int | None = (
+            sample_seed(self._engine_seed, self.agent_id, tick)
+            if self._engine_seed is not None
+            else None
+        )
 
         usage: TokenUsage | None = None
         try:
@@ -75,6 +97,7 @@ class LLMAgent(Agent):
                     json_mode=False,
                     tools=self._tool_defs,
                     tool_choice="auto",
+                    seed=seed,
                 )
                 usage = result.usage
                 response = self._tool_mapper(
@@ -88,6 +111,7 @@ class LLMAgent(Agent):
                     user=user,
                     temperature=self._role.temperature,
                     json_mode=True,
+                    seed=seed,
                 )
                 usage = result.usage
                 text = result.text

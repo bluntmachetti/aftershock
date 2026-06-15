@@ -69,6 +69,8 @@ def build_arm(
     lessons: list[str] | None = None,
     scenario: ScenarioPack | None = None,
     society_tools: bool = False,
+    seed_sampler: bool = False,
+    pool_sizes: dict[str, int] | None = None,
 ) -> ArmSetup:
     """Build all components for one (arm, seed) benchmark cell.
 
@@ -86,6 +88,12 @@ def build_arm(
                   from the pack (districts/pools/timeline from real data) via
                   town_from_scenario(scenario, seed); otherwise new_town(seed).
                   `seed` keeps its meaning for every other rng_for stream + replay.
+        seed_sampler: M1 opt-in (CLI --seed-sampler). When True, LLM arms thread
+                  the engine seed into a deterministic per-tick provider seed
+                  (see llm.agent.sample_seed). No effect on the scripted arm.
+        pool_sizes: D2 opt-in (CLI --pools). An override merged onto POOL_SIZES to
+                  harden the synthetic world. Ignored on the scenario path (a pack
+                  defines its own pools). None reproduces the canonical world.
 
     Returns:
         ArmSetup with fully wired world, society, agents, registry, roles,
@@ -105,20 +113,28 @@ def build_arm(
             f"arm {arm!r} requires a Provider — set DASHSCOPE_API_KEY and pass a provider"
         )
 
-    world = town_from_scenario(scenario, seed) if scenario else new_town(seed)
+    world = (
+        town_from_scenario(scenario, seed)
+        if scenario
+        else new_town(seed, pool_sizes=pool_sizes)
+    )
     registry = DecisionRegistry()
     register_all(registry)
+
+    # M1: the engine seed only flows to the LLM agents when the sampler is on.
+    engine_seed = seed if seed_sampler else None
 
     if arm == "scripted":
         return _build_scripted(world, registry, seed)
     if arm == "society":
         return _build_society(
-            world, registry, seed, provider, lessons=lessons, use_tools=society_tools
+            world, registry, seed, provider, lessons=lessons, use_tools=society_tools,
+            engine_seed=engine_seed,
         )
     if arm == "swarm":
-        return _build_swarm(world, registry, seed, provider)
+        return _build_swarm(world, registry, seed, provider, engine_seed=engine_seed)
     if arm == "solo":
-        return _build_solo(world, registry, seed, provider)
+        return _build_solo(world, registry, seed, provider, engine_seed=engine_seed)
 
     raise ValueError(f"unhandled arm {arm!r}")  # unreachable
 
@@ -167,13 +183,15 @@ def _build_society(
     provider: Any,
     lessons: list[str] | None = None,
     use_tools: bool = False,
+    engine_seed: int | None = None,
 ) -> ArmSetup:
     roles = load_roles(_TOWN_DIR / "roles")
     _six = ("commander", "comms", "fire", "infrastructure", "medical", "rescue")
     roster = {aid: aid for aid in _six}
     society = TownSociety(roster=roster)
     agents = build_llm_agents(
-        roles, provider, lessons=lessons, arm="society", force_tools=use_tools
+        roles, provider, lessons=lessons, arm="society", force_tools=use_tools,
+        engine_seed=engine_seed,
     )
     return ArmSetup(
         world=world,
@@ -191,6 +209,7 @@ def _build_swarm(
     registry: DecisionRegistry,
     seed: int,  # noqa: ARG001
     provider: Any,
+    engine_seed: int | None = None,
 ) -> ArmSetup:
     roles = load_roles(_TOWN_DIR / "roles_swarm")
     # Roster: agent_id == role name for the five swarm roles
@@ -215,6 +234,7 @@ def _build_swarm(
             role=role,
             provider=provider,
             contract=contract,
+            engine_seed=engine_seed,
         )
     return ArmSetup(
         world=world,
@@ -232,6 +252,7 @@ def _build_solo(
     registry: DecisionRegistry,
     seed: int,  # noqa: ARG001
     provider: Any,
+    engine_seed: int | None = None,
 ) -> ArmSetup:
     roles = load_roles(_TOWN_DIR / "roles_solo")
     solo_role = roles["solo"]
@@ -255,6 +276,7 @@ def _build_solo(
             role=solo_role,
             provider=provider,
             contract=contract,
+            engine_seed=engine_seed,
         )
     }
     return ArmSetup(

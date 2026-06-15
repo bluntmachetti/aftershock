@@ -57,6 +57,47 @@ def _run_id(seed: int, arm: str) -> str:
     return f"seed{seed}-{arm}"
 
 
+def _parse_pools(spec: str | None) -> dict[str, int] | None:
+    """Parse --pools: a preset name (e.g. 'tight') or a 'kind=N,kind=N' override.
+
+    Returns None when spec is None (the canonical world). Exits 1 with a friendly
+    message on a bad preset, unknown resource kind, or non-positive/non-integer value.
+    """
+    if spec is None:
+        return None
+    from aftershock.town.state import POOL_SIZES, SCARCITY_PRESETS
+
+    spec = spec.strip()
+    if spec in SCARCITY_PRESETS:
+        return dict(SCARCITY_PRESETS[spec])
+    override: dict[str, int] = {}
+    for part in spec.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "=" not in part:
+            print(
+                f"error: --pools entry {part!r} must be 'kind=N' or a preset name "
+                f"({sorted(SCARCITY_PRESETS)})",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        k, v = (s.strip() for s in part.split("=", 1))
+        if k not in POOL_SIZES:
+            print(f"error: unknown pool kind {k!r}; valid: {sorted(POOL_SIZES)}", file=sys.stderr)
+            raise SystemExit(1)
+        try:
+            n = int(v)
+        except ValueError:
+            print(f"error: --pools value for {k!r} must be an integer, got {v!r}", file=sys.stderr)
+            raise SystemExit(1) from None
+        if n < 1:
+            print(f"error: --pools value for {k!r} must be >= 1, got {n}", file=sys.stderr)
+            raise SystemExit(1)
+        override[k] = n
+    return override or None
+
+
 # Default extra ticks past the last timeline tick, and the engine ceiling.
 _SCENARIO_TICK_PADDING = 20
 _SCENARIO_TICK_CEILING = 120
@@ -176,9 +217,17 @@ def cmd_run(args: argparse.Namespace) -> int:
         lessons = load_lessons(memory_path) or None  # keep None when empty
 
     run_id = _run_id(seed, arm)
+    pool_sizes = _parse_pools(getattr(args, "pools", None))
+    if pool_sizes is not None and scenario is not None:
+        print(
+            "warning: --pools is ignored with --scenario (a pack defines its own pools)",
+            file=sys.stderr,
+        )
     setup = build_arm(
         arm, seed, provider, lessons=lessons, scenario=scenario,
         society_tools=getattr(args, "society_tools", False),
+        seed_sampler=getattr(args, "seed_sampler", False),
+        pool_sizes=pool_sizes,
     )
 
     manifest: dict[str, Any] = {
@@ -303,6 +352,55 @@ def cmd_bench(args: argparse.Namespace) -> int:
         from aftershock.llm.provider import QwenProvider
         provider = QwenProvider(api_key=api_key)
 
+    seed_sampler = getattr(args, "seed_sampler", False)
+    society_tools = getattr(args, "society_tools", False)
+    pool_sizes = _parse_pools(getattr(args, "pools", None))
+    repeat = getattr(args, "repeat_seeds", 1) or 1
+
+    # M2: --repeat-seeds N runs each (arm, seed) N times into ...-r{k} cells and
+    # reports a within-seed (LLM) vs between-seed (world) variance decomposition.
+    if repeat > 1:
+        if seed_sampler:
+            # M1 (--seed-sampler) sends an identical per-tick seed to every repeat,
+            # so it removes the exact within-seed LLM variance that M2 measures.
+            print(
+                "error: --repeat-seeds and --seed-sampler are contradictory. "
+                "--repeat-seeds measures within-seed LLM sampling variance, which "
+                "--seed-sampler (M1) is designed to remove (every repeat would get "
+                "the same provider seed → artificially ~0 within-seed variance). "
+                "Use one or the other.",
+                file=sys.stderr,
+            )
+            return 1
+        from aftershock.bench import (
+            analyze_repeats,
+            render_repeats_markdown,
+            run_repeat_seeds,
+        )
+
+        seeds_list = manifest.get("seeds", [])
+        if args.fresh:
+            for arm in requested_arms:
+                for seed in seeds_list:
+                    for k in range(repeat):
+                        cell_dir = out_dir / f"{arm}-seed{seed}-r{k}"
+                        if cell_dir.exists():
+                            shutil.rmtree(cell_dir)
+        cells = run_repeat_seeds(
+            requested_arms, seeds_list, repeat, manifest["ticks"],
+            provider, out_dir, society_tools=society_tools, seed_sampler=seed_sampler,
+            pool_sizes=pool_sizes,
+        )
+        rep = analyze_repeats(cells)
+        md = render_repeats_markdown(rep)
+        print(md)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "repeats.json").write_text(
+            json.dumps(rep, indent=2, sort_keys=True), encoding="utf-8"
+        )
+        (out_dir / "REPEATS.md").write_text(md, encoding="utf-8")
+        return 0
+
     # --fresh: wipe each cell directory before running
     if args.fresh:
         for arm in requested_arms:
@@ -313,7 +411,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
 
     cells = run_bench(
         manifest, provider=provider, out_dir=out_dir,
-        society_tools=getattr(args, "society_tools", False),
+        society_tools=society_tools, seed_sampler=seed_sampler, pool_sizes=pool_sizes,
     )
     agg = aggregate(cells)
     md = render_markdown(agg)
@@ -560,6 +658,88 @@ def cmd_conformance(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ablation(args: argparse.Namespace) -> int:
+    """Paired control-vs-treatment ablation with sign test, CI, and power curve (M3)."""
+    from aftershock.bench import render_ablation_markdown, run_ablation
+
+    control: str = args.control
+    treatment: str = args.treatment
+    for a in (control, treatment):
+        if a not in ARMS:
+            print(f"error: unknown arm {a!r}; valid: {ARMS}", file=sys.stderr)
+            return 1
+
+    try:
+        seeds = [int(s.strip()) for s in args.seeds.split(",") if s.strip()]
+    except ValueError:
+        print("error: --seeds must be comma-separated integers (e.g. 11,23,37)",
+              file=sys.stderr)
+        return 1
+    if not seeds:
+        print("error: --seeds is required (e.g. --seeds 11,23,37,42,57)", file=sys.stderr)
+        return 1
+
+    out_dir = Path(args.out)
+
+    # Key check: wire a provider only if either arm is LLM-backed.
+    needs_llm = any(a in _LLM_ARMS for a in (control, treatment))
+    provider: Any = None
+    if needs_llm:
+        api_key = os.environ.get("DASHSCOPE_API_KEY", "")
+        if not api_key:
+            print(_KEY_HINT)
+            return 2
+        from aftershock.llm.provider import QwenProvider
+        provider = QwenProvider(api_key=api_key)
+
+    result = run_ablation(
+        control, treatment, seeds, args.ticks, provider, out_dir,
+        society_tools=getattr(args, "society_tools", False),
+        seed_sampler=getattr(args, "seed_sampler", False),
+        pool_sizes=_parse_pools(getattr(args, "pools", None)),
+        power_target=args.power, alpha=args.alpha,
+    )
+    md = render_ablation_markdown(result)
+    print(md)
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "ablation.json").write_text(
+        json.dumps(result, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    (out_dir / "ABLATION.md").write_text(md, encoding="utf-8")
+    return 0
+
+
+def cmd_diagnose(args: argparse.Namespace) -> int:
+    """Free diagnostics over completed runs: auction losses, latency, calibration (M5)."""
+    from aftershock.town.diagnostics import (
+        conformance_calibration,
+        diagnose_run,
+        render_calibration_markdown,
+        render_diagnostics_markdown,
+    )
+
+    run_dirs = [Path(d) for d in args.run_dirs]
+    for rd in run_dirs:
+        if not rd.exists():
+            print(f"error: run directory not found: {rd}", file=sys.stderr)
+            return 1
+
+    reports = {str(rd): diagnose_run(rd) for rd in run_dirs}
+    calibration = conformance_calibration(run_dirs)
+
+    if getattr(args, "json", False):
+        print(json.dumps(
+            {"runs": reports, "calibration": calibration}, indent=2, sort_keys=True
+        ))
+        return 0
+
+    for rd in run_dirs:
+        print(render_diagnostics_markdown(reports[str(rd)]))
+    print(render_calibration_markdown(calibration))
+    return 0
+
+
 def cmd_episodes(args: argparse.Namespace) -> int:
     """Run N sequential society runs with AAR+memory between them.
 
@@ -773,6 +953,22 @@ def main() -> None:
             "cost-optimal path the published benchmark uses)."
         ),
     )
+    p_run.add_argument(
+        "--seed-sampler",
+        action="store_true",
+        help=(
+            "M1 opt-in: send a deterministic per-tick provider seed (derived from "
+            "the engine seed) on every LLM call, to test whether DashScope makes "
+            "sampling reproducible. No effect on the scripted arm."
+        ),
+    )
+    p_run.add_argument(
+        "--pools", default=None,
+        help=(
+            "D2: harden the synthetic world. A preset ('tight', 'scarce') or an "
+            "override like 'ambulance=3,rescue_crew=2'. Ignored with --scenario."
+        ),
+    )
 
     # bench
     p_bench = sub.add_parser("bench", help="Run the benchmark suite")
@@ -801,6 +997,59 @@ def main() -> None:
         "--scenario", default=None,
         help="REJECTED — bench refuses scenario packs (invariant 3)",
     )
+    p_bench.add_argument(
+        "--seed-sampler", action="store_true",
+        help="M1 opt-in: send a deterministic per-tick provider seed on LLM calls.",
+    )
+    p_bench.add_argument(
+        "--repeat-seeds", type=int, default=1,
+        help=(
+            "M2: run each (arm, seed) cell this many times into ...-r{k} dirs and "
+            "report a within-seed (LLM) vs between-seed (world) variance split "
+            "instead of the headline table. Default 1 (off)."
+        ),
+    )
+    p_bench.add_argument(
+        "--pools", default=None,
+        help=(
+            "D2: harden the synthetic world for every cell. A preset ('tight', "
+            "'scarce') or 'ambulance=3,rescue_crew=2'. Write to a distinct --out so "
+            "it never overwrites the default-world benchmark."
+        ),
+    )
+
+    # ablation
+    p_ablation = sub.add_parser(
+        "ablation",
+        help="Paired control-vs-treatment ablation (sign test + CI + power curve)",
+    )
+    p_ablation.add_argument("--control", required=True, choices=list(ARMS),
+                            help="Baseline arm")
+    p_ablation.add_argument("--treatment", required=True, choices=list(ARMS),
+                            help="Arm under test")
+    p_ablation.add_argument("--seeds", required=True,
+                            help="Comma-separated seeds shared by both arms (e.g. 11,23,37)")
+    p_ablation.add_argument("--ticks", type=int, default=60, help="Tick budget (default 60)")
+    p_ablation.add_argument("--out", default="runs/ablation", help="Output directory")
+    p_ablation.add_argument("--society-tools", action="store_true",
+                            help="Run society cells with native function calling")
+    p_ablation.add_argument("--seed-sampler", action="store_true",
+                            help="M1 opt-in: deterministic per-tick provider seed")
+    p_ablation.add_argument("--pools", default=None,
+                            help="D2: harden the world ('tight'/'scarce' or 'ambulance=3,...')")
+    p_ablation.add_argument("--power", type=float, default=0.8,
+                            help="Target power for the seeds-needed curve (default 0.8)")
+    p_ablation.add_argument("--alpha", type=float, default=0.05,
+                            help="Significance level (default 0.05)")
+
+    # diagnose
+    p_diagnose = sub.add_parser(
+        "diagnose",
+        help="Free diagnostics over completed runs (auction losses, latency, calibration)",
+    )
+    p_diagnose.add_argument("run_dirs", nargs="+", help="One or more run directories")
+    p_diagnose.add_argument("--json", action="store_true",
+                            help="Output raw JSON instead of markdown")
 
     # verify
     p_verify = sub.add_parser("verify", help="Verify determinism")
@@ -957,5 +1206,9 @@ def main() -> None:
         sys.exit(cmd_episodes(args))
     elif args.command == "conformance":
         sys.exit(cmd_conformance(args))
+    elif args.command == "ablation":
+        sys.exit(cmd_ablation(args))
+    elif args.command == "diagnose":
+        sys.exit(cmd_diagnose(args))
     elif args.command == "compile-scenario":
         sys.exit(cmd_compile_scenario(args))
