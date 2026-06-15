@@ -267,29 +267,38 @@ effect is the goal, a much harsher regime that forces genuine triage (can't-save
 prioritization quality — not auction mechanics — separates the arms. (Note 16 ran that harsher regime:
 inversions do finally appear, but stay negligible — S2's verdict holds.)
 
-## 16. Under triage pressure, coordination buys robustness, not just mean lives (2026-06-15)
+## 16. The harness caught a ghost: a +16-life "win" that evaporated at 11 seeds (2026-06-15)
 
-**Observed:** D2's harshest regime (all pools = 2 → 80% of missions resolved, lives saved ≈ lives lost
-— a genuine can't-save-everyone task) finally lets the arms separate. A paired society-vs-swarm
-ablation (5 seeds, 30 ticks, `aftershock ablation`): **society 68.8 vs swarm 52.6, Δ = +16.2 lives**
-(sd 17.05). Per seed: +31, −3, +6, +10, +37. The standout is *variance*, not the mean: **society's
-lives are stable (63–72 across all five seeds) while swarm's are volatile (32–66)**, collapsing on the
-hard draws (seeds 11, 57 → 39, 32) exactly where society holds ~70.
+**Observed:** D2's harshest regime (all pools = 2 → 80% of missions resolved, lives saved ≈ lives lost,
+a genuine can't-save-everyone task) was meant to let the arms separate on lives. A first paired
+society-vs-swarm ablation at **n=5** looked like a hit: society 68.8 vs swarm 52.6, **Δ = +16.2** with a
+95% bootstrap CI [+3.2, +29.6] that excludes 0, and society's lives looked *stable* (63–72) while swarm
+looked *volatile* (32–66). Tempting story: "coordination buys graceful degradation." But the sign test
+was already non-significant (p=0.375, 4+/1−) and power was only 0.57, so we added 6 seeds instead of
+believing it. At **n=11 the effect collapsed: Δ = +4.73** (sd 16.66), 95% CI **[−4.0, +14.7] now
+includes 0**, sign test **p=1.0 (6+/5−)**, power 0.15. The six new seeds included several where *swarm
+beats society* (seeds 5/29/41 → −15/−10/−11). The n=5 result was driven entirely by two lucky draws
+(seeds 11, 57) where swarm happened to crater; the "society floor holds" story was the same artifact
+(at n=11 society ranges 32–80, not 63–72).
 
-**Honest statistics:** the 95% bootstrap CI [+3.2, +29.6] excludes 0, but the conservative sign test is
-**p=0.375** (4+/1−) and observed power is only **0.57** — the result is *suggestive, not confirmed*. At
-n=5 the percentile bootstrap is optimistic on a skewed sample; trust the sign test + power. The power
-curve says ~11 seeds for a +15 effect (≈23 for +10) at 80% power, so the mean-Δ claim needs ~2× more
-seeds. The robustness (variance) gap, though, is already visible at n=5. (Lesson for the harness: the
-auto-verdict keys on the CI and can over-claim at small n; the sign test is the guardrail.)
+**Interpretation:** there is **no detectable society-vs-swarm lives advantage on the harsh world** — the
++16 was a small-sample false positive, exactly the failure mode the Tier-0 program exists to prevent
+(σ≈17 paired, n=5 → power 0.57; you cannot trust a one-shot mean). This is the harness paying for itself
+a second time: it stopped us shipping a plausible-but-wrong headline. The power curve at n=11 says a +10
+effect would need ~22 seeds and the *observed* +4.7 would need ~88 — i.e. if any lives gap exists here
+it is small (<10) and not worth the spend to chase.
+
+**Lesson for the harness itself:** the `aftershock ablation` auto-verdict keys on the bootstrap CI and
+printed "credible improvement" at n=5 — over-claiming on a small, skewed sample. The sign test + power
+were the guardrail that said "don't believe it yet." Treat the auto-verdict as advisory below ~10 seeds;
+the sign test is authoritative. (Worth hardening the verdict to require sign-test agreement.)
 
 **S2 epilogue:** at this extreme scarcity priority inversions *do* finally appear — but only **6 of 794
 auction losses (<1%)**, dwarfed by 443 pure-shortage (pool empty — partial grants have nothing to
-split). So S2's maximum headroom is ~6 grants; the note-15 verdict (don't build it) stands even on the
-hardest world we can make.
+split). S2's verdict (note 15: don't build it) stands even on the hardest world we can make.
 
-**Decision:** the lives lever that works under triage is the **coordination protocol itself** (already
-shipped), not an auction tweak — and its measured benefit is *graceful degradation* (this is the first
-evidence for the previously-untested D5 "society degrades more gracefully under stress" claim). To
-firm up the +16, add seeds until the harness says the CI is real; the defensible claim today is the
-robustness gap.
+**Decision:** stop chasing a harsh-world lives lever — it isn't there at any power worth buying. The
+honest claims that survive: (a) the auction arbitration is sound (notes 15–16), (b) the society's value
+is cost-efficiency + conformance, not a lives edge over swarm under scarcity, and (c) the published
+easy-world "+28 society vs swarm" (note 3) deserves the same paired-power re-check with this harness
+before it is leaned on further.

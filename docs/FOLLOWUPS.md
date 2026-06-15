@@ -45,21 +45,22 @@ write-up in `docs/FIELD-NOTES.md` §13–14):**
 - **D2 (configurable pools) is BUILT** — `--pools tight|scarce|kind=N` on run/bench/ablation; default
   world byte-identical. Pool sweep (scripted): default 98% resolved → tight 92 → scarce 87 →
   harsh(all=2) 80 → brutal 54. "harsh" = genuine triage (lives saved ≈ lost).
-- **Coordination buys robustness under triage** — harsh-world society-vs-swarm ablation (5 seeds):
-  society 68.8 vs swarm 52.6, **Δ +16.2**, CI [+3.2,+29.6] excludes 0 **BUT sign test p=0.375, power
-  0.57 — suggestive, not confirmed**. Real signal: society stable 63–72 vs swarm volatile 32–66
-  (collapses on hard seeds). First evidence for the D5 graceful-degradation claim. (FIELD-NOTES §16;
-  `bench/results/2026-06-15-harsh-ablation/`.)
+- **No harsh-world lives advantage (a caught false positive)** — society-vs-swarm ablation looked like
+  **Δ +16** at n=5 (CI excluded 0) but **collapsed to +4.7 at n=11** (CI [−4.0,+14.7] includes 0, sign
+  test p=1.0, power 0.15). The n=5 "win" + "robustness" story were small-sample artifacts (two lucky
+  seeds). **No detectable society-vs-swarm lives edge under scarcity.** The harness did its job — it
+  stopped a plausible wrong headline. (FIELD-NOTES §16; `bench/results/2026-06-15-harsh-ablation/`.)
 
-**Resume here → confirm or pivot:**
-1. **Confirm the +16** — add seeds to the harsh ablation (`aftershock ablation --control swarm
-   --treatment society --pools "ambulance=2,rescue_crew=2,fire_engine=2,supply_truck=2,repair_crew=2"
-   --seeds <more> --out runs/d2-harsh-ablation` resumes existing cells) until the CI tightens + sign
-   test reaches significance — power curve says ~11 total seeds for +15. ~$0.5 more.
-2. **Bid discipline / S1** — `redundant` is the dominant loss category (a conformance lever, harmless
-   to lives) + infra agent <0.85 conformance.
-3. Then memory-v2 + an autoresearch loop (optimise *conformance* not lives, gate on held-out seeds).
-   S3/W1 remain available but lower priority given the auction is not the bottleneck.
+**Resume here:**
+1. **Stop chasing a harsh-world lives lever** — power curve says +10 needs ~22 seeds, the observed +4.7
+   needs ~88; not worth the spend. The auction is sound and the arms don't separate on lives even under
+   triage. The honest society story is **cost-efficiency + conformance**, not a lives edge over swarm.
+2. **Re-check the published "+28 society vs swarm" (note 3)** with this paired harness before leaning on
+   it — the harsh-world null result means the easy-world headline deserves the same power scrutiny.
+3. **Bid discipline / S1** (cheap, deterministic): `redundant` is the dominant loss category + infra
+   agent <0.85 conformance — optimise the conformance signal, gate on held-out lives. Then memory-v2 /
+   autoresearch on conformance. (Harden `aftershock ablation`'s auto-verdict to require sign-test
+   agreement below ~10 seeds — it over-claimed at n=5.)
 
 **Constraints (do not violate):** `kernel/protocol.py` + `tests/test_protocol_snapshot.py` are
 FROZEN (no new proposal kinds — tune the auction *policy* in `town/society.py` only); `bench` rejects
