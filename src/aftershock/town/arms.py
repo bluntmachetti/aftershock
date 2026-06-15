@@ -70,6 +70,7 @@ def build_arm(
     scenario: ScenarioPack | None = None,
     society_tools: bool = False,
     seed_sampler: bool = False,
+    pool_sizes: dict[str, int] | None = None,
 ) -> ArmSetup:
     """Build all components for one (arm, seed) benchmark cell.
 
@@ -90,6 +91,9 @@ def build_arm(
         seed_sampler: M1 opt-in (CLI --seed-sampler). When True, LLM arms thread
                   the engine seed into a deterministic per-tick provider seed
                   (see llm.agent.sample_seed). No effect on the scripted arm.
+        pool_sizes: D2 opt-in (CLI --pools). An override merged onto POOL_SIZES to
+                  harden the synthetic world. Ignored on the scenario path (a pack
+                  defines its own pools). None reproduces the canonical world.
 
     Returns:
         ArmSetup with fully wired world, society, agents, registry, roles,
@@ -109,7 +113,11 @@ def build_arm(
             f"arm {arm!r} requires a Provider — set DASHSCOPE_API_KEY and pass a provider"
         )
 
-    world = town_from_scenario(scenario, seed) if scenario else new_town(seed)
+    world = (
+        town_from_scenario(scenario, seed)
+        if scenario
+        else new_town(seed, pool_sizes=pool_sizes)
+    )
     registry = DecisionRegistry()
     register_all(registry)
 

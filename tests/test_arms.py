@@ -430,6 +430,70 @@ def test_seed_sampler_reaches_provider_through_engine() -> None:
 
 
 # ---------------------------------------------------------------------------
+# D2: configurable pool sizes (harder synthetic worlds)
+# ---------------------------------------------------------------------------
+
+
+def test_new_town_default_byte_identical() -> None:
+    """new_town(seed) and new_town(seed, None) reproduce the canonical world."""
+    from aftershock.town.state import new_town
+
+    assert new_town(42).to_dict() == new_town(42, None).to_dict()
+
+
+def test_new_town_pool_override() -> None:
+    from aftershock.town.state import new_town
+
+    w = new_town(42, {"ambulance": 3})
+    assert w.pools["ambulance"].total == 3
+    assert w.pools["ambulance"].available == 3
+    # untouched kinds keep their defaults
+    assert w.pools["rescue_crew"].total == 3
+    assert w.pools["fire_engine"].total == 3
+
+
+def test_new_town_preset_tight() -> None:
+    from aftershock.town.state import SCARCITY_PRESETS, new_town
+
+    w = new_town(42, SCARCITY_PRESETS["tight"])
+    assert w.pools["ambulance"].total == 3
+    assert w.pools["rescue_crew"].total == 2
+
+
+def test_new_town_unknown_pool_raises() -> None:
+    from aftershock.town.state import new_town
+
+    with pytest.raises(ValueError, match="unknown pool kind"):
+        new_town(42, {"horse": 2})
+
+
+def test_build_arm_threads_pool_sizes() -> None:
+    setup = build_arm("scripted", _SEED, None, pool_sizes={"ambulance": 3})
+    assert setup.world.pools["ambulance"].total == 3
+    # default world is unchanged when no override given
+    assert build_arm("scripted", _SEED, None).world.pools["ambulance"].total == 4
+
+
+def test_parse_pools_preset_and_override() -> None:
+    from aftershock.cli import _parse_pools
+
+    assert _parse_pools(None) is None
+    assert _parse_pools("tight") == {"ambulance": 3, "rescue_crew": 2}
+    assert _parse_pools("ambulance=3,rescue_crew=2") == {"ambulance": 3, "rescue_crew": 2}
+
+
+def test_parse_pools_rejects_bad_input() -> None:
+    from aftershock.cli import _parse_pools
+
+    with pytest.raises(SystemExit):
+        _parse_pools("horse=2")  # unknown kind
+    with pytest.raises(SystemExit):
+        _parse_pools("ambulance=x")  # non-integer
+    with pytest.raises(SystemExit):
+        _parse_pools("ambulance=0")  # must be >= 1
+
+
+# ---------------------------------------------------------------------------
 # Unknown arm
 # ---------------------------------------------------------------------------
 

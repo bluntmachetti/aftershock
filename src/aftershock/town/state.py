@@ -56,6 +56,23 @@ POOL_SIZES: dict[str, int] = {
     ResourceKind.supply_truck: 3,
 }
 
+# D2 (harder synthetic worlds): named pool-size overrides applied on top of
+# POOL_SIZES. The default world is intentionally legible — the arms barely
+# separate (~96% missions resolved), so tightening pools is how you raise the
+# experiment ceiling and create the contention that levers like S2 need. These
+# are OPT-IN (CLI --pools); the default benchmark world is unchanged.
+SCARCITY_PRESETS: dict[str, dict[str, int]] = {
+    # backlog D2: ambulance 4->3, rescue_crew 3->2
+    "tight": {ResourceKind.ambulance: 3, ResourceKind.rescue_crew: 2},
+    # everything one unit scarcer than tight, for the sensitivity sweep
+    "scarce": {
+        ResourceKind.ambulance: 3,
+        ResourceKind.rescue_crew: 2,
+        ResourceKind.fire_engine: 2,
+        ResourceKind.supply_truck: 2,
+    },
+}
+
 # Required resources per mission kind (base, scaled by severity)
 # Values here are multipliers per severity level
 REQUIRED_BASE: dict[str, dict[str, int]] = {
@@ -253,21 +270,38 @@ def _make_required(kind: str, severity: int) -> dict[str, int]:
     return result
 
 
-def new_town(seed: int) -> TownState:
+def new_town(seed: int, pool_sizes: dict[str, int] | None = None) -> TownState:
     """Create a fresh TownState with a precomputed scenario timeline.
 
     The main quake fires at tick 0 (4-6 missions, 1-2 blockages); aftershocks
     near ticks 8-12 and 20-26 add 2-4 missions each with possible blockages.
     All randomness flows through rng_for(seed, "timeline").
+
+    ``pool_sizes`` (D2): an optional override merged onto POOL_SIZES to make the
+    world harder (tighter pools → more contention). Keys must be valid resource
+    kinds. ``None`` (default) reproduces the canonical world byte-for-byte, so the
+    determinism contract and published baseline are untouched.
     """
     rng = rng_for(seed, "timeline")
 
     district_ids = [did for did, _ in DISTRICTS]
     district_objs = {did: District(id=did, name=name) for did, name in DISTRICTS}
 
+    if pool_sizes is None:
+        sizes = POOL_SIZES
+    else:
+        unknown = set(pool_sizes) - set(POOL_SIZES)
+        if unknown:
+            raise ValueError(
+                f"unknown pool kind(s) {sorted(unknown)}; valid: {sorted(POOL_SIZES)}"
+            )
+        # Merge override onto POOL_SIZES — preserves POOL_SIZES key order (all
+        # override keys already exist), so pool construction stays deterministic.
+        sizes = {**POOL_SIZES, **pool_sizes}
+
     pools = {
         k: ResourcePool(kind=k, total=v, available=v)
-        for k, v in POOL_SIZES.items()
+        for k, v in sizes.items()
     }
 
     timeline: list[TimelineEntry] = []

@@ -38,6 +38,7 @@ def _execute_cell(
     *,
     society_tools: bool = False,
     seed_sampler: bool = False,
+    pool_sizes: dict[str, int] | None = None,
     extra_fields: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build + run one (arm, seed) cell and write its summary.json.
@@ -47,7 +48,8 @@ def _execute_cell(
     failure is logged but never blocks summary.json from being written.
     """
     setup = build_arm(
-        arm, seed, provider, society_tools=society_tools, seed_sampler=seed_sampler
+        arm, seed, provider, society_tools=society_tools, seed_sampler=seed_sampler,
+        pool_sizes=pool_sizes,
     )
     manifest_rec: dict[str, Any] = {
         "arm": arm,
@@ -121,6 +123,7 @@ def run_bench(
     out_dir: Path,
     society_tools: bool = False,
     seed_sampler: bool = False,
+    pool_sizes: dict[str, int] | None = None,
 ) -> list[dict[str, Any]]:
     """Run all (arm, seed) cells from *manifest*, writing results under *out_dir*.
 
@@ -180,6 +183,7 @@ def run_bench(
                 run_id=f"{arm}-seed{seed}",
                 society_tools=society_tools,
                 seed_sampler=seed_sampler,
+                pool_sizes=pool_sizes,
             )
             cells.append(cell_summary)
 
@@ -494,6 +498,7 @@ def run_ablation(
     *,
     society_tools: bool = False,
     seed_sampler: bool = False,
+    pool_sizes: dict[str, int] | None = None,
     effect_grid: tuple[float, ...] = DEFAULT_EFFECT_GRID,
     power_target: float = 0.8,
     alpha: float = 0.05,
@@ -507,7 +512,7 @@ def run_ablation(
     manifest: dict[str, Any] = {"ticks": ticks, "seeds": list(seeds), "arms": arms}
     cells = run_bench(
         manifest, provider=provider, out_dir=out_dir,
-        society_tools=society_tools, seed_sampler=seed_sampler,
+        society_tools=society_tools, seed_sampler=seed_sampler, pool_sizes=pool_sizes,
     )
     return analyze_ablation(
         cells, control, treatment,
@@ -605,6 +610,7 @@ def run_repeat_seeds(
     *,
     society_tools: bool = False,
     seed_sampler: bool = False,
+    pool_sizes: dict[str, int] | None = None,
 ) -> list[dict[str, Any]]:
     """Run each (arm, seed) ``repeats`` times into ``{arm}-seed{seed}-r{k}`` cells.
 
@@ -640,7 +646,7 @@ def run_repeat_seeds(
                     _execute_cell(
                         out_dir, arm, seed, ticks, provider, run_id=run_id,
                         society_tools=society_tools, seed_sampler=seed_sampler,
-                        extra_fields={"repeat": k},
+                        pool_sizes=pool_sizes, extra_fields={"repeat": k},
                     )
                 )
     return cells
