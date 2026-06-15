@@ -55,8 +55,10 @@ write-up in `docs/FIELD-NOTES.md` §13–14):**
 1. **Stop chasing a harsh-world lives lever** — power curve says +10 needs ~22 seeds, the observed +4.7
    needs ~88; not worth the spend. The auction is sound and the arms don't separate on lives even under
    triage. The honest society story is **cost-efficiency + conformance**, not a lives edge over swarm.
-2. **Re-check the published "+28 society vs swarm" (note 3)** with this paired harness before leaning on
-   it — the harsh-world null result means the easy-world headline deserves the same power scrutiny.
+2. **Published "+28 society vs swarm" re-checked (note 17, DONE):** directionally solid (society ≥ swarm
+   on all 5 seeds) so note 3's qualitative claim holds, BUT the magnitude is soft — sign test p=0.125,
+   power 0.42, leveraged by one seed (11=+88). Caveat the "+28" figure when quoted (README/Devpost) or
+   add seeds (~25 for a tight CI). (`bench/results/2026-06-15-plus28-recheck/`.)
 3. **Bid discipline / S1** (cheap, deterministic): `redundant` is the dominant loss category + infra
    agent <0.85 conformance — optimise the conformance signal, gate on held-out lives. Then memory-v2 /
    autoresearch on conformance. (Harden `aftershock ablation`'s auto-verdict to require sign-test
