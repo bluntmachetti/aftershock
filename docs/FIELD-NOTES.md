@@ -235,3 +235,33 @@ noise. Concretely, the paired-difference SD is √2·σ_within ≈ 11.0, versus 
 chasing a +5 is not worth it until the task is made harder (Tier 4 · D2) to widen the gap. These σ are
 at 30 ticks; the published headline σ≈23.6 is 60-tick between-seed spread (variance grows as the
 scenario plays out), so it is the same story at larger scale — not re-validated tick-for-tick here.
+
+## 15. The diagnostic killed S2 before we built it — the auction isn't the bottleneck (2026-06-15)
+
+**Observed:** S2 (partial-grant + re-auction, the backlog's "single biggest society lever, +10–15
+lives") fixes a *priority inversion* — a high-priority bid losing a pool, under all-or-nothing
+granting, to a later low-priority bid that fits the remainder. The M5 diagnostic (`aftershock diagnose`)
+looked for it and found **none**. Default world (society, 9 runs): 0 inversions, 59 contested losses
+all legitimate (loser priority ≤ winner), 253 pure-shortage, 446 redundant; only 4 missions failed vs
+101 resolved. We then built D2 (configurable pools) and re-ran on a deliberately harder world
+(`--pools tight`: ambulance 4→3, rescue_crew 3→2; 6 society runs): contention rose across the board
+per-run (displacement 6.6→12.3, pure-shortage 28→35, redundant 50→57) and lives dipped 110.7→106.5,
+but **priority_inversion stayed 0** — all 74 contested losses legitimate, verified with zero
+unknown-priority lookups that could hide one. Across both worlds: **133 contested losses, every single
+one legitimate.**
+
+**Interpretation:** the all-or-nothing pathology does not occur in this domain, even under engineered
+scarcity. Structural reason: the auction ranks priority-desc and serves the top mission first, and the
+agents don't request quantities that exceed the pool in the way that would let a low-priority
+remainder-fitter beat a high-priority bid. The auction's arbitration is *sound* — a positive result for
+the "the protocol carries the result" claim (note 5). The real binding constraints are (a) **pure
+shortage** (the pool is empty — a partial grant has nothing to split) and (b) **redundant bids** (50–57
+per run: agents re-requesting already-satisfied resources — a discipline/conformance issue, harmless to
+lives since the auction declines them). The task also stays ~93% resolved even on tight pools.
+
+**Decision:** **do not build S2.** Two rounds of measurement refute its premise; implementing it would
+optimize a pathology that isn't there. This is the Tier-0 harness paying for itself — it killed the
+program's headline lever before a line of it was written. Redirect Tier 1 away from auction policy
+(S2/S3) toward bid discipline (the dominant redundant category, a conformance lever) and, if a *lives*
+effect is the goal, a much harsher regime that forces genuine triage (can't-save-everyone) where
+prioritization quality — not auction mechanics — separates the arms.

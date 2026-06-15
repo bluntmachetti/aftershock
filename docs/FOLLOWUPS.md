@@ -37,15 +37,27 @@ write-up in `docs/FIELD-NOTES.md` §13–14):**
 - **Not done (optional):** M4 full 60-tick × 5-seed σ≈23.6 re-validation (more $); a first real
   `society`-vs-`swarm` ablation; M2 on the swarm arm.
 
-**Resume here → Tier 1 levers (gate each behind `aftershock ablation`, ~10 paired seeds):**
-1. **Diagnose a society run first** (`aftershock diagnose`) to size headroom — esp. `priority_inversion`
-   (LLM-arm-specific: scripted self-caps `qty=min(needed,avail)` so it reads 0; society agents
-   over-request, so inversions surface here and are the live signal for S2).
-2. **S2 partial-grant auction** (hypothesised +10–15, the big lever) — tune the auction *policy* in
-   `town/society.py` only (protocol frozen). Now measurable.
-3. S1 fix the infra agent (only role <0.85 conformance), S3 deadline-sort, W1 swarm `INFO_SHARE`,
-   D2 tighter pools to separate arms, then memory-v2 + an autoresearch loop (optimise *conformance*
-   not lives, gate on held-out seeds).
+**Tier 1 so far (2026-06-15):**
+- **S2 (partial-grant auction) is KILLED by measurement** — the backlog's "single biggest lever". The
+  M5 diagnostic found **0 priority inversions** in the default world (9 society runs), and D2's harder
+  world (`--pools tight`, 6 runs) still produced **0** — 133 contested losses across both worlds, every
+  one legitimate (loser priority ≤ winner). The auction's arbitration is sound; the pathology S2 fixes
+  doesn't exist here. **Do not build S2.** (FIELD-NOTES §15; `bench/results/2026-06-15-d2-tight/`.)
+- **D2 (configurable pools) is BUILT** — `--pools tight|scarce|kind=N` on run/bench/ablation; default
+  world byte-identical. Tightening raised contention but the task stays ~93% resolved.
+
+**Resume here → Tier 1, redirected away from auction policy (gate each behind `aftershock ablation`):**
+1. **Bid discipline / S1** — the dominant auction-loss category is `redundant` (50–57/run: agents
+   re-requesting already-satisfied resources) and the infra agent is the only role <0.85 conformance.
+   A conformance/cost lever (harmless to lives, but cleans up churn) — measure via the conformance
+   track, not lives.
+2. **For a lives effect, force genuine triage** — the task is still ~93% resolved even on tight pools,
+   so no lever moves lives until you can't-save-everyone. Push harder than `tight` (`--pools scarce`,
+   or raise mission load via a new harder timeline / D1-style bigger Ida) so *prioritization quality*
+   — not auction mechanics — separates the arms. THEN an ablation can show a real Δ.
+3. Then memory-v2 + an autoresearch loop (optimise *conformance* not lives, gate on held-out seeds).
+   S3 (deadline-sort) and W1 (swarm INFO_SHARE) remain available but are lower priority given the
+   auction is not the bottleneck.
 
 **Constraints (do not violate):** `kernel/protocol.py` + `tests/test_protocol_snapshot.py` are
 FROZEN (no new proposal kinds — tune the auction *policy* in `town/society.py` only); `bench` rejects
