@@ -39,6 +39,7 @@ def _execute_cell(
     society_tools: bool = False,
     seed_sampler: bool = False,
     pool_sizes: dict[str, int] | None = None,
+    doctrine: bool = True,
     extra_fields: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build + run one (arm, seed) cell and write its summary.json.
@@ -46,10 +47,13 @@ def _execute_cell(
     Shared by run_bench and run_repeat_seeds. ``run_id`` is the cell directory
     name (``{arm}-seed{seed}`` for bench, ``...-r{k}`` for repeats). Conformance
     failure is logged but never blocks summary.json from being written.
+
+    ``doctrine`` (default True) is forwarded to build_arm; the doctrine on/off
+    ablation passes False to build the doctrine-naive control (FIELD-NOTES §11).
     """
     setup = build_arm(
         arm, seed, provider, society_tools=society_tools, seed_sampler=seed_sampler,
-        pool_sizes=pool_sizes,
+        pool_sizes=pool_sizes, doctrine=doctrine,
     )
     manifest_rec: dict[str, Any] = {
         "arm": arm,
@@ -117,6 +121,53 @@ def _execute_cell(
     return cell_summary
 
 
+def _run_or_resume_cell(
+    out_dir: Path,
+    arm: str,
+    seed: int,
+    ticks: int,
+    provider: Any | None,
+    run_id: str,
+    *,
+    society_tools: bool = False,
+    seed_sampler: bool = False,
+    pool_sizes: dict[str, int] | None = None,
+    doctrine: bool = True,
+) -> dict[str, Any]:
+    """Resume a completed cell from disk, or execute it. ``run_id`` is the cell dir.
+
+    Resume reuses <out_dir>/<run_id>/summary.json only when present AND its
+    ticks_requested matches ``ticks``; a missing, corrupt, or tick-mismatched
+    summary forces a re-run (so cells from different tick budgets never mix). This
+    is the shared resume kernel for run_bench and the doctrine on/off ablation.
+    """
+    summary_path = out_dir / run_id / "summary.json"
+    if summary_path.exists():
+        try:
+            with summary_path.open(encoding="utf-8") as fh:
+                cached = json.load(fh)
+        except (json.JSONDecodeError, OSError):
+            print(
+                f"warning: corrupt summary at {summary_path}; re-running cell",
+                flush=True,
+            )
+            cached = None
+        if cached is not None:
+            if cached.get("ticks_requested") == ticks:
+                return cached
+            print(
+                f"warning: ticks mismatch for {run_id} "
+                f"(cached={cached.get('ticks_requested')}, requested={ticks}); "
+                "re-running cell",
+                flush=True,
+            )
+    return _execute_cell(
+        out_dir, arm, seed, ticks, provider, run_id=run_id,
+        society_tools=society_tools, seed_sampler=seed_sampler,
+        pool_sizes=pool_sizes, doctrine=doctrine,
+    )
+
+
 def run_bench(
     manifest: dict[str, Any],
     provider: Any | None,
@@ -142,39 +193,9 @@ def run_bench(
 
     for arm in arms:
         for seed in seeds:
-            cell_dir = _cell_dir(out_dir, arm, seed)
-            summary_path = cell_dir / "summary.json"
-
-            # Resume: skip cells that already have a completed summary, but
-            # only if the recorded ticks_requested matches the current manifest.
-            # A mismatch (e.g. resume with ticks=60 into a ticks=8 run) forces
-            # a re-run so cells from different tick budgets are never mixed.
-            if summary_path.exists():
-                try:
-                    with summary_path.open(encoding="utf-8") as fh:
-                        cached = json.load(fh)
-                except (json.JSONDecodeError, OSError):
-                    # Corrupt or truncated summary — treat as not-yet-run
-                    print(
-                        f"warning: corrupt summary at {summary_path}; re-running cell",
-                        flush=True,
-                    )
-                    cached = None
-
-                if cached is not None:
-                    if cached.get("ticks_requested") == ticks:
-                        cells.append(cached)
-                        continue
-                    # Tick budget changed — force re-run
-                    print(
-                        f"warning: ticks mismatch for {arm}-seed{seed} "
-                        f"(cached={cached.get('ticks_requested')}, requested={ticks}); "
-                        "re-running cell",
-                        flush=True,
-                    )
-
-            # Run this cell
-            cell_summary = _execute_cell(
+            # Resume-or-run via the shared kernel (skips completed, tick-matched
+            # cells; re-runs missing/corrupt/tick-mismatched ones).
+            cell_summary = _run_or_resume_cell(
                 out_dir,
                 arm,
                 seed,
@@ -402,11 +423,18 @@ DEFAULT_EFFECT_GRID: tuple[float, ...] = (2.0, 5.0, 10.0, 15.0, 20.0)
 _ABLATION_BOOTSTRAP_SEED = 20260614
 
 
-def _lives_by_seed(cells: list[dict[str, Any]], arm: str) -> dict[int, float]:
-    """Map seed -> lives_saved for one arm (last cell wins on duplicate seeds)."""
+def _lives_by_seed(
+    cells: list[dict[str, Any]], name: str, *, key: str = "arm"
+) -> dict[int, float]:
+    """Map seed -> lives_saved for one side (last cell wins on duplicate seeds).
+
+    ``key`` selects the field that names the side: "arm" for the normal arm-vs-arm
+    ablation, or "label" for the doctrine on/off ablation where both sides share the
+    same arm ("society") and are distinguished by a ``label`` field instead.
+    """
     out: dict[int, float] = {}
     for c in cells:
-        if c.get("arm") == arm:
+        if c.get(key) == name:
             out[int(c["seed"])] = float(c.get("scores", {}).get("lives_saved", 0.0))
     return out
 
@@ -416,6 +444,7 @@ def analyze_ablation(
     control: str,
     treatment: str,
     *,
+    key: str = "arm",
     effect_grid: tuple[float, ...] = DEFAULT_EFFECT_GRID,
     power_target: float = 0.8,
     alpha: float = 0.05,
@@ -425,9 +454,12 @@ def analyze_ablation(
     Pairing per seed removes the world variance that dominates the raw ±, so a
     small but consistent effect becomes visible. Reports the paired Δ, an exact
     sign test, a bootstrap CI, and a power curve (required seeds per effect size).
+
+    ``key`` names the cell field that distinguishes the two sides — "arm" (default)
+    for arm-vs-arm, or "label" for the doctrine on/off ablation (same arm, one knob).
     """
-    ctrl = _lives_by_seed(cells, control)
-    treat = _lives_by_seed(cells, treatment)
+    ctrl = _lives_by_seed(cells, control, key=key)
+    treat = _lives_by_seed(cells, treatment, key=key)
     common = sorted(set(ctrl) & set(treat))
     if not common:
         raise ValueError(
@@ -506,7 +538,132 @@ def analyze_ablation(
     }
 
 
+# Cell-dir / label suffix for the doctrine-naive (doctrine=False) control side.
+_NODOCTRINE_SUFFIX = "-nodoctrine"
+
+
+def _alignment_by_seed(
+    cells: list[dict[str, Any]], name: str, *, key: str = "label"
+) -> dict[int, float]:
+    """seed -> team_alignment for one labeled side (seeds with None alignment skipped)."""
+    out: dict[int, float] = {}
+    for c in cells:
+        if c.get(key) == name:
+            ta = c.get("team_alignment")
+            if ta is not None:
+                out[int(c["seed"])] = float(ta)
+    return out
+
+
+def _role_conf_by_seed(
+    cells: list[dict[str, Any]], name: str, *, key: str = "label"
+) -> dict[int, dict[str, float]]:
+    """seed -> {role: conformance} for one labeled side (None entries dropped)."""
+    out: dict[int, dict[str, float]] = {}
+    for c in cells:
+        if c.get(key) == name:
+            rc = c.get("role_conformance")
+            if isinstance(rc, dict):
+                out[int(c["seed"])] = {
+                    r: float(v) for r, v in rc.items() if v is not None
+                }
+    return out
+
+
+def _conformance_block(
+    cells: list[dict[str, Any]], control_label: str, treatment_label: str
+) -> dict[str, Any]:
+    """Paired conformance summary for the doctrine ablation.
+
+    Conformance (team_alignment + per-role) is computed deterministically from the
+    run records, so it is the *low-variance* signal this ablation exists to confirm
+    (FIELD-NOTES §11). Pairs by seed and reports the team-alignment Δ and a per-role
+    mean-alignment table for both sides.
+    """
+    ctrl = _alignment_by_seed(cells, control_label)
+    treat = _alignment_by_seed(cells, treatment_label)
+    common = sorted(set(ctrl) & set(treat))
+    per_seed = [
+        {"seed": s, "control": ctrl[s], "treatment": treat[s], "delta": treat[s] - ctrl[s]}
+        for s in common
+    ]
+    deltas = [row["delta"] for row in per_seed]
+
+    crole = _role_conf_by_seed(cells, control_label)
+    trole = _role_conf_by_seed(cells, treatment_label)
+    roles_seen = sorted(
+        {r for s in common for r in (set(crole.get(s, {})) | set(trole.get(s, {})))}
+    )
+    by_role: dict[str, dict[str, float]] = {}
+    for role in roles_seen:
+        cvals = [crole[s][role] for s in common if role in crole.get(s, {})]
+        tvals = [trole[s][role] for s in common if role in trole.get(s, {})]
+        if cvals and tvals:
+            cm = stats.mean(cvals)
+            tm = stats.mean(tvals)
+            by_role[role] = {"control": cm, "treatment": tm, "delta": tm - cm}
+
+    return {
+        "n": len(common),
+        "seeds": common,
+        "per_seed": per_seed,
+        "mean_control": stats.mean([ctrl[s] for s in common]) if common else None,
+        "mean_treatment": stats.mean([treat[s] for s in common]) if common else None,
+        "mean_delta": stats.mean(deltas) if deltas else None,
+        "sign_test_p": stats.sign_test_p(deltas) if deltas else None,
+        "by_role": by_role,
+    }
+
+
 def run_ablation(
+    control: str,
+    treatment: str,
+    seeds: list[int],
+    ticks: int,
+    provider: Any | None,
+    out_dir: Path,
+    *,
+    ablate: str | None = None,
+    society_tools: bool = False,
+    seed_sampler: bool = False,
+    pool_sizes: dict[str, int] | None = None,
+    effect_grid: tuple[float, ...] = DEFAULT_EFFECT_GRID,
+    power_target: float = 0.8,
+    alpha: float = 0.05,
+) -> dict[str, Any]:
+    """Run (or resume) control + treatment over ``seeds`` and analyze the pair.
+
+    Reuses the shared cell kernel, so completed cells are skipped — re-running the
+    analysis on existing cells costs $0. Returns the analyze_ablation result dict.
+
+    ``ablate`` selects a *same-arm knob* ablation instead of arm-vs-arm. The only
+    supported knob is "doctrine": control and treatment must be the same LLM arm,
+    and the harness runs it twice per seed — doctrine OFF (control) vs ON (treatment)
+    — pairing on a synthetic ``label`` so both society cells stay distinct. The result
+    additionally carries a ``conformance`` block (the primary, low-variance signal —
+    FIELD-NOTES §11) and ``ablate``/``arm`` markers.
+    """
+    if ablate is not None:
+        return _run_doctrine_ablation(
+            ablate, control, treatment, seeds, ticks, provider, out_dir,
+            society_tools=society_tools, seed_sampler=seed_sampler, pool_sizes=pool_sizes,
+            effect_grid=effect_grid, power_target=power_target, alpha=alpha,
+        )
+
+    arms = [control] if control == treatment else [control, treatment]
+    manifest: dict[str, Any] = {"ticks": ticks, "seeds": list(seeds), "arms": arms}
+    cells = run_bench(
+        manifest, provider=provider, out_dir=out_dir,
+        society_tools=society_tools, seed_sampler=seed_sampler, pool_sizes=pool_sizes,
+    )
+    return analyze_ablation(
+        cells, control, treatment,
+        effect_grid=effect_grid, power_target=power_target, alpha=alpha,
+    )
+
+
+def _run_doctrine_ablation(
+    ablate: str,
     control: str,
     treatment: str,
     seeds: list[int],
@@ -521,32 +678,147 @@ def run_ablation(
     power_target: float = 0.8,
     alpha: float = 0.05,
 ) -> dict[str, Any]:
-    """Run (or resume) control + treatment over ``seeds`` and analyze the pair.
+    """Doctrine ON/OFF paired ablation for a single LLM arm (FIELD-NOTES §11).
 
-    Reuses run_bench, so completed cells are skipped — re-running the analysis on
-    existing cells costs $0. Returns the analyze_ablation result dict.
+    Holds everything constant (world seed, tools, pools) and flips only the doctrine
+    layer. Both sides are the same arm, so they are tagged with a ``label``
+    ("{arm}" = ON, "{arm}-nodoctrine" = OFF) and analyzed key="label". Δ = ON − OFF,
+    so a positive Δ means doctrine *adds* lives.
     """
-    arms = [control] if control == treatment else [control, treatment]
-    manifest: dict[str, Any] = {"ticks": ticks, "seeds": list(seeds), "arms": arms}
-    cells = run_bench(
-        manifest, provider=provider, out_dir=out_dir,
-        society_tools=society_tools, seed_sampler=seed_sampler, pool_sizes=pool_sizes,
-    )
-    return analyze_ablation(
-        cells, control, treatment,
+    if ablate != "doctrine":
+        raise ValueError(f"unknown ablate knob {ablate!r}; supported: 'doctrine'")
+    if control != treatment:
+        raise ValueError(
+            "doctrine ablation requires control == treatment (the arm to ablate); "
+            f"got control={control!r}, treatment={treatment!r}"
+        )
+    arm = control
+    if arm == "scripted":
+        raise ValueError(
+            "the scripted arm carries no doctrine prompts — ablate an LLM arm "
+            "(society/swarm/solo)"
+        )
+
+    treatment_label = arm  # doctrine ON (canonical cell dir)
+    control_label = f"{arm}{_NODOCTRINE_SUFFIX}"  # doctrine OFF
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    cells: list[dict[str, Any]] = []
+    for seed in seeds:
+        on = _run_or_resume_cell(
+            out_dir, arm, seed, ticks, provider, run_id=f"{arm}-seed{seed}",
+            society_tools=society_tools, seed_sampler=seed_sampler,
+            pool_sizes=pool_sizes, doctrine=True,
+        )
+        cells.append({**on, "label": treatment_label})
+        off = _run_or_resume_cell(
+            out_dir, arm, seed, ticks, provider, run_id=f"{control_label}-seed{seed}",
+            society_tools=society_tools, seed_sampler=seed_sampler,
+            pool_sizes=pool_sizes, doctrine=False,
+        )
+        cells.append({**off, "label": control_label})
+
+    result = analyze_ablation(
+        cells, control_label, treatment_label, key="label",
         effect_grid=effect_grid, power_target=power_target, alpha=alpha,
     )
+    result["ablate"] = "doctrine"
+    result["arm"] = arm
+    result["conformance"] = _conformance_block(cells, control_label, treatment_label)
+    return result
+
+
+def _render_conformance_section(conf: dict[str, Any]) -> list[str]:
+    """Render the conformance block (team alignment + per-role) — assumes n>0."""
+    lines: list[str] = ["## Conformance (primary signal — deterministic)", ""]
+    md = conf["mean_delta"]
+    sp = conf["sign_test_p"]
+    sp_str = f"{sp:.4f}" if sp is not None else "n/a"
+    lines.append(
+        f"**Team alignment: {conf['mean_control']:.3f} (off) → "
+        f"{conf['mean_treatment']:.3f} (on)** · Δ = {md:+.3f} · "
+        f"sign test p={sp_str} · n={conf['n']}"
+    )
+    lines.append("")
+    lines.append("| seed | off | on | Δ |")
+    lines.append("|---|---|---|---|")
+    for row in conf["per_seed"]:
+        lines.append(
+            f"| {row['seed']} | {row['control']:.3f} | "
+            f"{row['treatment']:.3f} | {row['delta']:+.3f} |"
+        )
+    lines.append("")
+    by_role = conf.get("by_role") or {}
+    if by_role:
+        lines.append("Per-role mean alignment (off → on):")
+        lines.append("")
+        lines.append("| role | off | on | Δ |")
+        lines.append("|---|---|---|---|")
+        for role in sorted(by_role):
+            rv = by_role[role]
+            lines.append(
+                f"| {role} | {rv['control']:.3f} | "
+                f"{rv['treatment']:.3f} | {rv['delta']:+.3f} |"
+            )
+        lines.append("")
+    return lines
 
 
 def render_ablation_markdown(result: dict[str, Any]) -> str:
-    """Render an ABLATION.md from an analyze_ablation result."""
+    """Render an ABLATION.md from an analyze_ablation result.
+
+    For a doctrine ablation the deterministic conformance Δ is the *primary* signal
+    (FIELD-NOTES §11), so it is rendered first and the noisy lives verdict is demoted
+    to a clearly-labeled secondary section. If conformance is missing or only partial
+    (a conformance check failed on some/all seeds), a prominent warning is emitted so
+    the lives result cannot be silently read as confirming a doctrine effect — the
+    same honesty discipline that hardened the lives verdict in §16–17.
+    """
     lines: list[str] = []
     ctrl = result["control"]
     treat = result["treatment"]
-    lines.append(f"# Ablation — {treat} vs {ctrl} (paired)")
+    is_doctrine = result.get("ablate") == "doctrine"
+    conf = result.get("conformance")
+    lives_n = result["n"]
+    conf_n = conf.get("n", 0) if conf else 0
+
+    if is_doctrine:
+        arm = result.get("arm", treat)
+        lines.append(f"# Ablation — doctrine on/off ({arm}, paired)")
+        lines.append("")
+        lines.append(
+            f"Δ = **{treat} (doctrine on)** − **{ctrl} (doctrine off)**, everything else held "
+            "constant (world seed, tools, pools). A positive Δ means doctrine adds the metric."
+        )
+    else:
+        lines.append(f"# Ablation — {treat} vs {ctrl} (paired)")
     lines.append("")
+
+    # Doctrine ablation: lead with conformance (primary, deterministic). Warn loudly
+    # when it is missing/partial so the secondary lives verdict can't be over-read.
+    if is_doctrine:
+        if conf_n == 0:
+            lines.append(
+                f"> ⚠️ **Primary signal missing.** The conformance check produced no usable "
+                f"paired seeds (0 of {lives_n}); conformance — not lives — is this ablation's "
+                "headline (FIELD-NOTES §11). Treat the lives result below as **secondary and "
+                "unconfirmed**: on its own it neither confirms nor denies a doctrine effect."
+            )
+            lines.append("")
+        else:
+            if conf_n < lives_n:
+                lines.append(
+                    f"> ⚠️ Conformance is missing for {lives_n - conf_n} of {lives_n} seeds "
+                    f"(a conformance check failed); the figures below cover only the {conf_n} "
+                    "seeds where both sides reported alignment."
+                )
+                lines.append("")
+            lines.extend(_render_conformance_section(conf))
+        lines.append("## Lives (secondary signal)")
+        lines.append("")
+
     lines.append(
-        f"**n={result['n']} paired seeds** · "
+        f"**n={lives_n} paired seeds** · "
         f"mean {ctrl}={result['mean_control']:.2f} · "
         f"mean {treat}={result['mean_treatment']:.2f}"
     )
@@ -564,24 +836,29 @@ def render_ablation_markdown(result: dict[str, Any]) -> str:
     if op is not None:
         lines.append("")
         lines.append(
-            f"Observed power to detect this Δ at n={result['n']}: **{op:.2f}** "
+            f"Observed power to detect this Δ at n={lives_n}: **{op:.2f}** "
             f"(α={result['alpha']})."
         )
 
     # Verdict line — the bootstrap CI and the sign test must AGREE before an effect
     # is called "credible" (FIELD-NOTES §16–17: a CI-only verdict over-claimed at n=5).
+    # For a doctrine ablation this verdict is about LIVES only (the secondary signal).
     p = result["sign_test_p"]
     alpha = result["alpha"]
     power_str = f"{op:.2f}" if op is not None else "n/a"
+    # Non-doctrine output stays byte-identical ("Verdict:"); doctrine tags the verdict
+    # as the LIVES (secondary) signal so it can't be mistaken for the headline.
+    label = "Verdict (lives Δ)" if is_doctrine else "Verdict"
+    metric = "lives " if is_doctrine else ""
     lines.append("")
     if result["verdict"] == "noise":
         lines.append(
-            f"> Verdict: **not distinguishable from noise** — the {conf_pct}% CI includes 0 "
+            f"> {label}: **not distinguishable from noise** — the {conf_pct}% CI includes 0 "
             f"(sign test p={p:.3f}). Add seeds (see the power curve) before claiming an effect."
         )
     elif result["verdict"] == "suggestive":
         lines.append(
-            f"> Verdict: **suggestive but unconfirmed** — the {conf_pct}% CI excludes 0, but "
+            f"> {label}: **suggestive but unconfirmed** — the {conf_pct}% CI excludes 0, but "
             f"the sign test is not significant (p={p:.3f} ≥ {alpha}) and power is {power_str}. "
             "The percentile bootstrap is optimistic on small, skewed samples; treat this as a "
             "lead and add seeds (see the power curve) until the sign test agrees."
@@ -589,8 +866,8 @@ def render_ablation_markdown(result: dict[str, Any]) -> str:
     else:
         direction = "improvement" if result["mean_delta"] > 0 else "regression"
         lines.append(
-            f"> Verdict: **credible {direction}** — the {conf_pct}% CI excludes 0 *and* the "
-            f"sign test is significant (p={p:.3f} < {alpha})."
+            f"> {label}: **credible {metric}{direction}** — the {conf_pct}% CI excludes 0 *and* "
+            f"the sign test is significant (p={p:.3f} < {alpha})."
         )
     lines.append("")
 

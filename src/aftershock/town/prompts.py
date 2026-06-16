@@ -136,6 +136,7 @@ def build_llm_agents(
     _doctrine_rules: list[Rule] | None = None,
     force_tools: bool = False,
     engine_seed: int | None = None,
+    doctrine: bool = True,
 ) -> dict[str, Agent]:
     """Build one LLMAgent per town role, sharing the same provider instance.
 
@@ -165,16 +166,27 @@ def build_llm_agents(
         engine_seed: M1 opt-in (CLI --seed-sampler). When set, every agent sends a
                      deterministic per-tick provider seed derived from this value;
                      None (default) sends no seed (legacy behaviour).
+        doctrine: when True (default) each role's prompt gains its TEAM/ROLE
+                  DOCTRINE blocks (byte-identical to the published behaviour). When
+                  False the doctrine layer is omitted entirely (and doctrine.yaml is
+                  not even loaded) — the doctrine-naive control for the doctrine
+                  on/off ablation (FIELD-NOTES §11).
 
     Returns:
         dict mapping agent_id -> LLMAgent for all six town agents.
 
     Raises:
-        ValueError: if doctrine.yaml contains duplicate rule ids.
-        FileNotFoundError: if doctrine.yaml is missing.
+        ValueError: if doctrine.yaml contains duplicate rule ids (only when
+                    doctrine is True).
+        FileNotFoundError: if doctrine.yaml is missing (only when doctrine is True).
     """
-    # Load doctrine once; failure must raise at build time (not silently skipped)
-    rules: list[Rule] = _doctrine_rules if _doctrine_rules is not None else load_doctrine()
+    # Load doctrine once; failure must raise at build time (not silently skipped).
+    # With doctrine=False the layer is dropped wholesale: no load, no blocks.
+    rules: list[Rule]
+    if not doctrine:
+        rules = []
+    else:
+        rules = _doctrine_rules if _doctrine_rules is not None else load_doctrine()
 
     decision_param_schemas = {
         "recall": RecallParams.model_json_schema(),

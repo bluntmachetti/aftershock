@@ -494,6 +494,71 @@ def test_parse_pools_rejects_bad_input() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Doctrine on/off toggle (FIELD-NOTES §11 — the doctrine ablation control)
+# ---------------------------------------------------------------------------
+
+
+def _has_doctrine(system: str) -> bool:
+    return "TEAM DOCTRINE:" in system or "YOUR ROLE DOCTRINE:" in system
+
+
+@pytest.mark.parametrize("arm", ["society", "swarm", "solo"])
+def test_doctrine_on_by_default(arm: str) -> None:
+    """Every LLM arm carries doctrine blocks by default (the published behaviour)."""
+    from aftershock.llm.agent import LLMAgent
+
+    setup = build_arm(arm, _SEED, _mock())
+    assert any(
+        isinstance(a, LLMAgent) and _has_doctrine(a._system) for a in setup.agents.values()
+    ), f"arm {arm!r} default build must carry doctrine blocks"
+
+
+@pytest.mark.parametrize("arm", ["society", "swarm", "solo"])
+def test_doctrine_off_drops_all_blocks(arm: str) -> None:
+    """build_arm(doctrine=False) strips every TEAM/ROLE DOCTRINE block (the control)."""
+    from aftershock.llm.agent import LLMAgent
+
+    setup = build_arm(arm, _SEED, _mock(), doctrine=False)
+    for a in setup.agents.values():
+        assert isinstance(a, LLMAgent)
+        assert not _has_doctrine(a._system), (
+            f"arm {arm!r} doctrine=False must not carry any doctrine block"
+        )
+
+
+def test_doctrine_default_equals_explicit_true() -> None:
+    """The default build is byte-identical to doctrine=True (no behaviour drift)."""
+    default = build_arm("society", _SEED, _mock())
+    explicit = build_arm("society", _SEED, _mock(), doctrine=True)
+    assert (
+        default.agents["commander"]._system == explicit.agents["commander"]._system
+    )
+
+
+@pytest.mark.parametrize("arm", ["society", "swarm", "solo"])
+def test_doctrine_toggle_preserves_world(arm: str) -> None:
+    """Flipping doctrine never touches the seeded world (it's a prompt-only knob)."""
+    on = build_arm(arm, _SEED, _mock(), doctrine=True).world.to_dict()
+    off = build_arm(arm, _SEED, _mock(), doctrine=False).world.to_dict()
+    scripted = build_arm("scripted", _SEED, None).world.to_dict()
+    assert on == off == scripted
+
+
+def test_doctrine_off_keeps_contract_and_roster() -> None:
+    """doctrine=False changes only the doctrine blocks: roster, resolver, contract
+    markers and agent count are otherwise identical to the doctrine=True build."""
+    on = build_arm("society", _SEED, _mock(), doctrine=True)
+    off = build_arm("society", _SEED, _mock(), doctrine=False)
+    assert set(on.agents) == set(off.agents)
+    assert type(on.resolver) is type(off.resolver)
+    # The decision contract (everything after the doctrine region) is unchanged: the
+    # JSON-mode contract must still be present on the doctrine-off agents.
+    on_sys = on.agents["commander"]._system
+    off_sys = off.agents["commander"]._system
+    assert "decisions" in on_sys.lower() and "decisions" in off_sys.lower()
+
+
+# ---------------------------------------------------------------------------
 # Unknown arm
 # ---------------------------------------------------------------------------
 

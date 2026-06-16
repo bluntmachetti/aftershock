@@ -1,0 +1,266 @@
+{
+  "arm": "society",
+  "notes": [],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 0.9230769230769231,
+    "fire": 0.8620689655172413,
+    "infrastructure": 0.5581395348837209,
+    "medical": 0.8,
+    "rescue": 0.875
+  },
+  "rules": {
+    "C1": {
+      "commander": {
+        "applicable": 9,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "C2": {},
+    "C3": {
+      "commander": {
+        "applicable": 8,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "F1": {},
+    "F2": {},
+    "I1": {
+      "infrastructure": {
+        "applicable": 22,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "I2": {},
+    "M1": {},
+    "M2": {
+      "medical": {
+        "applicable": 1,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "no escalation for 'm3' within [t=4, t=5] (deadline_in=3, staffing=0.00)",
+            "tick": 5
+          }
+        ]
+      }
+    },
+    "R1": {},
+    "R2": {},
+    "T1": {},
+    "T2": {
+      "comms": {
+        "applicable": 10,
+        "rate": 1.0,
+        "violations": []
+      },
+      "fire": {
+        "applicable": 23,
+        "rate": 0.8695652173913043,
+        "violations": [
+          {
+            "detail": "requested 1 'fire_engine' for 'm3' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 8
+          },
+          {
+            "detail": "requested 2 'repair_crew' for 'm6' but max allowed is 0 (required=1, assigned=2)",
+            "tick": 15
+          },
+          {
+            "detail": "requested 1 'fire_engine' for 'm8' but max allowed is 0 (required=1, assigned=1)",
+            "tick": 30
+          }
+        ]
+      },
+      "infrastructure": {
+        "applicable": 4,
+        "rate": 0.5,
+        "violations": [
+          {
+            "detail": "requested 1 'repair_crew' for 'm6' but max allowed is 0 (required=1, assigned=1)",
+            "tick": 14
+          },
+          {
+            "detail": "requested 2 'repair_crew' for 'm6' but max allowed is 0 (required=1, assigned=2)",
+            "tick": 15
+          }
+        ]
+      },
+      "medical": {
+        "applicable": 29,
+        "rate": 0.7931034482758621,
+        "violations": [
+          {
+            "detail": "requested 1 'ambulance' for 'm7' but max allowed is 0 (required=1, assigned=1)",
+            "tick": 14
+          },
+          {
+            "detail": "requested 1 'rescue_crew' for 'm7' but max allowed is 0 (required=1, assigned=1)",
+            "tick": 14
+          },
+          {
+            "detail": "requested 1 'repair_crew' for 'm6' but max allowed is 0 (required=1, assigned=2)",
+            "tick": 15
+          },
+          {
+            "detail": "requested 1 'supply_truck' for 'm9' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 28
+          },
+          {
+            "detail": "requested 1 'ambulance' for 'm9' but max allowed is 0 (required=1, assigned=1)",
+            "tick": 29
+          },
+          {
+            "detail": "requested 1 'supply_truck' for 'm9' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 30
+          }
+        ]
+      },
+      "rescue": {
+        "applicable": 25,
+        "rate": 0.84,
+        "violations": [
+          {
+            "detail": "requested 1 'rescue_crew' for 'm3' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 7
+          },
+          {
+            "detail": "requested 2 'repair_crew' for 'm6' but max allowed is 0 (required=1, assigned=2)",
+            "tick": 15
+          },
+          {
+            "detail": "requested 1 'rescue_crew' for 'm9' but max allowed is 0 (required=1, assigned=1)",
+            "tick": 29
+          },
+          {
+            "detail": "requested 1 'ambulance' for 'm9' but max allowed is 0 (required=1, assigned=1)",
+            "tick": 29
+          }
+        ]
+      }
+    },
+    "T3": {
+      "comms": {
+        "applicable": 3,
+        "rate": 0.6666666666666667,
+        "violations": [
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=6 > 4 for 'm4'",
+            "tick": 2
+          }
+        ]
+      },
+      "fire": {
+        "applicable": 6,
+        "rate": 0.8333333333333334,
+        "violations": [
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=5 > 4 for 'm4'",
+            "tick": 3
+          }
+        ]
+      },
+      "infrastructure": {
+        "applicable": 1,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "urgency=9 > 8 but severity=1 < 4 and deadline_in=11 > 4 for 'm6'",
+            "tick": 15
+          }
+        ]
+      },
+      "medical": {
+        "applicable": 5,
+        "rate": 1.0,
+        "violations": []
+      },
+      "rescue": {
+        "applicable": 7,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "T4": {},
+    "T5": {
+      "infrastructure": {
+        "applicable": 16,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor industrial'} 2 tick(s) after rejection at t=1",
+            "tick": 3
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor industrial'} 1 tick(s) after rejection at t=3",
+            "tick": 4
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor_industrial'} 3 tick(s) after rejection at t=2",
+            "tick": 5
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor_industrial'} 1 tick(s) after rejection at t=5",
+            "tick": 6
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor industrial'} 3 tick(s) after rejection at t=4",
+            "tick": 7
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor industrial'} 1 tick(s) after rejection at t=7",
+            "tick": 8
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor_industrial'} 3 tick(s) after rejection at t=6",
+            "tick": 9
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor_industrial'} 2 tick(s) after rejection at t=9",
+            "tick": 11
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor_industrial'} 2 tick(s) after rejection at t=11",
+            "tick": 13
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor_industrial'} 3 tick(s) after rejection at t=13",
+            "tick": 16
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor industrial'} 1 tick(s) after rejection at t=21",
+            "tick": 22
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor industrial'} 1 tick(s) after rejection at t=22",
+            "tick": 23
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor_industrial'} 1 tick(s) after rejection at t=26",
+            "tick": 27
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor_industrial'} 1 tick(s) after rejection at t=27",
+            "tick": 28
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor_industrial'} 1 tick(s) after rejection at t=28",
+            "tick": 29
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor_industrial'} 1 tick(s) after rejection at t=29",
+            "tick": 30
+          }
+        ]
+      }
+    },
+    "T6": {},
+    "X1": {},
+    "X2": {}
+  },
+  "seed": 23,
+  "team_alignment": 0.7364341085271318
+}

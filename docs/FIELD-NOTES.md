@@ -133,7 +133,7 @@ log exists.
 - **Negative results get published** (notes 5, 8). They are the reason to believe
   the positive ones.
 
-## 11. Written doctrine raises conformance — outcomes TBD (2026-06-11)
+## 11. Written doctrine raises conformance — outcomes TBD → resolved in §18 (2026-06-11)
 
 **Observed:** we gave every agent a two-tier playbook (six shared coordination rules,
 two-three role rules each) and built a deterministic conformance checker over the run
@@ -147,6 +147,8 @@ attempting repairs with no crew available).
 noise — but it rhymes with note 8: every instruction added to a prompt has a cost, and
 discipline is not automatically performance. A paired doctrine-on/off comparison across
 seeds is queued; until then we claim the conformance effect, not an outcome effect.
+**→ Now run (§18, paired n=5): the conformance effect holds (+0.156, 5/5 seeds) and the
+n=1 lives "cost" was an artifact — doctrine does not cost lives.**
 
 **Also:** verifying the checkers was its own lesson. Of twelve review findings against
 the conformance engine, the confirmed ones were almost all *measurement* bugs —
@@ -327,3 +329,38 @@ caveat it as an n=5 paired mean with a wide CI (or add seeds to firm it). Two no
 test at n=5 — so it was hardened: the verdict now requires CI **and** sign-test agreement before reading
 "credible". The +28 re-rendered under the new rule reads **"suggestive but unconfirmed"** (CI excludes 0,
 sign test p=0.125, power 0.42) — exactly the honest verdict.
+
+## 18. Doctrine on/off, paired across seeds — it buys conformance, not lives (resolves §11) (2026-06-16)
+
+**Setup:** the §11 tension was an n=1 anecdote (doctrine raised conformance 0.759→0.904 but *lost* lives,
+96 vs 113). We finally ran the queued paired comparison: `aftershock ablation --ablate doctrine --control
+society --treatment society --seeds 11,23,37,42,57 --ticks 60` — the same society arm twice per seed,
+doctrine **off** (control) vs **on** (treatment), everything else (world seed, JSON-mode, default pools)
+held constant. 10 LLM runs, **$0.41, 19 min**
+([bench/results/2026-06-16-doctrine-ablation](../bench/results/2026-06-16-doctrine-ablation/ABLATION.md)).
+This required new tooling: a `doctrine: bool` knob on `build_arm`/`build_llm_agents` (default on =
+byte-identical to the published behaviour) and a same-arm ablation path that pairs on a synthetic label
+and **leads with the deterministic conformance Δ** (the primary signal), demoting the noisy lives Δ to a
+clearly-labelled secondary verdict.
+
+**Conformance (primary, deterministic) — confirmed across seeds.** Team alignment **0.696 (off) → 0.852
+(on), Δ = +0.156**, and *every one of the 5 seeds is positive* (per-seed Δ +0.073…+0.220). Per-role, the
+gains land where §11 said they would: comms +0.219 (0.773→0.992), rescue +0.169, medical +0.160, fire
++0.103, infrastructure +0.094 — still the chronic offender at 0.667 (it keeps attempting repairs with no
+crew; that's the S1 lever). Commander is flat (−0.013) because it's already near the ceiling (0.95). The
+exact sign test floors at p=0.0625 at n=5 (5/5 positive can't reach <0.05 — same n=5 floor §16–17
+flagged), so the auto-verdict won't print "credible" without a 6th seed; but conformance is *deterministic
+and low-variance*, and a clean 5/5 with a tight, consistent magnitude band is the confident finding here,
+not the lives number. (Absolute values differ from §11's 0.759/0.904 because the conformance checker was
+hardened since — §11 "Also" — so compare the **effect** (~+0.15), not the levels.)
+
+**Lives (secondary, noisy) — the §11 "cost" was an artifact.** Mean **100.4 (off) → 104.2 (on), Δ =
++3.8** (per-seed [+13, +1, −1, +5, +1]). 95% CI [+0.2, +8.6] excludes 0, but sign test p=0.375 (4+/1−)
+and power 0.33 → verdict **"suggestive but unconfirmed."** So doctrine does **not** cost lives: the n=1
+−17 was small-sample noise, and if anything the paired lean is *slightly positive* (within noise).
+
+**Resolution of §11:** discipline here is not paid for in lives. Doctrine earns its keep on the signal it
+was built for — coordination conformance (+0.156, 5/5 seeds, deterministic) — at **no detectable lives
+cost**. This is the society's honest story in miniature: the value of the written protocol shows up as
+*conformance and cost-efficiency*, not as out-saving on lives (cf. §15–17). Next: the infra role (S1) is
+the one place conformance is still leaking (0.667), and it's a cheap deterministic lever.
