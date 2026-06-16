@@ -142,6 +142,22 @@ def _parse_role_models(spec: str | None) -> dict[str, str] | None:
     return override or None
 
 
+def _resolve_role_models(args: argparse.Namespace) -> dict[str, str] | None:
+    """Per-role model overrides, merging the DASHSCOPE_MODEL global env with --role-model.
+
+    DASHSCOPE_MODEL (when set) applies to *every* role — convenient for pointing the
+    whole society at one self-hosted model (e.g. a local Ollama `qwen3.5:9b`) without
+    a six-part --role-model string. Explicit --role-model entries win per role. The
+    global env path skips the priced-model check (a self-hosted model is unpriced →
+    cost logs $0, which is honest), so it works with any Ollama tag.
+    """
+    rm = _parse_role_models(getattr(args, "role_model", None)) or {}
+    global_model = os.environ.get("DASHSCOPE_MODEL")
+    if global_model:
+        rm = {**{role: global_model for role in _ROLE_MODEL_ROLES}, **rm}
+    return rm or None
+
+
 # Default extra ticks past the last timeline tick, and the engine ceiling.
 _SCENARIO_TICK_PADDING = 20
 _SCENARIO_TICK_CEILING = 120
@@ -272,7 +288,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         society_tools=getattr(args, "society_tools", False),
         seed_sampler=getattr(args, "seed_sampler", False),
         pool_sizes=pool_sizes,
-        role_models=_parse_role_models(getattr(args, "role_model", None)),
+        role_models=_resolve_role_models(args),
     )
 
     manifest: dict[str, Any] = {
@@ -400,7 +416,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
     seed_sampler = getattr(args, "seed_sampler", False)
     society_tools = getattr(args, "society_tools", False)
     pool_sizes = _parse_pools(getattr(args, "pools", None))
-    role_models = _parse_role_models(getattr(args, "role_model", None))
+    role_models = _resolve_role_models(args)
     repeat = getattr(args, "repeat_seeds", 1) or 1
 
     # M2: --repeat-seeds N runs each (arm, seed) N times into ...-r{k} cells and
