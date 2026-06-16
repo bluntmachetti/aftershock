@@ -291,7 +291,9 @@ it is small (<10) and not worth the spend to chase.
 **Lesson for the harness itself:** the `aftershock ablation` auto-verdict keys on the bootstrap CI and
 printed "credible improvement" at n=5 — over-claiming on a small, skewed sample. The sign test + power
 were the guardrail that said "don't believe it yet." Treat the auto-verdict as advisory below ~10 seeds;
-the sign test is authoritative. (Worth hardening the verdict to require sign-test agreement.)
+the sign test is authoritative. (Now fixed: `analyze_ablation` requires the bootstrap CI **and** the
+sign test to agree before it reads "credible", and exposes a structured `verdict` field —
+`noise` / `suggestive` / `credible` — so callers gate on the value, not the prose.)
 
 **S2 epilogue:** at this extreme scarcity priority inversions *do* finally appear — but only **6 of 794
 auction losses (<1%)**, dwarfed by 443 pure-shortage (pool empty — partial grants have nothing to
@@ -320,6 +322,8 @@ n=11 — the easy-world gap is **directionally robust**: society ≥ swarm on *a
 and leveraged by a single seed. A tight CI on the magnitude would need ~25 seeds (power curve).
 
 **Decision:** keep note 3's direction; when the "+28 lives" figure is *quoted* (README, Devpost),
-caveat it as an n=5 paired mean with a wide CI (or add seeds to firm it). Two notes now show the
+caveat it as an n=5 paired mean with a wide CI (or add seeds to firm it). Two notes (§16–17) showed the
 `aftershock ablation` auto-verdict ("credible — CI excludes 0") disagreeing with a non-significant sign
-test at n=5 — harden it to require sign-test agreement below ~10 seeds before it prints "credible".
+test at n=5 — so it was hardened: the verdict now requires CI **and** sign-test agreement before reading
+"credible". The +28 re-rendered under the new rule reads **"suggestive but unconfirmed"** (CI excludes 0,
+sign test p=0.125, power 0.42) — exactly the honest verdict.

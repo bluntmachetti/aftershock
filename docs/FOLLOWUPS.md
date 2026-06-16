@@ -61,8 +61,12 @@ write-up in `docs/FIELD-NOTES.md` §13–14):**
    add seeds (~25 for a tight CI). (`bench/results/2026-06-15-plus28-recheck/`.)
 3. **Bid discipline / S1** (cheap, deterministic): `redundant` is the dominant loss category + infra
    agent <0.85 conformance — optimise the conformance signal, gate on held-out lives. Then memory-v2 /
-   autoresearch on conformance. (Harden `aftershock ablation`'s auto-verdict to require sign-test
-   agreement below ~10 seeds — it over-claimed at n=5.)
+   autoresearch on conformance — gate it on the new `analyze_ablation["verdict"]` field.
+
+**Done since:** the `aftershock ablation` auto-verdict is hardened — it now requires the bootstrap CI
+**and** the sign test to agree before reading "credible" (three tiers: `noise` / `suggestive` /
+`credible`), exposed as a structured `verdict` field for programmatic gating. The +28 and the n=5
+harsh-world results now read "suggestive", not "credible". (FIELD-NOTES §16–17.)
 
 **Constraints (do not violate):** `kernel/protocol.py` + `tests/test_protocol_snapshot.py` are
 FROZEN (no new proposal kinds — tune the auction *policy* in `town/society.py` only); `bench` rejects
