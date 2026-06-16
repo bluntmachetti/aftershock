@@ -1,0 +1,167 @@
+{
+  "arm": "society",
+  "notes": [],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 1.0,
+    "fire": 0.92,
+    "infrastructure": 0.8947368421052632,
+    "medical": 0.9302325581395349,
+    "rescue": 0.9166666666666666
+  },
+  "rules": {
+    "C1": {
+      "commander": {
+        "applicable": 11,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "C2": {},
+    "C3": {
+      "commander": {
+        "applicable": 3,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "F1": {},
+    "F2": {},
+    "I1": {
+      "infrastructure": {
+        "applicable": 8,
+        "rate": 0.5,
+        "violations": [
+          {
+            "detail": "repair_road rejected: 'no repair_crew available'",
+            "tick": 4
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'old_town' is not blocked\"",
+            "tick": 9
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'hospital_district' is not blocked\"",
+            "tick": 10
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'hospital_district' is not blocked\"",
+            "tick": 14
+          }
+        ]
+      }
+    },
+    "I2": {},
+    "M1": {},
+    "M2": {},
+    "R1": {},
+    "R2": {},
+    "T1": {},
+    "T2": {
+      "comms": {
+        "applicable": 27,
+        "rate": 1.0,
+        "violations": []
+      },
+      "fire": {
+        "applicable": 41,
+        "rate": 0.975609756097561,
+        "violations": [
+          {
+            "detail": "requested 2 'ambulance' for 'm5' but max allowed is 0 (required=2, assigned=2)",
+            "tick": 4
+          }
+        ]
+      },
+      "infrastructure": {
+        "applicable": 26,
+        "rate": 1.0,
+        "violations": []
+      },
+      "medical": {
+        "applicable": 34,
+        "rate": 1.0,
+        "violations": []
+      },
+      "rescue": {
+        "applicable": 33,
+        "rate": 0.9393939393939394,
+        "violations": [
+          {
+            "detail": "requested 1 'ambulance' for 'm8' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 18
+          },
+          {
+            "detail": "requested 1 'ambulance' for 'm8' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 19
+          }
+        ]
+      }
+    },
+    "T3": {
+      "comms": {
+        "applicable": 1,
+        "rate": 1.0,
+        "violations": []
+      },
+      "fire": {
+        "applicable": 9,
+        "rate": 0.6666666666666667,
+        "violations": [
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=9 > 4 for 'm6'",
+            "tick": 9
+          },
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=14 > 4 for 'm7'",
+            "tick": 10
+          },
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=14 > 4 for 'm8'",
+            "tick": 10
+          }
+        ]
+      },
+      "infrastructure": {
+        "applicable": 4,
+        "rate": 1.0,
+        "violations": []
+      },
+      "medical": {
+        "applicable": 9,
+        "rate": 0.6666666666666667,
+        "violations": [
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=6 > 4 for 'm5'",
+            "tick": 2
+          },
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=5 > 4 for 'm5'",
+            "tick": 3
+          },
+          {
+            "detail": "urgency=10 > 8 but severity=3 < 4 and deadline_in=9 > 4 for 'm6'",
+            "tick": 9
+          }
+        ]
+      },
+      "rescue": {
+        "applicable": 3,
+        "rate": 0.6666666666666667,
+        "violations": [
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=9 > 4 for 'm6'",
+            "tick": 9
+          }
+        ]
+      }
+    },
+    "T4": {},
+    "T5": {},
+    "T6": {},
+    "X1": {},
+    "X2": {}
+  },
+  "seed": 37,
+  "team_alignment": 0.946524064171123
+}

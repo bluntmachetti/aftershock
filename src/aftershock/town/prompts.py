@@ -99,23 +99,20 @@ DECISION_DOCS_DIRECT: dict[str, str] = {
 
 PROPOSAL_DOCS: dict[str, str] = {
     "resource_request": (
-        "resource_request body {mission_id, resource, qty, urgency 1-10}: bid in the "
-        "contested-resource auction; the auction ranks bids by mission priority, severity, "
-        "deadline, and urgency — if outbid the ruling names what won, so adjust urgency or "
-        "reassess before re-bidding"
+        "resource_request body {mission_id, resource, qty, urgency 1-10}: bid for a "
+        "contested resource; the auction ranks by priority, severity, deadline, urgency — "
+        "if outbid, the ruling names what won, so reassess before re-bidding"
     ),
     "task_handoff": (
-        "task_handoff: transfer responsibility for a task to a specific recipient agent; "
-        "set recipient to the target agent_id"
+        "task_handoff: hand a task to a recipient agent; set recipient to their agent_id"
     ),
     "escalation": (
-        "escalation body {mission_id, why}: alert the commander that a mission needs "
-        "command-level attention — use when deadline pressure is high and staffing is "
-        "critically below requirements"
+        "escalation body {mission_id, why}: alert the commander a mission needs "
+        "command attention — when deadline pressure is high and staffing far below need"
     ),
     "info_share": (
-        "info_share: broadcast situational information to all other agents; no recipient "
-        "needed, automatically accepted by the kernel — never grants resources"
+        "info_share: broadcast situational info to all agents; no recipient, auto-accepted "
+        "by the kernel — never grants resources"
     ),
 }
 

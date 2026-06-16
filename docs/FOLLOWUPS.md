@@ -105,14 +105,25 @@ aim at the conformance story — specifically the one role still leaking it: **i
    −24%**. Shipped as an **opt-in operating mode**, not the default: a general `--role-model
    infrastructure=qwen3.5-plus` override (default stays flash → headline numbers untouched).
    `bench/results/2026-06-16-s1-infra-model/ANALYSIS.md`.
-5. **▶ NEXT lever options** (I1 resolved): S3 auction deadline-sort (missions_failed), W1 swarm
-   `INFO_SHARE`, or the "redundant" re-bidding (~50–57/run — but check it's not outcome-neutral first,
-   like I1 was). **Avoid:** metric-gaming guards (§20), auction policy (S2 dead, §15), harsh-world lives
-   (§16). Also cheap: a 6th seed on the §18 doctrine ablation tips its conformance verdict from the n=5
-   sign-test floor (p=0.0625) to a formal "credible".
-6. **memory-v2 / autoresearch on conformance** (Tier 3) — now that the harness can say "credible"
+5. **DONE (2026-06-16): next-lever scoping (workflow) + cost lever (FIELD-NOTES §21, branch
+   `cost-contract-trim`).** A scoping workflow scored S3/W1/redundant/S4 against the §20 outcome-neutrality
+   gate — **all four SKIP** (S3: missions_failed in {0,1}, no headroom, failed missions WON their grants;
+   redundant bids never decrement `remaining` = $0.0001/run; S4: premise wrong — commander is 45.5% of cost
+   not 59%, and 72% of cost is INPUT tokens temp can't touch; W1: only one with real headroom but can't reach
+   it + contaminates the +28 control). That surfaced the real lever — **static-prompt cost**: ~60% of run
+   cost is a 941-tok system prompt re-sent every tick. **Caching is a dead end** (~$0.01 probe: DashScope-Intl
+   returns no `cached_tokens` → our full-rate ledger is accurate). **Contract trim** (compact JSON skeleton +
+   dedup Hard Rules + compress proposal docs; doctrine/role untouched) → paired A/B vs s1-infra-fix:
+   **cost −14%, lives-per-$ +21%**, lives +4 (p=0.125, up), conformance −0.037 (p=0.375 NOT significant —
+   watch-item). **KEPT.** Society ~$0.04/run is mostly structural; −14% ≈ the safe ceiling.
+6. **▶ Open follow-ups:** (a) refresh README/SUBMISSION society cost **downward** (~−14%, lives-per-$ up) in
+   a later pass — needs a fresh 4-arm bench for a consistent table; (b) watch conformance if more contract
+   trims are tried (§21 dip); (c) cheap: a 6th seed on the §18 doctrine ablation tips its conformance verdict
+   from the n=5 sign-test floor (p=0.0625) to a formal "credible". **Avoid:** metric-gaming guards (§20),
+   auction policy (S2 dead §15), harsh-world lives (§16), the four scoped-and-skipped levers.
+7. **memory-v2 / autoresearch on conformance** (Tier 3) — now that the harness can say "credible"
    honestly, an autoresearch loop can optimise conformance and gate on `verdict == "credible"`.
-7. **Optional, paid:** M4 full 60-tick × 5-seed σ re-validation; a properly-powered (~25-seed)
+8. **Optional, paid:** M4 full 60-tick × 5-seed σ re-validation; a properly-powered (~25-seed)
    society-vs-swarm ablation if a lives claim ever needs firming.
 
 **Harness hardened (PR #7):** the `aftershock ablation` verdict now requires the bootstrap CI **and** the
@@ -127,10 +138,18 @@ byte-identical** (`aftershock verify` + the determinism invariant); don't re-pro
 failures — naive cross-run memory (note 8, −9 lives) and native function calling (note 12, ~2× cost).
 LLM-arm runs need `DASHSCOPE_API_KEY` (~$0.01/seed; a 10-iteration autoresearch loop ≈ $0.30).
 
-**Also pending (not blockers):** Field Logs **003 + 004 are PUBLISHED and live**
-(<https://bluntmachetti.github.io/aftershock/>; PR #6). The engine-vs-LLM determinism distinction is now
-explicit (FIELD-NOTES §13). Still optional: promote the experiment backlog from `.omc/research/` into
-committed `docs/`; update the public README/Devpost headline copy to caveat the "+28" (resume step 2).
+**Also pending (not blockers):** Field Logs **003 + 004 + 005 are PUBLISHED and live**
+(<https://bluntmachetti.github.io/aftershock/>; 003/004 = PR #6, **005 = PR #12, merged to main
+2026-06-16** — "the fix that would have only fooled the scoreboard", the §18–21 tuning arc + the
+outcome-neutrality lesson). The engine-vs-LLM determinism distinction is explicit (FIELD-NOTES §13).
+Still optional: promote the experiment backlog from `.omc/research/` into committed `docs/`.
+
+**▶ Parked, waiting on hackathon credits (later 2026-06-16):**
+1. **README/SUBMISSION cost refresh** — the §21 contract trim cut society cost ~14% (lives-per-$
+   ~2,440 → ~2,800+). The published numbers should be refreshed *downward*; do it via a fresh,
+   consistent **4-arm bench** (not a hand-edit), then update the headline table + finding #2 ratios.
+2. **(Optional) firm the §21 conformance dip** — the trim's −0.037 team-alignment is non-significant
+   at n=5 (p=0.375); ~5 more paired seeds would resolve whether it's real or noise.
 
 ## Mission Control observatory redesign — MERGED + DEPLOYED (staging + prod, live)
 
