@@ -2,13 +2,15 @@
 
 Short list of known project tasks that are not part of the current deployment path.
 
-## ▶ NEXT SESSION — resume here: Tier-1 levers (Tier-0 measurement is DONE)
+## ▶ NEXT SESSION — resume here: Tier-1 bid-discipline / S1 (auction ruled out as the bottleneck)
 
-**Status: the Tier-0 measurement harness is BUILT and VERIFIED (2026-06-14).** Code + tests for
-M1/M2/M3/M5 (committed on branch `tier0-measurement-harness`); full suite green (812 tests), ruff
-clean, `aftershock verify` PASS, frozen `kernel/protocol.py` untouched; 6-dimension adversarial review
-(5 findings fixed); paid M1/M2 verification run (see below). **Full backlog:**
-`.omc/research/improvement-experiments.md`.
+**Status (2026-06-16): Tier-0 measurement is DONE and the Tier-1 questions are answered.** The harness
+(M1/M2/M3/M5) + D2 were built, paid-verified ($1.41 total), used to kill/qualify three levers, and then
+hardened. Full suite green (**823 tests**), ruff clean, `aftershock verify` PASS, frozen
+`kernel/protocol.py` untouched; the Tier-0 build passed a 6-dimension adversarial review (5 findings
+fixed). **On main:** PR #4 (Tier-0 harness + D2), PR #5 (+28 re-check), PR #6 (Field Logs 003+004, live
+at <https://bluntmachetti.github.io/aftershock/>). **Open:** **PR #7** — ablation verdict hardening,
+ready to merge. **Full backlog:** `.omc/research/improvement-experiments.md`.
 
 **What shipped (new surfaces):**
 - **M3 ablation** — `aftershock ablation --control X --treatment Y --seeds 11,23,37,42,57` → paired
@@ -34,8 +36,9 @@ write-up in `docs/FIELD-NOTES.md` §13–14):**
 - **M2: the world is ~79% of the variance** (society, 3 seeds × 3 repeats, 30 ticks): σ_within(LLM)=7.75,
   σ_between(world)=14.87, ICC=0.79. **So pair, don't repeat** — paired-Δ SD ≈ 11 vs unpaired ≈ 23.7;
   detecting +10 lives at 80% power needs ~10 paired seeds vs ~45 unpaired. Repeats only buy down the 21%.
-- **Not done (optional):** M4 full 60-tick × 5-seed σ≈23.6 re-validation (more $); a first real
-  `society`-vs-`swarm` ablation; M2 on the swarm arm.
+- **Not done (optional):** M4 full 60-tick × 5-seed σ≈23.6 re-validation (more $); M2 on the swarm arm.
+  (A society-vs-swarm ablation *was* run on the harsh world — see Tier 1 below — and the published
+  default-world pair was re-analysed in the +28 re-check.)
 
 **Tier 1 (2026-06-15) — three results:**
 - **S2 (partial-grant auction) is KILLED by measurement** — the backlog's "single biggest lever".
@@ -51,22 +54,29 @@ write-up in `docs/FIELD-NOTES.md` §13–14):**
   seeds). **No detectable society-vs-swarm lives edge under scarcity.** The harness did its job — it
   stopped a plausible wrong headline. (FIELD-NOTES §16; `bench/results/2026-06-15-harsh-ablation/`.)
 
-**Resume here:**
-1. **Stop chasing a harsh-world lives lever** — power curve says +10 needs ~22 seeds, the observed +4.7
-   needs ~88; not worth the spend. The auction is sound and the arms don't separate on lives even under
-   triage. The honest society story is **cost-efficiency + conformance**, not a lives edge over swarm.
-2. **Published "+28 society vs swarm" re-checked (note 17, DONE):** directionally solid (society ≥ swarm
-   on all 5 seeds) so note 3's qualitative claim holds, BUT the magnitude is soft — sign test p=0.125,
-   power 0.42, leveraged by one seed (11=+88). Caveat the "+28" figure when quoted (README/Devpost) or
-   add seeds (~25 for a tight CI). (`bench/results/2026-06-15-plus28-recheck/`.)
-3. **Bid discipline / S1** (cheap, deterministic): `redundant` is the dominant loss category + infra
-   agent <0.85 conformance — optimise the conformance signal, gate on held-out lives. Then memory-v2 /
-   autoresearch on conformance — gate it on the new `analyze_ablation["verdict"]` field.
+**The bottom line for next session:** the auction is *not* the bottleneck (S2 dead, 0 inversions), and
+the arms do *not* separate on lives even under triage (the +16 was noise). So **stop chasing a harsh-
+world lives lever** — the society's honest, defensible story is **cost-efficiency + conformance**, not
+out-saving the swarm on lives. Aim there.
 
-**Done since:** the `aftershock ablation` auto-verdict is hardened — it now requires the bootstrap CI
-**and** the sign test to agree before reading "credible" (three tiers: `noise` / `suggestive` /
-`credible`), exposed as a structured `verdict` field for programmatic gating. The +28 and the n=5
-harsh-world results now read "suggestive", not "credible". (FIELD-NOTES §16–17.)
+**Resume here (in order):**
+1. **Merge PR #7** (ablation verdict hardening) if not already merged.
+2. **Caveat the "+28" in the README / Devpost copy** — it's an n=5 paired mean with a wide CI
+   (directionally solid: society ≥ swarm on all 5 seeds; magnitude soft: sign test p=0.125, power 0.42,
+   one seed = +88). `bench/results/2026-06-15-plus28-recheck/`, FIELD-NOTES §17.
+3. **Bid discipline / S1** — the highest-value remaining lever, and cheap (deterministic, no lives runs):
+   `redundant` is the dominant auction-loss category (~50–57/run: agents re-bidding already-satisfied
+   resources) and the infra agent is the only role <0.85 conformance. Optimise the conformance signal;
+   gate any change on held-out lives + the ablation `verdict` field.
+4. **memory-v2 / autoresearch on conformance** (Tier 3) — now that the harness can say "credible"
+   honestly, an autoresearch loop can optimise conformance and gate on `verdict == "credible"`.
+5. **Optional, paid:** M4 full 60-tick × 5-seed σ re-validation; a properly-powered (~25-seed)
+   society-vs-swarm ablation if a lives claim ever needs firming.
+
+**Harness hardened (PR #7):** the `aftershock ablation` verdict now requires the bootstrap CI **and** the
+sign test to agree before reading "credible" — three tiers (`noise` / `suggestive` / `credible`) exposed
+as a structured `verdict` field for programmatic gating. The +28 and the n=5 harsh result now read
+"suggestive", not "credible" (closing the over-claim from FIELD-NOTES §16–17).
 
 **Constraints (do not violate):** `kernel/protocol.py` + `tests/test_protocol_snapshot.py` are
 FROZEN (no new proposal kinds — tune the auction *policy* in `town/society.py` only); `bench` rejects
@@ -75,11 +85,10 @@ byte-identical** (`aftershock verify` + the determinism invariant); don't re-pro
 failures — naive cross-run memory (note 8, −9 lives) and native function calling (note 12, ~2× cost).
 LLM-arm runs need `DASHSCOPE_API_KEY` (~$0.01/seed; a 10-iteration autoresearch loop ≈ $0.30).
 
-**Also pending from this session (not blockers):** Field Log **003 blog draft is written but
-UNCOMMITTED** (`blog/_posts/2026-06-15-we-drew-the-auction-on-the-map.md`) — awaiting Kenny's voice
-pass before publishing (do NOT push; Pages auto-deploys on push). Optionally promote the experiment
-backlog from `.omc/research/` into committed `docs/`. Optionally add a FIELD-NOTES/README note making
-the engine-vs-LLM determinism distinction explicit.
+**Also pending (not blockers):** Field Logs **003 + 004 are PUBLISHED and live**
+(<https://bluntmachetti.github.io/aftershock/>; PR #6). The engine-vs-LLM determinism distinction is now
+explicit (FIELD-NOTES §13). Still optional: promote the experiment backlog from `.omc/research/` into
+committed `docs/`; update the public README/Devpost headline copy to caveat the "+28" (resume step 2).
 
 ## Mission Control observatory redesign — MERGED + DEPLOYED (staging + prod, live)
 
