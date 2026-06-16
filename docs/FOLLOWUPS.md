@@ -138,10 +138,18 @@ byte-identical** (`aftershock verify` + the determinism invariant); don't re-pro
 failures — naive cross-run memory (note 8, −9 lives) and native function calling (note 12, ~2× cost).
 LLM-arm runs need `DASHSCOPE_API_KEY` (~$0.01/seed; a 10-iteration autoresearch loop ≈ $0.30).
 
-**Also pending (not blockers):** Field Logs **003 + 004 are PUBLISHED and live**
-(<https://bluntmachetti.github.io/aftershock/>; PR #6). The engine-vs-LLM determinism distinction is now
-explicit (FIELD-NOTES §13). Still optional: promote the experiment backlog from `.omc/research/` into
-committed `docs/`; update the public README/Devpost headline copy to caveat the "+28" (resume step 2).
+**Also pending (not blockers):** Field Logs **003 + 004 + 005 are PUBLISHED and live**
+(<https://bluntmachetti.github.io/aftershock/>; 003/004 = PR #6, **005 = PR #12, merged to main
+2026-06-16** — "the fix that would have only fooled the scoreboard", the §18–21 tuning arc + the
+outcome-neutrality lesson). The engine-vs-LLM determinism distinction is explicit (FIELD-NOTES §13).
+Still optional: promote the experiment backlog from `.omc/research/` into committed `docs/`.
+
+**▶ Parked, waiting on hackathon credits (later 2026-06-16):**
+1. **README/SUBMISSION cost refresh** — the §21 contract trim cut society cost ~14% (lives-per-$
+   ~2,440 → ~2,800+). The published numbers should be refreshed *downward*; do it via a fresh,
+   consistent **4-arm bench** (not a hand-edit), then update the headline table + finding #2 ratios.
+2. **(Optional) firm the §21 conformance dip** — the trim's −0.037 team-alignment is non-significant
+   at n=5 (p=0.375); ~5 more paired seeds would resolve whether it's real or noise.
 
 ## Mission Control observatory redesign — MERGED + DEPLOYED (staging + prod, live)
 
