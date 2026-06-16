@@ -1,0 +1,30 @@
+{
+  "arms": {
+    "society": {
+      "lives_per_dollar": 2522.1847573370974,
+      "mean_cost_usd": 0.04107550000000002,
+      "mean_lives_lost": 58.6,
+      "mean_lives_saved": 103.6,
+      "mean_missions_failed": 0.4,
+      "mean_missions_resolved": 10.6,
+      "mean_team_alignment": 0.915812684459498,
+      "mean_wall_s": 92.9643421954941,
+      "n": 5,
+      "sd_cost_usd": 0.0037490482718951553,
+      "sd_lives_lost": 18.68956928342652,
+      "sd_lives_saved": 18.420097719610503,
+      "sd_missions_failed": 0.5477225575051662,
+      "sd_missions_resolved": 1.3416407864998738,
+      "sd_wall_s": 11.769721650272185
+    }
+  },
+  "paired": {
+    "society": {
+      "11": 136.0,
+      "23": 94.0,
+      "37": 92.0,
+      "42": 95.0,
+      "57": 101.0
+    }
+  }
+}

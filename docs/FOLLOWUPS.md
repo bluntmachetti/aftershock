@@ -90,12 +90,18 @@ aim at the conformance story — specifically the one role still leaking it: **i
    p=0.125, power 0.42, one seed dominates; §17). Video beat-3 spoken line kept, with a not-spoken
    director's note to render any lower-third as "≈+28 (n=5)". SUBMISSION "what we learned" also now points
    at §18 as the most robust number. (Source: `bench/results/2026-06-15-plus28-recheck/`, FIELD-NOTES §17.)
-3. **Bid discipline / S1 — now the clear #1 lever.** The doctrine ablation's per-role data confirms the
-   **infra agent is the lone role still <0.70 conformance (0.667)** — it keeps attempting repairs with no
-   crew. Cheap and deterministic (no lives runs needed to optimise): also `redundant` is the dominant
-   auction-loss category (~50–57/run). Optimise the conformance signal; gate any change on held-out lives
-   + the ablation `verdict` field. A 6th seed on the §18 doctrine ablation would also tip its conformance
-   verdict from the n=5 sign-test floor (p=0.0625) to a formal "credible".
+3. **DONE (2026-06-16): S1 infra prompt fix (FIELD-NOTES §19, branch `s1-infra-fix`).** Rewrote
+   `roles/infrastructure.yaml` to tie each rule to the agent's observation labels → **infra conformance
+   0.667 → 0.863 (+0.196, 5/5 seeds), team alignment +0.064, lives flat (−0.6, no regression — gate
+   passes), infra violations 61 → 24.** But a partial win: **T3 urgency fully fixed (calibration prompts
+   well); I1 repair-preconditions STAYED STICKY (0.627 → 0.560) — precondition-gating resists prompting.**
+   (`bench/results/2026-06-16-s1-infra-fix/ANALYSIS.md`.)
+4. **▶ NEW #1 lever — I1 deterministic guard.** The flash model won't reliably gate `repair_road` on
+   "district on the BLOCKED line AND repair_crew ≥ 1" from the prompt alone (§19). Add a deterministic
+   precondition check at the **registry/heuristic layer** (frozen-protocol-safe — not a new proposal kind)
+   so an invalid repair_road is never attempted/accepted. Gate on lives no-regression + conformance. This
+   is the cheap, high-value remaining conformance lever. Also: a 6th seed on the §18 doctrine ablation
+   tips its conformance verdict from the n=5 sign-test floor (p=0.0625) to a formal "credible".
 4. **memory-v2 / autoresearch on conformance** (Tier 3) — now that the harness can say "credible"
    honestly, an autoresearch loop can optimise conformance and gate on `verdict == "credible"`.
 5. **Optional, paid:** M4 full 60-tick × 5-seed σ re-validation; a properly-powered (~25-seed)
