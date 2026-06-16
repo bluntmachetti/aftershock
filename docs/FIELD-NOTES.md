@@ -428,3 +428,41 @@ override threaded through `build_arm`/`build_llm_agents`). Flip it when conforma
 than cost; leave it off for the lives-per-$ story. Two honest readings of "fix I1," and the switch keeps
 both — the scientific finding (it's a capability floor) is the durable result, independent of which
 default ships.
+
+## 21. Where the society's cost actually goes — and a −14% contract trim (2026-06-16)
+
+With lives levers exhausted (§15–16) and the story pinned to cost-efficiency + conformance (§18–20), we
+went after **cost** directly. A $0 profile of the records first: the commander sends **31.9k prompt tokens
+but only 2.3k completion**, and its prompt mass is **45.9% of run cost** (the plus model). Decomposing one
+call (~1.1k tok): a **941-token static system prompt re-sent every tick** (~29×) + only ~160 tok of
+observation. The static prompt = role (289) + doctrine (~200) + **contract/format boilerplate (~452)**.
+Extrapolated across all six agents, **~85% of the run's 193k prompt tokens are re-sent static prefixes**,
+and since ~72% of cost is input tokens, **~60% of total run cost is the same prompts re-sent every tick.**
+
+**Caching is a dead end here (a clean ~$0.01 negative result).** The obvious fix — context caching — does
+not apply: probing the DashScope-International compatible-mode endpoint (a 958- and a 1,589-token stable
+prefix, sent 3× rapidly, on both qwen3.5-plus and qwen3.5-flash) returned **no `prompt_tokens_details.
+cached_tokens` and no discount** — every call bills the full prompt. So our cost ledger (full-rate
+`prompt_tokens`) is **accurate, not pessimistic**; there is no free accounting win.
+
+**The deterministic lever — trim the re-sent prefix.** Doctrine is off-limits (§18) and the role prompt is
+behavioral, so the target is the contract. Profiling showed pure redundancy is small (~16 tok), so we went
+aggressive: compact the multi-line JSON skeleton to one line, dedup the Hard Rules (the "JSON-only" line
+duplicated the Output Format header; "≤25 words" lives in the schema), and compress the four proposal-doc
+descriptions — keeping every capability + the contract's tested vocabulary. Result: commander prefix
+**941 → 835 tok (−11%)**; 861 tests green, ruff clean, `aftershock verify` byte-identical.
+
+**Paired A/B (trimmed vs full contract, 5 seeds, only `contract.py`/`PROPOSAL_DOCS` differ;
+[bench/results/2026-06-16-cost-contract-trim/ANALYSIS.md](../bench/results/2026-06-16-cost-contract-trim/ANALYSIS.md)):**
+- **Cost $0.0411 → $0.0353 (−14.0%)**, prompt tokens −11.2% — credible and largely deterministic.
+- **Lives-per-$ 2,522 → 3,046 (+21%)** — the headline metric. **Lives 103.6 → 107.6** (Δ +4, p=0.125, up).
+- **Conformance 0.916 → 0.879** (Δ −0.037, sign p=0.375) — **not** significant, within the §18–20 band
+  (~0.85–0.92); a watch-item (likely the proposal-doc compression), not a credible regression. Actions
+  emitted −3.3% (no parse collapse).
+
+**Decision: KEEP.** By the same significance bar we've held all session (§16–17 — don't bless a p>α effect),
+a deterministic −14% cost / +21% lives-per-$ at no *credible* lives or conformance regression is the
+cost-efficiency win the program is about. The conformance dip is logged as a watch-item; the published
+README/SUBMISSION cost figures can be refreshed downward in a later pass. (And the honest meta-result of
+the whole cost arc: the society's ~$0.04/run is *mostly structural* — re-sent semantic prompts the agents
+need — so −14% is near the safe ceiling without touching doctrine or model tier.)

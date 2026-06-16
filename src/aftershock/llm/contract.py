@@ -25,48 +25,25 @@ def decision_contract(
     """
     lines: list[str] = []
 
-    # --- Section 1: JSON schema ---
+    # --- Section 1: JSON schema (compact single-line forms keep the same field
+    # vocabulary at a fraction of the tokens; FIELD-NOTES §21 cost trim) ---
     lines.append("## Output Format")
     lines.append("")
-    lines.append("Respond with ONLY a JSON object (no markdown, no extra text):")
-    lines.append("")
-
+    lines.append("Reply with ONLY a JSON object (no markdown, no prose). Schema:")
     if proposal_docs:
         # Full schema: decisions + proposals + responses
-        lines.append("{")
-        lines.append('  "decisions": [')
-        lines.append("    {")
-        lines.append('      "decision_type": "<type>",')
-        lines.append('      "params": {<key>: <value>, ...},')
-        lines.append('      "rationale": "<under 25 words>"')
-        lines.append("    }")
-        lines.append("  ],")
-        lines.append('  "proposals": [')
-        lines.append("    {")
-        lines.append('      "kind": "<kind>",')
-        lines.append('      "recipient": "<agent_id or null>",')
-        lines.append('      "body": {<key>: <value>, ...}')
-        lines.append("    }")
-        lines.append("  ],")
-        lines.append('  "responses": [')
-        lines.append("    {")
-        lines.append('      "proposal_id": "<id>",')
-        lines.append('      "accept": true|false,')
-        lines.append('      "note": "<optional note>"')
-        lines.append("    }")
-        lines.append("  ]")
-        lines.append("}")
+        lines.append(
+            '{"decisions":[{"decision_type":"<type>","params":{<k>:<v>},'
+            '"rationale":"<≤25 words>"}], '
+            '"proposals":[{"kind":"<kind>","recipient":"<agent_id|null>","body":{<k>:<v>}}], '
+            '"responses":[{"proposal_id":"<id>","accept":true|false,"note":"<optional>"}]}'
+        )
     else:
         # Decisions-only schema (no proposals, no responses)
-        lines.append("{")
-        lines.append('  "decisions": [')
-        lines.append("    {")
-        lines.append('      "decision_type": "<type>",')
-        lines.append('      "params": {<key>: <value>, ...},')
-        lines.append('      "rationale": "<under 25 words>"')
-        lines.append("    }")
-        lines.append("  ]")
-        lines.append("}")
+        lines.append(
+            '{"decisions":[{"decision_type":"<type>","params":{<k>:<v>},'
+            '"rationale":"<≤25 words>"}]}'
+        )
 
     lines.append("")
 
@@ -89,28 +66,25 @@ def decision_contract(
             lines.append(f"- {doc}")
         lines.append("")
 
-    # --- Section 4: Hard rules ---
+    # --- Section 4: Hard rules (deduped — "JSON only" lives in Output Format and the
+    # 25-word cap in the schema; FIELD-NOTES §21) ---
     lines.append("## Hard Rules")
     lines.append("")
-    lines.append("- Output ONLY a JSON object; no markdown fences, no explanation.")
     if proposal_docs:
         lines.append(
-            "- Use exact ids exactly as they appear in the observation"
+            "- Use exact ids from the observation"
             " (mission ids like \"m3\", resource names, proposal ids) — never invent ids."
         )
-    else:
-        lines.append(
-            "- Use exact ids exactly as they appear in the observation"
-            " (mission ids like \"m3\", resource names) — never invent ids."
-        )
-    if proposal_docs:
         lines.append('- Answer every proposal in YOUR INBOX via "responses".')
         lines.append(
             "- Resources are granted only through resource_request proposals,"
             " not dispatch decisions."
         )
     else:
+        lines.append(
+            "- Use exact ids from the observation"
+            " (mission ids like \"m3\", resource names) — never invent ids."
+        )
         lines.append("- Do not emit proposals or responses.")
-    lines.append("- Keep each rationale under 25 words.")
 
     return "\n".join(lines)
