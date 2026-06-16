@@ -334,6 +334,7 @@ def test_bench_e2e_offline_llm_arm(monkeypatch: pytest.MonkeyPatch) -> None:
         arm: str, seed: int, provider: Any,
         society_tools: bool = False, seed_sampler: bool = False,
         pool_sizes: dict | None = None, doctrine: bool = True,
+        **_kwargs: object,  # absorb future build_arm kwargs (e.g. role_models)
     ) -> Any:
         build_arm_calls.append(arm)
         if arm == "society":

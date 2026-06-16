@@ -40,6 +40,7 @@ def _execute_cell(
     seed_sampler: bool = False,
     pool_sizes: dict[str, int] | None = None,
     doctrine: bool = True,
+    role_models: dict[str, str] | None = None,
     extra_fields: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build + run one (arm, seed) cell and write its summary.json.
@@ -50,10 +51,11 @@ def _execute_cell(
 
     ``doctrine`` (default True) is forwarded to build_arm; the doctrine on/off
     ablation passes False to build the doctrine-naive control (FIELD-NOTES §11).
+    ``role_models`` (default None) forwards the --role-model operating-mode override.
     """
     setup = build_arm(
         arm, seed, provider, society_tools=society_tools, seed_sampler=seed_sampler,
-        pool_sizes=pool_sizes, doctrine=doctrine,
+        pool_sizes=pool_sizes, doctrine=doctrine, role_models=role_models,
     )
     manifest_rec: dict[str, Any] = {
         "arm": arm,
@@ -133,6 +135,7 @@ def _run_or_resume_cell(
     seed_sampler: bool = False,
     pool_sizes: dict[str, int] | None = None,
     doctrine: bool = True,
+    role_models: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Resume a completed cell from disk, or execute it. ``run_id`` is the cell dir.
 
@@ -164,7 +167,7 @@ def _run_or_resume_cell(
     return _execute_cell(
         out_dir, arm, seed, ticks, provider, run_id=run_id,
         society_tools=society_tools, seed_sampler=seed_sampler,
-        pool_sizes=pool_sizes, doctrine=doctrine,
+        pool_sizes=pool_sizes, doctrine=doctrine, role_models=role_models,
     )
 
 
@@ -175,6 +178,7 @@ def run_bench(
     society_tools: bool = False,
     seed_sampler: bool = False,
     pool_sizes: dict[str, int] | None = None,
+    role_models: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """Run all (arm, seed) cells from *manifest*, writing results under *out_dir*.
 
@@ -205,6 +209,7 @@ def run_bench(
                 society_tools=society_tools,
                 seed_sampler=seed_sampler,
                 pool_sizes=pool_sizes,
+                role_models=role_models,
             )
             cells.append(cell_summary)
 
@@ -917,6 +922,7 @@ def run_repeat_seeds(
     society_tools: bool = False,
     seed_sampler: bool = False,
     pool_sizes: dict[str, int] | None = None,
+    role_models: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """Run each (arm, seed) ``repeats`` times into ``{arm}-seed{seed}-r{k}`` cells.
 
@@ -952,7 +958,8 @@ def run_repeat_seeds(
                     _execute_cell(
                         out_dir, arm, seed, ticks, provider, run_id=run_id,
                         society_tools=society_tools, seed_sampler=seed_sampler,
-                        pool_sizes=pool_sizes, extra_fields={"repeat": k},
+                        pool_sizes=pool_sizes, role_models=role_models,
+                        extra_fields={"repeat": k},
                     )
                 )
     return cells

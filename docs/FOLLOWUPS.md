@@ -96,15 +96,23 @@ aim at the conformance story — specifically the one role still leaking it: **i
    passes), infra violations 61 → 24.** But a partial win: **T3 urgency fully fixed (calibration prompts
    well); I1 repair-preconditions STAYED STICKY (0.627 → 0.560) — precondition-gating resists prompting.**
    (`bench/results/2026-06-16-s1-infra-fix/ANALYSIS.md`.)
-4. **▶ NEW #1 lever — I1 deterministic guard.** The flash model won't reliably gate `repair_road` on
-   "district on the BLOCKED line AND repair_crew ≥ 1" from the prompt alone (§19). Add a deterministic
-   precondition check at the **registry/heuristic layer** (frozen-protocol-safe — not a new proposal kind)
-   so an invalid repair_road is never attempted/accepted. Gate on lives no-regression + conformance. This
-   is the cheap, high-value remaining conformance lever. Also: a 6th seed on the §18 doctrine ablation
-   tips its conformance verdict from the n=5 sign-test floor (p=0.0625) to a formal "credible".
-4. **memory-v2 / autoresearch on conformance** (Tier 3) — now that the harness can say "credible"
+4. **DONE (2026-06-16): I1 investigated → guard killed; model bump shipped as an operating mode
+   (FIELD-NOTES §20, branch `s1-infra-model`).** The "deterministic I1 guard" is a **metric-gaming trap**:
+   the world already rejects invalid `repair_road` (`RepairRoadHandler.validate`, before `apply()` — zero
+   resource cost, outcome-neutral) and conformance I1 counts the *attempt*, so a drop-filter would only hide
+   LLM behaviour. **Not built.** Instead proved I1 is a **model-capability floor**: infra flash→plus lifts
+   **I1 0.560 → 0.957** (infra conf 0.863 → 0.986, 5/5 seeds) — but lives flat, **cost +33%, lives-per-$
+   −24%**. Shipped as an **opt-in operating mode**, not the default: a general `--role-model
+   infrastructure=qwen3.5-plus` override (default stays flash → headline numbers untouched).
+   `bench/results/2026-06-16-s1-infra-model/ANALYSIS.md`.
+5. **▶ NEXT lever options** (I1 resolved): S3 auction deadline-sort (missions_failed), W1 swarm
+   `INFO_SHARE`, or the "redundant" re-bidding (~50–57/run — but check it's not outcome-neutral first,
+   like I1 was). **Avoid:** metric-gaming guards (§20), auction policy (S2 dead, §15), harsh-world lives
+   (§16). Also cheap: a 6th seed on the §18 doctrine ablation tips its conformance verdict from the n=5
+   sign-test floor (p=0.0625) to a formal "credible".
+6. **memory-v2 / autoresearch on conformance** (Tier 3) — now that the harness can say "credible"
    honestly, an autoresearch loop can optimise conformance and gate on `verdict == "credible"`.
-5. **Optional, paid:** M4 full 60-tick × 5-seed σ re-validation; a properly-powered (~25-seed)
+7. **Optional, paid:** M4 full 60-tick × 5-seed σ re-validation; a properly-powered (~25-seed)
    society-vs-swarm ablation if a lives claim ever needs firming.
 
 **Harness hardened (PR #7):** the `aftershock ablation` verdict now requires the bootstrap CI **and** the

@@ -108,6 +108,18 @@ So Aftershock's cost-optimal default is JSON contracts, with function calling im
 benchmarked, and available behind `--society-tools`. Full write-up in
 [docs/FIELD-NOTES.md](docs/FIELD-NOTES.md).
 
+### Operating modes (opt-in)
+
+The headline numbers above are the **cost-optimal default** (flash workers + a plus commander).
+Two switches trade cost for other properties without changing the default:
+
+- `--society-tools` — native Qwen function calling instead of JSON contracts (the ablation above).
+- `--role-model infrastructure=qwen3.5-plus` — a **high-conformance mode**. The infrastructure
+  agent is the one role flash won't reliably keep in-doctrine (it attempts road repairs with no
+  crew / on un-blocked roads); a stronger model lifts its conformance 0.86 → 0.99 (and fixes the
+  precondition rule flash ignores), at ~+33% cost/run for *no* change in lives. Off by default —
+  flip it when discipline matters more than lives-per-$. ([FIELD-NOTES §19–20](docs/FIELD-NOTES.md).)
+
 ## Real-data scenarios (sim vs reality)
 
 Beyond the synthetic benchmark, the society can run on scenarios compiled **offline from real

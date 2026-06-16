@@ -493,6 +493,30 @@ def test_parse_pools_rejects_bad_input() -> None:
         _parse_pools("ambulance=0")  # must be >= 1
 
 
+def test_parse_role_models_valid_and_none() -> None:
+    from aftershock.cli import _parse_role_models
+
+    assert _parse_role_models(None) is None
+    assert _parse_role_models("infrastructure=qwen3.5-plus") == {
+        "infrastructure": "qwen3.5-plus"
+    }
+    assert _parse_role_models("infrastructure=qwen3.5-plus,commander=qwen3-max") == {
+        "infrastructure": "qwen3.5-plus",
+        "commander": "qwen3-max",
+    }
+
+
+def test_parse_role_models_rejects_bad_input() -> None:
+    from aftershock.cli import _parse_role_models
+
+    with pytest.raises(SystemExit):
+        _parse_role_models("horse=qwen3.5-plus")  # unknown role
+    with pytest.raises(SystemExit):
+        _parse_role_models("infrastructure=gpt-4")  # unpriced model -> silent $0
+    with pytest.raises(SystemExit):
+        _parse_role_models("infrastructure")  # missing '='
+
+
 # ---------------------------------------------------------------------------
 # Doctrine on/off toggle (FIELD-NOTES §11 — the doctrine ablation control)
 # ---------------------------------------------------------------------------
@@ -556,6 +580,57 @@ def test_doctrine_off_keeps_contract_and_roster() -> None:
     on_sys = on.agents["commander"]._system
     off_sys = off.agents["commander"]._system
     assert "decisions" in on_sys.lower() and "decisions" in off_sys.lower()
+
+
+# ---------------------------------------------------------------------------
+# --role-model operating-mode override (FIELD-NOTES §20: infra=plus)
+# ---------------------------------------------------------------------------
+
+
+def test_role_model_override_society_infra() -> None:
+    """role_models bumps only the named role; the rest keep their YAML model."""
+    from aftershock.llm.agent import LLMAgent
+
+    setup = build_arm(
+        "society", _SEED, _mock(), role_models={"infrastructure": "qwen3.5-plus"}
+    )
+    infra = setup.agents["infrastructure"]
+    assert isinstance(infra, LLMAgent)
+    assert infra._role.model == "qwen3.5-plus"
+    # the other four workers stay flash; commander stays plus (its YAML default)
+    assert setup.agents["medical"]._role.model == "qwen3.5-flash"
+    assert setup.agents["fire"]._role.model == "qwen3.5-flash"
+
+
+def test_role_model_default_is_yaml_mix() -> None:
+    """No override = the cost-optimal YAML mix (infra flash) — byte-identical default."""
+    setup = build_arm("society", _SEED, _mock())
+    assert setup.agents["infrastructure"]._role.model == "qwen3.5-flash"
+
+
+def test_role_model_override_preserves_world() -> None:
+    """A model override never touches the seeded world (it's an LLM-only knob)."""
+    base = build_arm("society", _SEED, _mock()).world.to_dict()
+    over = build_arm(
+        "society", _SEED, _mock(), role_models={"infrastructure": "qwen3.5-plus"}
+    ).world.to_dict()
+    assert base == over == build_arm("scripted", _SEED, None).world.to_dict()
+
+
+@pytest.mark.parametrize("arm", ["swarm", "solo"])
+def test_role_model_override_swarm_solo(arm: str) -> None:
+    """The override also applies to the swarm/solo builders."""
+    role = "infrastructure" if arm == "swarm" else "solo"
+    setup = build_arm(arm, _SEED, _mock(), role_models={role: "qwen3.5-plus"})
+    assert setup.agents[role]._role.model == "qwen3.5-plus"
+
+
+def test_role_model_unknown_role_is_ignored() -> None:
+    """A key matching no role in this arm is silently ignored (so one override map
+    can be reused across arms with different rosters)."""
+    setup = build_arm("society", _SEED, _mock(), role_models={"solo": "qwen3-max"})
+    # 'solo' is not a society role -> nothing changes
+    assert setup.agents["infrastructure"]._role.model == "qwen3.5-flash"
 
 
 # ---------------------------------------------------------------------------

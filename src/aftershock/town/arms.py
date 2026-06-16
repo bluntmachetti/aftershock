@@ -72,6 +72,7 @@ def build_arm(
     seed_sampler: bool = False,
     pool_sizes: dict[str, int] | None = None,
     doctrine: bool = True,
+    role_models: dict[str, str] | None = None,
 ) -> ArmSetup:
     """Build all components for one (arm, seed) benchmark cell.
 
@@ -100,6 +101,11 @@ def build_arm(
                   When False the doctrine layer is dropped for those arms, giving the
                   doctrine-naive control for the doctrine on/off ablation
                   (FIELD-NOTES §11). No effect on the scripted arm (it has no prompts).
+        role_models: optional {role: model} override for the LLM arms (CLI
+                  --role-model). None (default) keeps each role's YAML model — the
+                  cost-optimal published mix. Enables operating modes like the §20
+                  high-conformance infra bump (infrastructure=qwen3.5-plus). No effect
+                  on the scripted arm.
 
     Returns:
         ArmSetup with fully wired world, society, agents, registry, roles,
@@ -135,15 +141,17 @@ def build_arm(
     if arm == "society":
         return _build_society(
             world, registry, seed, provider, lessons=lessons, use_tools=society_tools,
-            engine_seed=engine_seed, doctrine=doctrine,
+            engine_seed=engine_seed, doctrine=doctrine, role_models=role_models,
         )
     if arm == "swarm":
         return _build_swarm(
             world, registry, seed, provider, engine_seed=engine_seed, doctrine=doctrine,
+            role_models=role_models,
         )
     if arm == "solo":
         return _build_solo(
             world, registry, seed, provider, engine_seed=engine_seed, doctrine=doctrine,
+            role_models=role_models,
         )
 
     raise ValueError(f"unhandled arm {arm!r}")  # unreachable
@@ -195,6 +203,7 @@ def _build_society(
     use_tools: bool = False,
     engine_seed: int | None = None,
     doctrine: bool = True,
+    role_models: dict[str, str] | None = None,
 ) -> ArmSetup:
     roles = load_roles(_TOWN_DIR / "roles")
     _six = ("commander", "comms", "fire", "infrastructure", "medical", "rescue")
@@ -202,7 +211,7 @@ def _build_society(
     society = TownSociety(roster=roster)
     agents = build_llm_agents(
         roles, provider, lessons=lessons, arm="society", force_tools=use_tools,
-        engine_seed=engine_seed, doctrine=doctrine,
+        engine_seed=engine_seed, doctrine=doctrine, role_models=role_models,
     )
     return ArmSetup(
         world=world,
@@ -222,6 +231,7 @@ def _build_swarm(
     provider: Any,
     engine_seed: int | None = None,
     doctrine: bool = True,
+    role_models: dict[str, str] | None = None,
 ) -> ArmSetup:
     roles = load_roles(_TOWN_DIR / "roles_swarm")
     # Roster: agent_id == role name for the five swarm roles
@@ -237,6 +247,9 @@ def _build_swarm(
             role = role.model_copy(
                 update={"system_prompt": role.system_prompt + "\n\n" + blocks}
             )
+        # --role-model override (e.g. §20 operating mode); default keeps the YAML model.
+        if role_models and agent_id in role_models:
+            role = role.model_copy(update={"model": role_models[agent_id]})
         contract = decision_contract(
             allowed=role.allowed_decisions,
             decision_docs=DECISION_DOCS_DIRECT,
@@ -267,6 +280,7 @@ def _build_solo(
     provider: Any,
     engine_seed: int | None = None,
     doctrine: bool = True,
+    role_models: dict[str, str] | None = None,
 ) -> ArmSetup:
     roles = load_roles(_TOWN_DIR / "roles_solo")
     solo_role = roles["solo"]
@@ -280,6 +294,9 @@ def _build_solo(
         solo_role = solo_role.model_copy(
             update={"system_prompt": solo_role.system_prompt + "\n\n" + blocks}
         )
+    # --role-model override (e.g. §20 operating mode); default keeps the YAML model.
+    if role_models and "solo" in role_models:
+        solo_role = solo_role.model_copy(update={"model": role_models["solo"]})
     contract = decision_contract(
         allowed=solo_role.allowed_decisions,
         decision_docs=DECISION_DOCS_DIRECT,
