@@ -859,3 +859,67 @@ def test_analyze_repeats_nonzero_within_variance() -> None:
     assert math.isclose(a["sd_within"], math.sqrt(8.0), rel_tol=1e-9)
     assert a["sd_between"] > 0.0
     assert 0.0 < a["icc"] < 1.0
+
+
+# ---------------------------------------------------------------------------
+# Ablation verdict hardening: CI and sign test must AGREE for "credible"
+# (regression for FIELD-NOTES §16-17 — a CI-only verdict over-claimed at n=5)
+# ---------------------------------------------------------------------------
+
+
+def _paired_cells(control: str, treatment: str, ctrl: dict[int, float],
+                  treat: dict[int, float]) -> list[dict[str, Any]]:
+    cells = []
+    for s, v in ctrl.items():
+        cells.append(_make_cell(control, s, float(v), 0.0, 1.0, 0.0, 0.0, 1.0))
+    for s, v in treat.items():
+        cells.append(_make_cell(treatment, s, float(v), 0.0, 1.0, 0.0, 0.0, 1.0))
+    return cells
+
+
+def test_verdict_suggestive_when_ci_excludes_zero_but_sign_not_significant() -> None:
+    """The published +28 data: CI excludes 0 yet sign test p=0.125 -> 'suggestive',
+    NOT 'credible'. This is the exact §16-17 over-claim being guarded against."""
+    society = {11: 140, 23: 86, 37: 81, 42: 98, 57: 111}
+    swarm = {11: 52, 23: 79, 37: 81, 42: 72, 57: 94}
+    res = analyze_ablation(_paired_cells("swarm", "society", swarm, society),
+                           "swarm", "society")
+    assert res["ci_excludes_zero"] is True
+    assert res["sign_significant"] is False
+    assert math.isclose(res["sign_test_p"], 0.125, rel_tol=1e-9)
+    assert res["verdict"] == "suggestive"
+    md = render_ablation_markdown(res)
+    assert "suggestive but unconfirmed" in md
+    assert "credible improvement" not in md
+
+
+def test_verdict_credible_when_ci_and_sign_agree() -> None:
+    """6 seeds all +10 (sd 0): CI excludes 0 AND sign test significant -> 'credible'."""
+    ctrl = {s: 100.0 for s in range(1, 7)}
+    treat = {s: 110.0 for s in range(1, 7)}
+    res = analyze_ablation(_paired_cells("ctrl", "treat", ctrl, treat), "ctrl", "treat")
+    assert res["ci_excludes_zero"] is True
+    assert res["sign_significant"] is True
+    assert res["verdict"] == "credible"
+    assert "credible improvement" in render_ablation_markdown(res)
+
+
+def test_verdict_noise_when_ci_includes_zero() -> None:
+    """Zero effect -> CI includes 0 -> 'noise' regardless of sign test."""
+    ctrl = {1: 100.0, 2: 100.0, 3: 100.0}
+    treat = {1: 100.0, 2: 100.0, 3: 100.0}
+    res = analyze_ablation(_paired_cells("a", "b", ctrl, treat), "a", "b")
+    assert res["ci_excludes_zero"] is False
+    assert res["verdict"] == "noise"
+    assert "not distinguishable from noise" in render_ablation_markdown(res)
+
+
+def test_verdict_n5_all_positive_cannot_be_credible() -> None:
+    """Even a clean 5/5 split can't be 'credible': the sign test floor at n=5 is
+    p=0.0625 > 0.05, so the harness correctly demands more seeds."""
+    ctrl = {s: 100.0 for s in range(1, 6)}
+    treat = {s: 110.0 for s in range(1, 6)}
+    res = analyze_ablation(_paired_cells("c", "t", ctrl, treat), "c", "t")
+    assert res["ci_excludes_zero"] is True
+    assert math.isclose(res["sign_test_p"], 0.0625, rel_tol=1e-9)
+    assert res["verdict"] == "suggestive"

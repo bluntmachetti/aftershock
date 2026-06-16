@@ -461,6 +461,21 @@ def analyze_ablation(
         for eff in effect_grid
     ]
 
+    # Verdict — "credible" requires the bootstrap CI AND the sign test to AGREE.
+    # The percentile CI excludes 0 on small, skewed samples where the conservative
+    # sign test does not, so keying on the CI alone over-claims (FIELD-NOTES §16–17:
+    # it printed "credible" at n=5 twice on effects that were noise). Exposed as a
+    # structured field so callers (e.g. an autoresearch loop) can gate on it.
+    sign_p = stats.sign_test_p(diffs)
+    ci_excludes_zero = not (ci.lower <= 0.0 <= ci.upper)
+    sign_significant = sign_p < alpha
+    if not ci_excludes_zero:
+        verdict = "noise"
+    elif not sign_significant:
+        verdict = "suggestive"
+    else:
+        verdict = "credible"
+
     return {
         "control": control,
         "treatment": treatment,
@@ -474,7 +489,10 @@ def analyze_ablation(
         "n_positive": sum(1 for d in diffs if d > 0),
         "n_negative": sum(1 for d in diffs if d < 0),
         "n_tied": sum(1 for d in diffs if d == 0),
-        "sign_test_p": stats.sign_test_p(diffs),
+        "sign_test_p": sign_p,
+        "verdict": verdict,
+        "ci_excludes_zero": ci_excludes_zero,
+        "sign_significant": sign_significant,
         "ci": {
             "lower": ci.lower,
             "upper": ci.upper,
@@ -550,19 +568,30 @@ def render_ablation_markdown(result: dict[str, Any]) -> str:
             f"(α={result['alpha']})."
         )
 
-    # Verdict line — honest about the noise floor.
-    ci_lo = result["ci"]["lower"]
-    ci_hi = result["ci"]["upper"]
-    crosses_zero = ci_lo <= 0.0 <= ci_hi
+    # Verdict line — the bootstrap CI and the sign test must AGREE before an effect
+    # is called "credible" (FIELD-NOTES §16–17: a CI-only verdict over-claimed at n=5).
+    p = result["sign_test_p"]
+    alpha = result["alpha"]
+    power_str = f"{op:.2f}" if op is not None else "n/a"
     lines.append("")
-    if crosses_zero:
+    if result["verdict"] == "noise":
         lines.append(
-            "> Verdict: **not distinguishable from noise** — the CI includes 0. "
-            "Add seeds (see the power curve) or seed the sampler (M1) before claiming an effect."
+            f"> Verdict: **not distinguishable from noise** — the {conf_pct}% CI includes 0 "
+            f"(sign test p={p:.3f}). Add seeds (see the power curve) before claiming an effect."
+        )
+    elif result["verdict"] == "suggestive":
+        lines.append(
+            f"> Verdict: **suggestive but unconfirmed** — the {conf_pct}% CI excludes 0, but "
+            f"the sign test is not significant (p={p:.3f} ≥ {alpha}) and power is {power_str}. "
+            "The percentile bootstrap is optimistic on small, skewed samples; treat this as a "
+            "lead and add seeds (see the power curve) until the sign test agrees."
         )
     else:
         direction = "improvement" if result["mean_delta"] > 0 else "regression"
-        lines.append(f"> Verdict: **credible {direction}** — the {conf_pct}% CI excludes 0.")
+        lines.append(
+            f"> Verdict: **credible {direction}** — the {conf_pct}% CI excludes 0 *and* the "
+            f"sign test is significant (p={p:.3f} < {alpha})."
+        )
     lines.append("")
 
     # Per-seed paired table
