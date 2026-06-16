@@ -226,7 +226,7 @@ def test_resume_skips_existing_cell(monkeypatch: pytest.MonkeyPatch) -> None:
     def _fake_build_arm(
         arm: str, seed: int, provider: Any,
         society_tools: bool = False, seed_sampler: bool = False,
-        pool_sizes: dict | None = None,
+        pool_sizes: dict | None = None, doctrine: bool = True,
     ) -> Any:
         call_count["n"] += 1
         raise AssertionError("build_arm should not be called for a resumed cell")
@@ -380,7 +380,7 @@ def test_resume_reruns_on_tick_budget_mismatch(monkeypatch: pytest.MonkeyPatch) 
     def _fake_build_arm(
         arm: str, seed: int, provider: Any,
         society_tools: bool = False, seed_sampler: bool = False,
-        pool_sizes: dict | None = None,
+        pool_sizes: dict | None = None, doctrine: bool = True,
     ) -> Any:
         call_count["n"] += 1
         # Return a minimal fake setup that never actually runs
@@ -424,7 +424,7 @@ def test_resume_skips_when_ticks_match(monkeypatch: pytest.MonkeyPatch) -> None:
     def _fake_build_arm(
         arm: str, seed: int, provider: Any,
         society_tools: bool = False, seed_sampler: bool = False,
-        pool_sizes: dict | None = None,
+        pool_sizes: dict | None = None, doctrine: bool = True,
     ) -> Any:
         raise AssertionError("build_arm must not be called when ticks match")
 
@@ -466,7 +466,7 @@ def test_resume_reruns_on_corrupt_summary(monkeypatch: pytest.MonkeyPatch) -> No
     def _fake_build_arm(
         arm: str, seed: int, provider: Any,
         society_tools: bool = False, seed_sampler: bool = False,
-        pool_sizes: dict | None = None,
+        pool_sizes: dict | None = None, doctrine: bool = True,
     ) -> Any:
         call_count["n"] += 1
         raise RuntimeError("re-run triggered")
@@ -923,3 +923,213 @@ def test_verdict_n5_all_positive_cannot_be_credible() -> None:
     assert res["ci_excludes_zero"] is True
     assert math.isclose(res["sign_test_p"], 0.0625, rel_tol=1e-9)
     assert res["verdict"] == "suggestive"
+
+
+# ---------------------------------------------------------------------------
+# Doctrine on/off ablation (FIELD-NOTES §11) — same arm, one knob flipped
+# ---------------------------------------------------------------------------
+
+
+def _labeled_cell(label: str, seed: int, lives: float, alignment: float,
+                  roles: dict[str, float] | None = None) -> dict[str, Any]:
+    cell = _make_cell("society", seed, lives, 0.0, 1.0, 0.0, 0.0, 1.0)
+    cell["label"] = label
+    cell["team_alignment"] = alignment
+    cell["role_conformance"] = roles or {}
+    return cell
+
+
+def test_analyze_ablation_pairs_on_label_not_arm() -> None:
+    """With key='label', two same-arm sides pair correctly (the doctrine ablation)."""
+    cells = [
+        _labeled_cell("society-nodoctrine", 11, 113.0, 0.759),
+        _labeled_cell("society-nodoctrine", 23, 100.0, 0.760),
+        _labeled_cell("society", 11, 96.0, 0.904),
+        _labeled_cell("society", 23, 105.0, 0.900),
+    ]
+    res = analyze_ablation(cells, "society-nodoctrine", "society", key="label")
+    assert res["n"] == 2
+    # Δ lives = (96-113) + (105-100) = -17, +5 -> mean -6
+    assert math.isclose(res["mean_delta"], -6.0, rel_tol=1e-9)
+
+
+def test_analyze_ablation_default_key_arm_ignores_label() -> None:
+    """The default key='arm' is unchanged: same-arm cells with distinct labels would
+    collide on arm (so the doctrine ablation MUST pass key='label')."""
+    cells = [
+        _labeled_cell("society-nodoctrine", 11, 113.0, 0.759),
+        _labeled_cell("society", 11, 96.0, 0.904),
+    ]
+    # both have arm='society' -> only one seed/side resolvable -> no distinct pair
+    with pytest.raises(ValueError, match="no common seeds"):
+        analyze_ablation(cells, "society-nodoctrine", "society")  # key='arm'
+
+
+def test_conformance_block_team_and_per_role() -> None:
+    from aftershock.bench import _conformance_block
+
+    cells = [
+        _labeled_cell("society-nodoctrine", 11, 113.0, 0.759,
+                      {"comms": 0.83, "infrastructure": 0.56}),
+        _labeled_cell("society-nodoctrine", 23, 100.0, 0.760,
+                      {"comms": 0.85, "infrastructure": 0.58}),
+        _labeled_cell("society", 11, 96.0, 0.904,
+                      {"comms": 1.00, "infrastructure": 0.69}),
+        _labeled_cell("society", 23, 105.0, 0.900,
+                      {"comms": 1.00, "infrastructure": 0.71}),
+    ]
+    block = _conformance_block(cells, "society-nodoctrine", "society")
+    assert block["n"] == 2
+    assert math.isclose(block["mean_control"], 0.7595, rel_tol=1e-9)
+    assert math.isclose(block["mean_treatment"], 0.902, rel_tol=1e-9)
+    assert block["mean_delta"] > 0  # doctrine raises alignment
+    assert math.isclose(block["by_role"]["comms"]["delta"], 1.00 - 0.84, rel_tol=1e-9)
+    assert block["by_role"]["infrastructure"]["delta"] > 0
+
+
+def test_conformance_block_skips_none_alignment() -> None:
+    from aftershock.bench import _conformance_block
+
+    cells = [
+        _labeled_cell("society-nodoctrine", 11, 113.0, 0.759),
+        _labeled_cell("society", 11, 96.0, 0.904),
+    ]
+    cells[0]["team_alignment"] = None  # conformance check failed on this side
+    block = _conformance_block(cells, "society-nodoctrine", "society")
+    assert block["n"] == 0  # the seed has no usable pair
+    assert block["mean_delta"] is None
+
+
+def _doctrine_result(cells: list[dict[str, Any]]) -> dict[str, Any]:
+    """Assemble a doctrine-ablation result dict the way _run_doctrine_ablation does."""
+    from aftershock.bench import _conformance_block
+
+    res = analyze_ablation(cells, "society-nodoctrine", "society", key="label")
+    res["ablate"] = "doctrine"
+    res["arm"] = "society"
+    res["conformance"] = _conformance_block(cells, "society-nodoctrine", "society")
+    return res
+
+
+def test_render_doctrine_leads_with_conformance() -> None:
+    """Healthy doctrine ablation: conformance (primary) is rendered BEFORE the demoted
+    '## Lives (secondary signal)' section — the §11 honesty ordering."""
+    cells = [
+        _labeled_cell("society-nodoctrine", 11, 113.0, 0.759, {"comms": 0.83}),
+        _labeled_cell("society-nodoctrine", 23, 100.0, 0.760, {"comms": 0.85}),
+        _labeled_cell("society", 11, 96.0, 0.904, {"comms": 1.00}),
+        _labeled_cell("society", 23, 105.0, 0.900, {"comms": 1.00}),
+    ]
+    md = render_ablation_markdown(_doctrine_result(cells))
+    conf_pos = md.index("## Conformance")
+    lives_pos = md.index("## Lives (secondary signal)")
+    assert conf_pos < lives_pos, "conformance must lead the lives section"
+    assert "Verdict (lives Δ)" in md  # lives verdict is tagged as secondary
+
+
+def test_render_doctrine_warns_when_conformance_missing() -> None:
+    """If conformance failed on every seed (team_alignment=None), the lives verdict must
+    NOT be presented as the headline — a prominent 'Primary signal missing' warning fires."""
+    cells = [
+        _labeled_cell("society-nodoctrine", 11, 113.0, 0.0),
+        _labeled_cell("society-nodoctrine", 23, 100.0, 0.0),
+        _labeled_cell("society", 11, 140.0, 0.0),
+        _labeled_cell("society", 23, 130.0, 0.0),
+    ]
+    for c in cells:
+        c["team_alignment"] = None  # conformance check failed on both sides, all seeds
+    res = _doctrine_result(cells)
+    assert res["conformance"]["n"] == 0
+    md = render_ablation_markdown(res)
+    assert "Primary signal missing" in md
+    assert "secondary and unconfirmed" in md
+    # The conformance section is absent (no data) but the reader is warned, not misled.
+    assert "## Conformance" not in md
+
+
+def test_render_doctrine_warns_on_partial_conformance() -> None:
+    """When conformance is present for some but not all lives-paired seeds, a partial
+    warning names how many seeds are missing."""
+    cells = [
+        _labeled_cell("society-nodoctrine", 11, 113.0, 0.759, {"comms": 0.83}),
+        _labeled_cell("society-nodoctrine", 23, 100.0, 0.760, {"comms": 0.85}),
+        _labeled_cell("society", 11, 96.0, 0.904, {"comms": 1.00}),
+        _labeled_cell("society", 23, 105.0, 0.900, {"comms": 1.00}),
+    ]
+    cells[1]["team_alignment"] = None  # drop conformance on one control seed only
+    res = _doctrine_result(cells)
+    assert res["n"] == 2  # lives still pairs on both seeds
+    assert res["conformance"]["n"] == 1  # but conformance only on one
+    md = render_ablation_markdown(res)
+    assert "Conformance is missing for 1 of 2 seeds" in md
+    assert "## Conformance" in md  # the one usable seed is still reported
+
+
+def test_run_ablation_doctrine_rejects_mismatched_arms() -> None:
+    with tempfile.TemporaryDirectory() as td, pytest.raises(
+        ValueError, match="control == treatment"
+    ):
+        run_ablation("society", "swarm", seeds=[42], ticks=3,
+                     provider=None, out_dir=Path(td), ablate="doctrine")
+
+
+def test_run_ablation_doctrine_rejects_scripted() -> None:
+    with tempfile.TemporaryDirectory() as td, pytest.raises(ValueError, match="no doctrine"):
+        run_ablation("scripted", "scripted", seeds=[42], ticks=3,
+                     provider=None, out_dir=Path(td), ablate="doctrine")
+
+
+def test_run_ablation_doctrine_unknown_knob_raises() -> None:
+    with tempfile.TemporaryDirectory() as td, pytest.raises(
+        ValueError, match="unknown ablate knob"
+    ):
+        run_ablation("society", "society", seeds=[42], ticks=3,
+                     provider=None, out_dir=Path(td), ablate="bogus")
+
+
+def test_run_ablation_doctrine_end_to_end_mock() -> None:
+    """Full doctrine ablation through the engine with a MockProvider: distinct
+    labeled cells, conformance block present, ablate/arm markers set."""
+    from aftershock.llm.provider import MockProvider
+
+    prov = MockProvider(script=lambda m, s, u: '{"decisions": []}')
+    with tempfile.TemporaryDirectory() as td:
+        out = Path(td)
+        res = run_ablation("society", "society", seeds=[42, 57], ticks=2,
+                           provider=prov, out_dir=out, ablate="doctrine")
+        assert res["ablate"] == "doctrine"
+        assert res["arm"] == "society"
+        assert res["control"] == "society-nodoctrine"
+        assert res["treatment"] == "society"
+        assert res["n"] == 2
+        assert "conformance" in res and res["conformance"]["n"] == 2
+        # Both sides wrote distinct cell dirs (no collision on the same arm).
+        dirs = {p.name for p in out.iterdir() if p.is_dir()}
+        assert {"society-seed42", "society-seed57",
+                "society-nodoctrine-seed42", "society-nodoctrine-seed57"} <= dirs
+        # The rendered markdown carries the doctrine framing + conformance section.
+        md = render_ablation_markdown(res)
+        assert "doctrine on/off" in md
+        assert "## Conformance" in md
+
+
+def test_run_ablation_doctrine_resumes_both_sides() -> None:
+    """Re-running the doctrine ablation reuses both sides' completed cells ($0)."""
+    from aftershock.llm.provider import MockProvider
+
+    calls = {"n": 0}
+
+    def script(m, s, u):  # type: ignore[no-untyped-def]
+        calls["n"] += 1
+        return '{"decisions": []}'
+
+    with tempfile.TemporaryDirectory() as td:
+        out = Path(td)
+        run_ablation("society", "society", seeds=[42], ticks=2,
+                     provider=MockProvider(script=script), out_dir=out, ablate="doctrine")
+        first = calls["n"]
+        assert first > 0
+        # Second run must skip every cell (no further provider calls).
+        run_ablation("society", "society", seeds=[42], ticks=2,
+                     provider=MockProvider(script=script), out_dir=out, ablate="doctrine")
+        assert calls["n"] == first, "resume must not re-execute completed cells"

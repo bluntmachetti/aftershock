@@ -341,6 +341,52 @@ def test_bench_scripted_two_seeds_end_to_end() -> None:
 
 
 # ---------------------------------------------------------------------------
+# ablation --ablate doctrine (FIELD-NOTES §11): validation before the key check
+# ---------------------------------------------------------------------------
+
+
+def test_ablation_ablate_doctrine_mismatched_arms_exits_1() -> None:
+    """--ablate doctrine requires --control == --treatment; a mismatch exits 1
+    with a friendly error (before the API-key check, so no key needed)."""
+    result = _run_aftershock(
+        "ablation", "--ablate", "doctrine",
+        "--control", "society", "--treatment", "swarm", "--seeds", "42",
+        env=_env_without_key(),
+    )
+    _assert_rc(result, 1)
+    combined = result.stdout + result.stderr
+    assert "== --treatment" in combined
+    assert "Traceback" not in combined
+
+
+def test_ablation_ablate_doctrine_scripted_exits_1() -> None:
+    """--ablate doctrine on the scripted arm exits 1 (scripted has no doctrine)."""
+    result = _run_aftershock(
+        "ablation", "--ablate", "doctrine",
+        "--control", "scripted", "--treatment", "scripted", "--seeds", "42",
+        env=_env_without_key(),
+    )
+    _assert_rc(result, 1)
+    assert "no doctrine" in (result.stdout + result.stderr)
+
+
+def test_ablation_ablate_unknown_knob_exits_2() -> None:
+    """An unsupported --ablate value is rejected by argparse (exit 2)."""
+    result = _run_aftershock(
+        "ablation", "--ablate", "bogus",
+        "--control", "society", "--treatment", "society", "--seeds", "42",
+        env=_env_without_key(),
+    )
+    _assert_rc(result, 2)
+
+
+def test_ablation_help_shows_ablate() -> None:
+    """The ablation subcommand help advertises --ablate doctrine."""
+    result = _run_aftershock("ablation", "--help")
+    assert "--ablate" in result.stdout + result.stderr
+
+
+# ---------------------------------------------------------------------------
 # serve / mcp subcommands appear in --help
 # ---------------------------------------------------------------------------
 

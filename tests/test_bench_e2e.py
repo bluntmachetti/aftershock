@@ -333,7 +333,7 @@ def test_bench_e2e_offline_llm_arm(monkeypatch: pytest.MonkeyPatch) -> None:
     def _patched_build_arm(
         arm: str, seed: int, provider: Any,
         society_tools: bool = False, seed_sampler: bool = False,
-        pool_sizes: dict | None = None,
+        pool_sizes: dict | None = None, doctrine: bool = True,
     ) -> Any:
         build_arm_calls.append(arm)
         if arm == "society":

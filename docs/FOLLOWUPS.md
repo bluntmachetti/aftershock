@@ -2,15 +2,36 @@
 
 Short list of known project tasks that are not part of the current deployment path.
 
-## ▶ NEXT SESSION — resume here: Tier-1 bid-discipline / S1 (auction ruled out as the bottleneck)
+## ▶ NEXT SESSION — resume here: Tier-1 bid-discipline / S1 (the infra agent is now THE lever)
 
-**Status (2026-06-16): Tier-0 measurement is DONE and the Tier-1 questions are answered.** The harness
-(M1/M2/M3/M5) + D2 were built, paid-verified ($1.41 total), used to kill/qualify three levers, and then
-hardened. Full suite green (**823 tests**), ruff clean, `aftershock verify` PASS, frozen
-`kernel/protocol.py` untouched; the Tier-0 build passed a 6-dimension adversarial review (5 findings
-fixed). **On main:** PR #4 (Tier-0 harness + D2), PR #5 (+28 re-check), PR #6 (Field Logs 003+004, live
-at <https://bluntmachetti.github.io/aftershock/>). **Open:** **PR #7** — ablation verdict hardening,
-ready to merge. **Full backlog:** `.omc/research/improvement-experiments.md`.
+**Status (2026-06-16): Tier-0 done; Tier-1 questions answered; the doctrine on/off ablation (§11) is now
+resolved.** The harness (M1/M2/M3/M5) + D2 were built, paid-verified, used to kill/qualify levers, and
+hardened. Full suite green (**853 tests**), ruff clean, `aftershock verify` PASS, frozen
+`kernel/protocol.py` untouched. **On main:** PR #4 (Tier-0 harness + D2), PR #5 (+28 re-check), PR #6
+(Field Logs 003+004, live at <https://bluntmachetti.github.io/aftershock/>), PR #7 (ablation verdict
+hardening). **UNCOMMITTED on main:** the doctrine on/off ablation work (see next paragraph). **Full
+backlog:** `.omc/research/improvement-experiments.md`.
+
+**▶ Doctrine on/off ablation — DONE 2026-06-16 (FIELD-NOTES §18, resolves §11; UNCOMMITTED, ready to
+commit/PR).** Built the missing mechanism — a `doctrine: bool` knob on `build_arm`/`build_llm_agents`
+(default on = byte-identical to the published behaviour; scripted unaffected) and a same-arm ablation
+path `aftershock ablation --ablate doctrine --control society --treatment society` that pairs on a
+synthetic label, **leads with the deterministic conformance Δ** (the §11 primary signal), demotes the
+noisy lives Δ to a clearly-labelled secondary verdict, and warns when conformance is missing/partial.
++26 tests, ruff clean, `verify` PASS; passed a 4-dimension adversarial review (3 clean; the one real
+finding — a silent over-claim when conformance is absent — was fixed + tested). **Paid run** (society,
+seeds 11/23/37/42/57, 60t, **$0.41, 19 min**, `bench/results/2026-06-16-doctrine-ablation/`):
+- **Conformance (primary, deterministic):** 0.696 → 0.852, **Δ +0.156, all 5 seeds positive** — the
+  confident finding (n=5 exact sign test floors at p=0.0625, so add a 6th seed for a formal "credible").
+  Per-role: comms +0.219, rescue +0.169, medical +0.160, fire +0.103, **infra +0.094 still chronic at
+  0.667**, commander flat (ceiling).
+- **Lives (secondary, noisy):** 100.4 → 104.2, Δ +3.8, CI [+0.2,+8.6] but sign p=0.375 → "suggestive".
+  So the §11 n=1 "−17 lives cost" was a **small-sample artifact**: doctrine buys conformance at **no
+  detectable lives cost**. (Absolute conformance ≠ §11's 0.759/0.904 — the checker was hardened since;
+  compare the ~+0.15 effect, not the levels.)
+- **Files (uncommitted):** `src/aftershock/town/{prompts,arms}.py`, `src/aftershock/{bench,cli}.py`,
+  `tests/test_{arms,doctrine,bench,bench_e2e,cli_arms}.py`, `docs/FIELD-NOTES.md` (§18 + §11 pointer),
+  results dir. **Commit it** (branch off main first), then optionally PR.
 
 **What shipped (new surfaces):**
 - **M3 ablation** — `aftershock ablation --control X --treatment Y --seeds 11,23,37,42,57` → paired
@@ -55,19 +76,26 @@ write-up in `docs/FIELD-NOTES.md` §13–14):**
   stopped a plausible wrong headline. (FIELD-NOTES §16; `bench/results/2026-06-15-harsh-ablation/`.)
 
 **The bottom line for next session:** the auction is *not* the bottleneck (S2 dead, 0 inversions), and
-the arms do *not* separate on lives even under triage (the +16 was noise). So **stop chasing a harsh-
-world lives lever** — the society's honest, defensible story is **cost-efficiency + conformance**, not
-out-saving the swarm on lives. Aim there.
+the arms do *not* separate on lives even under triage (the +16 was noise). The society's honest story is
+**cost-efficiency + conformance** — and the doctrine ablation (§18) now *confirms* doctrine as a
+conformance lever (+0.156, 5/5 seeds) at no lives cost. So **stop chasing a harsh-world lives lever** and
+aim at the conformance story — specifically the one role still leaking it: **infra (S1)**.
 
 **Resume here (in order):**
-1. **Merge PR #7** (ablation verdict hardening) if not already merged.
-2. **Caveat the "+28" in the README / Devpost copy** — it's an n=5 paired mean with a wide CI
-   (directionally solid: society ≥ swarm on all 5 seeds; magnitude soft: sign test p=0.125, power 0.42,
-   one seed = +88). `bench/results/2026-06-15-plus28-recheck/`, FIELD-NOTES §17.
-3. **Bid discipline / S1** — the highest-value remaining lever, and cheap (deterministic, no lives runs):
-   `redundant` is the dominant auction-loss category (~50–57/run: agents re-bidding already-satisfied
-   resources) and the infra agent is the only role <0.85 conformance. Optimise the conformance signal;
-   gate any change on held-out lives + the ablation `verdict` field.
+1. **Commit the doctrine ablation + README/Devpost caveat work** (§18 + the +28 caveats; uncommitted on
+   main — branch off first). Optionally PR.
+2. **DONE (2026-06-16): caveated the "+28" in README.md + docs/SUBMISSION.md** (Devpost/video script) —
+   "light caveat, keep the number" framing: kept ≈+28 as the headline, appended a one-line honesty note
+   (n=5 paired mean; directionally robust — society ≥ swarm on all 5 seeds; magnitude soft — sign test
+   p=0.125, power 0.42, one seed dominates; §17). Video beat-3 spoken line kept, with a not-spoken
+   director's note to render any lower-third as "≈+28 (n=5)". SUBMISSION "what we learned" also now points
+   at §18 as the most robust number. (Source: `bench/results/2026-06-15-plus28-recheck/`, FIELD-NOTES §17.)
+3. **Bid discipline / S1 — now the clear #1 lever.** The doctrine ablation's per-role data confirms the
+   **infra agent is the lone role still <0.70 conformance (0.667)** — it keeps attempting repairs with no
+   crew. Cheap and deterministic (no lives runs needed to optimise): also `redundant` is the dominant
+   auction-loss category (~50–57/run). Optimise the conformance signal; gate any change on held-out lives
+   + the ablation `verdict` field. A 6th seed on the §18 doctrine ablation would also tip its conformance
+   verdict from the n=5 sign-test floor (p=0.0625) to a formal "credible".
 4. **memory-v2 / autoresearch on conformance** (Tier 3) — now that the harness can say "credible"
    honestly, an autoresearch loop can optimise conformance and gate on `verdict == "credible"`.
 5. **Optional, paid:** M4 full 60-tick × 5-seed σ re-validation; a properly-powered (~25-seed)

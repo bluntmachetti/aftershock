@@ -664,9 +664,25 @@ def cmd_ablation(args: argparse.Namespace) -> int:
 
     control: str = args.control
     treatment: str = args.treatment
+    ablate: str | None = getattr(args, "ablate", None)
     for a in (control, treatment):
         if a not in ARMS:
             print(f"error: unknown arm {a!r}; valid: {ARMS}", file=sys.stderr)
+            return 1
+    if ablate == "doctrine":
+        if control != treatment:
+            print(
+                "error: --ablate doctrine requires --control == --treatment "
+                f"(the arm to ablate); got control={control!r}, treatment={treatment!r}",
+                file=sys.stderr,
+            )
+            return 1
+        if control == "scripted":
+            print(
+                "error: the scripted arm carries no doctrine prompts — "
+                "ablate an LLM arm (society/swarm/solo)",
+                file=sys.stderr,
+            )
             return 1
 
     try:
@@ -694,6 +710,7 @@ def cmd_ablation(args: argparse.Namespace) -> int:
 
     result = run_ablation(
         control, treatment, seeds, args.ticks, provider, out_dir,
+        ablate=ablate,
         society_tools=getattr(args, "society_tools", False),
         seed_sampler=getattr(args, "seed_sampler", False),
         pool_sizes=_parse_pools(getattr(args, "pools", None)),
@@ -1024,9 +1041,12 @@ def main() -> None:
         help="Paired control-vs-treatment ablation (sign test + CI + power curve)",
     )
     p_ablation.add_argument("--control", required=True, choices=list(ARMS),
-                            help="Baseline arm")
+                            help="Baseline arm (for --ablate, the arm to test, == --treatment)")
     p_ablation.add_argument("--treatment", required=True, choices=list(ARMS),
                             help="Arm under test")
+    p_ablation.add_argument("--ablate", default=None, choices=["doctrine"],
+                            help="Same-arm knob ablation: 'doctrine' flips doctrine "
+                                 "off (control) vs on (treatment); requires control==treatment")
     p_ablation.add_argument("--seeds", required=True,
                             help="Comma-separated seeds shared by both arms (e.g. 11,23,37)")
     p_ablation.add_argument("--ticks", type=int, default=60, help="Tick budget (default 60)")

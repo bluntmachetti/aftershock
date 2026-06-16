@@ -67,11 +67,14 @@ measured cost tradeoff.*
 
 Two findings, both causal because every arm faces byte-identical worlds:
 
-1. **The protocol is worth +28 lives per run.** Same five cheap models, with vs without
+1. **The protocol is worth ~+28 lives per run.** Same five cheap models, with vs without
    the negotiation protocol: 103.2 vs 75.6 lives saved, 0.4 vs 3.0 missions failed.
    The run records show why — the swarm wasted 160 decisions racing for empty resource
    pools; the society resolved contention in the auction *before* acting.
    (*swarm's high lives-per-$ is efficiency at a much worse outcome.)
+   *(Caveat: +28 is an n=5 paired mean — society ≥ swarm on all five seeds (robust
+   direction), but the magnitude is soft: sign test p=0.125, power 0.42, leveraged by one
+   seed; a tight bound needs ~25 seeds. See [FIELD-NOTES §17](docs/FIELD-NOTES.md).)*
 2. **The society matches the flagship at 65% of the cost.** A coordinated team of
    qwen3.5-flash workers under a qwen3.5-plus commander saves as many lives as one
    qwen3-max doing everything (103.2 vs 104.2 — within noise), for 52% more lives per

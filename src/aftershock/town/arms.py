@@ -71,6 +71,7 @@ def build_arm(
     society_tools: bool = False,
     seed_sampler: bool = False,
     pool_sizes: dict[str, int] | None = None,
+    doctrine: bool = True,
 ) -> ArmSetup:
     """Build all components for one (arm, seed) benchmark cell.
 
@@ -94,6 +95,11 @@ def build_arm(
         pool_sizes: D2 opt-in (CLI --pools). An override merged onto POOL_SIZES to
                   harden the synthetic world. Ignored on the scenario path (a pack
                   defines its own pools). None reproduces the canonical world.
+        doctrine: when True (default) the LLM arms (society/swarm/solo) receive their
+                  doctrine prompt blocks — byte-identical to the published behaviour.
+                  When False the doctrine layer is dropped for those arms, giving the
+                  doctrine-naive control for the doctrine on/off ablation
+                  (FIELD-NOTES §11). No effect on the scripted arm (it has no prompts).
 
     Returns:
         ArmSetup with fully wired world, society, agents, registry, roles,
@@ -129,12 +135,16 @@ def build_arm(
     if arm == "society":
         return _build_society(
             world, registry, seed, provider, lessons=lessons, use_tools=society_tools,
-            engine_seed=engine_seed,
+            engine_seed=engine_seed, doctrine=doctrine,
         )
     if arm == "swarm":
-        return _build_swarm(world, registry, seed, provider, engine_seed=engine_seed)
+        return _build_swarm(
+            world, registry, seed, provider, engine_seed=engine_seed, doctrine=doctrine,
+        )
     if arm == "solo":
-        return _build_solo(world, registry, seed, provider, engine_seed=engine_seed)
+        return _build_solo(
+            world, registry, seed, provider, engine_seed=engine_seed, doctrine=doctrine,
+        )
 
     raise ValueError(f"unhandled arm {arm!r}")  # unreachable
 
@@ -184,6 +194,7 @@ def _build_society(
     lessons: list[str] | None = None,
     use_tools: bool = False,
     engine_seed: int | None = None,
+    doctrine: bool = True,
 ) -> ArmSetup:
     roles = load_roles(_TOWN_DIR / "roles")
     _six = ("commander", "comms", "fire", "infrastructure", "medical", "rescue")
@@ -191,7 +202,7 @@ def _build_society(
     society = TownSociety(roster=roster)
     agents = build_llm_agents(
         roles, provider, lessons=lessons, arm="society", force_tools=use_tools,
-        engine_seed=engine_seed,
+        engine_seed=engine_seed, doctrine=doctrine,
     )
     return ArmSetup(
         world=world,
@@ -210,13 +221,15 @@ def _build_swarm(
     seed: int,  # noqa: ARG001
     provider: Any,
     engine_seed: int | None = None,
+    doctrine: bool = True,
 ) -> ArmSetup:
     roles = load_roles(_TOWN_DIR / "roles_swarm")
     # Roster: agent_id == role name for the five swarm roles
     roster = {name: name for name in roles}
     society = TownSociety(roster=roster)
-    # Load doctrine once; failure raises at build time
-    rules = load_doctrine()
+    # Load doctrine once; failure raises at build time. doctrine=False (the ablation
+    # control) drops the layer wholesale — no load, no blocks (FIELD-NOTES §11).
+    rules = load_doctrine() if doctrine else []
     agents: dict[str, Agent] = {}
     for agent_id, role in roles.items():
         blocks = doctrine_blocks(rules, role=agent_id, arm="swarm")
@@ -253,13 +266,15 @@ def _build_solo(
     seed: int,  # noqa: ARG001
     provider: Any,
     engine_seed: int | None = None,
+    doctrine: bool = True,
 ) -> ArmSetup:
     roles = load_roles(_TOWN_DIR / "roles_solo")
     solo_role = roles["solo"]
     roster = {"solo": "solo"}
     society = TownSociety(roster=roster)
-    # Load doctrine once; failure raises at build time
-    rules = load_doctrine()
+    # Load doctrine once; failure raises at build time. doctrine=False (the ablation
+    # control) drops the layer wholesale — no load, no blocks (FIELD-NOTES §11).
+    rules = load_doctrine() if doctrine else []
     blocks = doctrine_blocks(rules, role="solo", arm="solo")
     if blocks:
         solo_role = solo_role.model_copy(

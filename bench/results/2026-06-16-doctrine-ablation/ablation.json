@@ -1,0 +1,171 @@
+{
+  "ablate": "doctrine",
+  "alpha": 0.05,
+  "arm": "society",
+  "ci": {
+    "confidence": 0.95,
+    "lower": 0.2,
+    "n_resamples": 10000,
+    "upper": 8.6
+  },
+  "ci_excludes_zero": true,
+  "conformance": {
+    "by_role": {
+      "commander": {
+        "control": 0.9522058823529411,
+        "delta": -0.012598039215686141,
+        "treatment": 0.939607843137255
+      },
+      "comms": {
+        "control": 0.7728058608058609,
+        "delta": 0.2188608058608057,
+        "treatment": 0.9916666666666666
+      },
+      "fire": {
+        "control": 0.7718155025051576,
+        "delta": 0.1028095928095929,
+        "treatment": 0.8746250953147505
+      },
+      "infrastructure": {
+        "control": 0.5736279069767442,
+        "delta": 0.0938567136657712,
+        "treatment": 0.6674846206425153
+      },
+      "medical": {
+        "control": 0.7332900432900433,
+        "delta": 0.1603691037578504,
+        "treatment": 0.8936591470478937
+      },
+      "rescue": {
+        "control": 0.6545682616406798,
+        "delta": 0.1691178285848841,
+        "treatment": 0.8236860902255639
+      }
+    },
+    "mean_control": 0.6959471875965185,
+    "mean_delta": 0.15567853235994444,
+    "mean_treatment": 0.851625719956463,
+    "n": 5,
+    "per_seed": [
+      {
+        "control": 0.6875,
+        "delta": 0.14989837398373984,
+        "seed": 11,
+        "treatment": 0.8373983739837398
+      },
+      {
+        "control": 0.7364341085271318,
+        "delta": 0.07348324684476903,
+        "seed": 23,
+        "treatment": 0.8099173553719008
+      },
+      {
+        "control": 0.6758241758241759,
+        "delta": 0.2195246613851265,
+        "seed": 37,
+        "treatment": 0.8953488372093024
+      },
+      {
+        "control": 0.6759776536312849,
+        "delta": 0.19620279749653458,
+        "seed": 42,
+        "treatment": 0.8721804511278195
+      },
+      {
+        "control": 0.704,
+        "delta": 0.13928358208955227,
+        "seed": 57,
+        "treatment": 0.8432835820895522
+      }
+    ],
+    "seeds": [
+      11,
+      23,
+      37,
+      42,
+      57
+    ],
+    "sign_test_p": 0.0625
+  },
+  "control": "society-nodoctrine",
+  "mean_control": 100.4,
+  "mean_delta": 3.8,
+  "mean_treatment": 104.2,
+  "n": 5,
+  "n_negative": 1,
+  "n_positive": 4,
+  "n_tied": 0,
+  "observed_power": 0.3304226063461162,
+  "per_seed": [
+    {
+      "control": 127.0,
+      "delta": 13.0,
+      "seed": 11,
+      "treatment": 140.0
+    },
+    {
+      "control": 85.0,
+      "delta": 1.0,
+      "seed": 23,
+      "treatment": 86.0
+    },
+    {
+      "control": 94.0,
+      "delta": -1.0,
+      "seed": 37,
+      "treatment": 93.0
+    },
+    {
+      "control": 90.0,
+      "delta": 5.0,
+      "seed": 42,
+      "treatment": 95.0
+    },
+    {
+      "control": 106.0,
+      "delta": 1.0,
+      "seed": 57,
+      "treatment": 107.0
+    }
+  ],
+  "power_curve": [
+    {
+      "effect": 2.0,
+      "power_at_current_n": 0.12316223109333818,
+      "required_n": 62
+    },
+    {
+      "effect": 5.0,
+      "power_at_current_n": 0.5166063353576368,
+      "required_n": 10
+    },
+    {
+      "effect": 10.0,
+      "power_at_current_n": 0.9794856501761453,
+      "required_n": 3
+    },
+    {
+      "effect": 15.0,
+      "power_at_current_n": 0.999973820764007,
+      "required_n": 2
+    },
+    {
+      "effect": 20.0,
+      "power_at_current_n": 0.9999999992596104,
+      "required_n": 2
+    }
+  ],
+  "power_target": 0.8,
+  "sd_delta": 5.585696017507576,
+  "seeds": [
+    11,
+    23,
+    37,
+    42,
+    57
+  ],
+  "sign_significant": false,
+  "sign_test_p": 0.375,
+  "treatment": "society",
+  "verdict": "suggestive"
+}

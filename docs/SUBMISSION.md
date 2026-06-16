@@ -66,6 +66,8 @@ The project has three core pieces:
 The headline result: with the same five qwen3.5-flash workers, adding the negotiation protocol raised
 mean lives saved from 75.6 to 103.2 and cut failed missions from 3.0 to 0.4. The structured society
 matched the qwen3-max solo agent's outcome within noise while costing about 35% less per run.
+(Honest caveat: the ~+28-life gap is an n=5 paired mean — directionally robust, society ≥ swarm on all
+five seeds, but the magnitude is soft, n=5 with one seed dominating; see FIELD-NOTES §17.)
 
 Every run is replayable. Same seed plus same decisions gives the same outcome, byte for byte. The
 web observatory lets judges scrub through ticks, inspect agent decisions, compare arms, start live
@@ -152,6 +154,9 @@ The strongest result is that coordination structure matters more than agent coun
 Five qwen3.5-flash agents without a protocol saved 75.6 lives on average. The same five cheap models
 inside a structured society saved 103.2. The difference was not model intelligence; it was the
 mechanism that turned resource contention into explicit information before agents wasted actions.
+(The ~+28-life gap is directionally robust — society ≥ swarm on every one of the 5 paired seeds — but
+its precise size is an n=5 estimate with a wide CI; FIELD-NOTES §17. The most robust number we report
+is the deterministic doctrine-conformance effect: +0.156 team alignment, positive on all 5 seeds, §18.)
 
 We also learned that a society of small models can match a flagship solo model when the task is
 decomposable. The structured society saved 103.2 lives per run versus 104.2 for qwen3-max solo, but
@@ -246,6 +251,10 @@ protocol alone is worth twenty-eight lives a run."
 SHOW: Bench tab; the four-arm table; highlight swarm (75.6) vs society (103.2) and missions-failed
 (3.0 → 0.4).
 
+> Note (not spoken): "twenty-eight" is an n=5 paired mean — robust in direction (society ≥ swarm on
+> all five seeds) but soft in magnitude (§17). The claim is honest as a *direction*; if a lower-third
+> shows the number, keep it as "≈+28 (n=5)" rather than an exact figure.
+
 ### 4 · Matches the flagship (1:22–1:42)
 
 VO: "And the society matches a single qwen3-max doing everything — 103 lives versus 104 — at about a
@@ -287,7 +296,7 @@ SHOW: final scoreboard / map, then the live URL card.
    to the matching VO length; replay/scrub recorded runs (no live-LLM latency on camera). The NYC
    beat uses the `seed7-scripted` Ida run; the society beats use a `seed42-society` run.
 3. **Title/section cards**: optional qwencloud-image-generation poster; lower-thirds for the key
-   numbers (+28 lives, 103.2 vs 75.6, 948 s, 16% held) via ffmpeg drawtext.
+   numbers (≈+28 lives (n=5), 103.2 vs 75.6, 948 s, 16% held) via ffmpeg drawtext.
 4. **Assemble** (ffmpeg): concat clips, lay VO per beat, hold the Bench table long enough to read,
    normalize loudness, export ≤ 3:00 H.264 1080p.
 

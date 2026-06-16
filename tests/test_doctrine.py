@@ -304,6 +304,39 @@ def test_build_llm_agents_doctrine_failure_raises(roles: dict, tmp_path: Path) -
         load_doctrine(bad_yaml)
 
 
+def test_build_llm_agents_doctrine_false_omits_blocks(roles: dict) -> None:
+    """build_llm_agents(doctrine=False) drops every doctrine block from every role —
+    the doctrine-naive control for the FIELD-NOTES §11 ablation."""
+    provider = MockProvider(script=["{}"])
+    agents = build_llm_agents(roles, provider, arm="society", doctrine=False)
+    for agent_id, agent in agents.items():
+        system = agent._system  # type: ignore[attr-defined]
+        assert "TEAM DOCTRINE:" not in system, f"doctrine leaked into {agent_id}"
+        assert "YOUR ROLE DOCTRINE:" not in system, f"doctrine leaked into {agent_id}"
+
+
+def test_build_llm_agents_doctrine_false_skips_yaml_load(roles: dict) -> None:
+    """doctrine=False must not even load doctrine.yaml — a broken _doctrine_rules is
+    ignored, proving the layer is dropped wholesale rather than rendered-then-hidden."""
+    provider = MockProvider(script=["{}"])
+    # A poison rule that WOULD appear if the loader ran; doctrine=False must skip it.
+    poison = [Rule(id="ZZ", text="POISON", arms=("society",), role=None)]
+    agents = build_llm_agents(
+        roles, provider, arm="society", doctrine=False, _doctrine_rules=poison
+    )
+    assert "POISON" not in agents["commander"]._system  # type: ignore[attr-defined]
+
+
+def test_build_llm_agents_doctrine_true_is_default(roles: dict) -> None:
+    """The default (no doctrine kwarg) is byte-identical to doctrine=True."""
+    provider = MockProvider(script=["{}"])
+    default = build_llm_agents(roles, provider, arm="society")
+    explicit = build_llm_agents(roles, provider, arm="society", doctrine=True)
+    assert (
+        default["commander"]._system == explicit["commander"]._system  # type: ignore[attr-defined]
+    )
+
+
 def test_build_llm_agents_scripted_arm_unaffected() -> None:
     """Scripted agents are not constructed via build_llm_agents — just verify
     that doctrine_blocks for scripted arm returns empty (scripted is not a valid arm)."""
