@@ -34,6 +34,17 @@ const DISTRICTS = [
 ]
 const EVENT_KINDS = ['fire', 'aftershock', 'road_block']
 
+// Auto-start a scripted demo stream when the Live tab first mounts, so a judge
+// who opens it sees a live negotiation immediately. Opt out with ?autostart=0
+// (e.g. to open a static control view). Evaluated once at module load.
+const AUTO_START_ENABLED =
+  new URLSearchParams(window.location.search).get('autostart') !== '0'
+
+// Demo defaults shared by auto-start and the Demo Mode preset, kept in one place
+// so the call args and the state setters can't drift apart.
+const DEMO_SEED = 42
+const DEMO_TICKS = 30
+
 const ARM_COLORS: Record<string, string> = {
   scripted: FALLBACK_COLOR,
   solo: STATUS_COLORS.open,
@@ -100,6 +111,48 @@ export function LiveTab({ onTickReceived }: Props) {
     const id = setInterval(poll, 2000)
     return () => { cancelled = true; clearInterval(id) }
   }, [])
+
+  const refreshStatus = useCallback(async () => {
+    // Flip running on/off immediately after start/stop instead of waiting for the
+    // 2s poll, so the WS opens/closes and the controls update without lag.
+    try {
+      setStatus(await api.liveStatus())
+    } catch (e) {
+      setStatusError((e as Error).message)
+    }
+  }, [])
+
+  const autoStartScripted = useCallback(async () => {
+    setStartError(null)
+    setLog([])
+    setLiveTicks([])
+    setLiveWorld(null)
+    setSelectedMission(null)
+    setInjectMarker(null)
+    setArm('scripted')
+    setSeed(DEMO_SEED)
+    setTicks(DEMO_TICKS)
+    setScenario(SYNTHETIC_SCENARIO)
+    setAarEnabled(false)
+    setMemoryEnabled(false)
+    setMemoryActive(false)
+    try {
+      await api.startLive('scripted', DEMO_SEED, DEMO_TICKS)
+      appendLog('[auto] scripted demo stream started')
+      await refreshStatus()
+    } catch (e) {
+      // On a token-gated deploy the POST may 401; the presenter can Start manually.
+      appendLog(`[auto] auto-start skipped: ${(e as Error).message}`)
+    }
+  }, [appendLog, refreshStatus])
+
+  const autoStartedRef = useRef(false)
+  useEffect(() => {
+    if (!AUTO_START_ENABLED || autoStartedRef.current || status === null) return
+    autoStartedRef.current = true
+    if (status.running) return // a run is already live — just watch it
+    void autoStartScripted()
+  }, [status, autoStartScripted])
 
   useEffect(() => {
     let cancelled = false
@@ -227,10 +280,22 @@ export function LiveTab({ onTickReceived }: Props) {
         (aarEnabled ? ' aar=on' : '') +
         (memoryEnabled ? ' memory=on' : ''),
       )
+      await refreshStatus()
     } catch (e) {
       setStartError(friendlyError(e as Error))
     } finally {
       setStarting(false)
+    }
+  }
+
+  async function handleStop() {
+    try {
+      await api.stopLive()
+      appendLog('[stop] run cancelled')
+    } catch (e) {
+      setStartError(friendlyError(e as Error))
+    } finally {
+      await refreshStatus()
     }
   }
 
@@ -250,8 +315,8 @@ export function LiveTab({ onTickReceived }: Props) {
 
   const handleDemo = useCallback(() => {
     setArm('scripted')
-    setSeed(42)
-    setTicks(30)
+    setSeed(DEMO_SEED)
+    setTicks(DEMO_TICKS)
     setScenario(SYNTHETIC_SCENARIO)
     setAarEnabled(false)
     setMemoryEnabled(false)
@@ -392,15 +457,26 @@ export function LiveTab({ onTickReceived }: Props) {
             ))}
           </div>
 
-          <button
-            onClick={handleStart}
-            disabled={isRunning || starting}
-            className="w-full py-1.5 rounded text-[10px] font-mono uppercase tracking-wider transition-all
-              bg-signal-amber/20 border border-signal-amber text-signal-amber
-              hover:bg-signal-amber/30 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {starting ? 'Starting…' : isRunning ? 'Running…' : 'Start'}
-          </button>
+          {isRunning ? (
+            <button
+              onClick={handleStop}
+              className="w-full py-1.5 rounded text-[10px] font-mono uppercase tracking-wider transition-all
+                bg-signal-red/15 border border-signal-red text-signal-red
+                hover:bg-signal-red/25"
+            >
+              Stop
+            </button>
+          ) : (
+            <button
+              onClick={handleStart}
+              disabled={starting}
+              className="w-full py-1.5 rounded text-[10px] font-mono uppercase tracking-wider transition-all
+                bg-signal-amber/20 border border-signal-amber text-signal-amber
+                hover:bg-signal-amber/30 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {starting ? 'Starting…' : 'Start'}
+            </button>
+          )}
 
           {startError && (
             <div className="text-[9px] font-mono text-signal-red border border-signal-red/30 bg-signal-red/10 rounded px-2 py-1">

@@ -62,6 +62,11 @@ _SCENARIO_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _MAX_TICKS_LIVE = 120
 _MAX_LIMIT = 200
 _DEFAULT_SYNTHETIC_TICKS = 30
+# Wall-clock pause between streamed ticks in a LIVE run, so a fast (scripted)
+# stream plays at a watchable cadence instead of bursting all ticks at once.
+# Presentation-only: passed to Engine.run(inter_tick_delay_s=...) on the live path;
+# cli/bench/verify never set it, so determinism is unaffected. Tests neutralize it.
+_LIVE_TICK_DELAY_S = 0.6
 # Scenario tick budget (default + under-budget floor) comes from the shared
 # town.scenario.scenario_tick_budget helper so the CLI and the live API agree.
 _VALID_INJECT_KINDS = frozenset({"fire", "aftershock", "road_block"})
@@ -119,6 +124,10 @@ class _LiveState:
     memory: bool = False
     # AAR message stored after generation so late WS connects can replay it
     aar_msg: dict[str, Any] | None = None
+    # Set by _run_live / start_live; declared so they're typed and always present
+    # (a missing _task previously let stop_live silently orphan a just-started run).
+    _society: Any = None
+    _task: asyncio.Task[Any] | None = None
 
 
 _live: _LiveState | None = None
@@ -363,7 +372,7 @@ async def _run_live(
     recorder = Recorder(runs_root, run_id, manifest_rec)
 
     # Store the society reference so inject_event can reach it
-    state._society = setup.society  # type: ignore[attr-defined]
+    state._society = setup.society
 
     def _on_tick(record: Any, world_state_dict: dict[str, Any] | None = None) -> None:
         """Sync tick listener: buffer and push to WS clients."""
@@ -388,7 +397,7 @@ async def _run_live(
     )
 
     try:
-        summary_run = await engine.run()
+        summary_run = await engine.run(inter_tick_delay_s=_LIVE_TICK_DELAY_S)
         summary_dict: dict[str, Any] = {
             "run_id": summary_run.run_id,
             "seed": summary_run.seed,
@@ -427,6 +436,11 @@ async def _run_live(
         with contextlib.suppress(Exception):
             await _broadcast(state, {"type": "error", "detail": "live run encountered an error"})
     finally:
+        # Close the recorder even on cancel/error — engine.run() only closes it on
+        # its happy path, so a Stop mid-run would otherwise leak file handles
+        # (the Stop button is built for repeated use within a demo session).
+        with contextlib.suppress(Exception):
+            recorder.close()
         state.running = False
         for ws in list(state.connections):
             with contextlib.suppress(Exception):
@@ -752,19 +766,21 @@ def create_app(
                 aar=req.aar,
                 memory=req.memory,
             )
-
-        task = asyncio.create_task(
-            _run_live(
-                req.arm,
-                req.seed,
-                ticks,
-                runs_root,
-                do_aar=req.aar,
-                do_memory=req.memory,
-                pack=pack,
+            # Create the task and retain a strong ref to it BEFORE releasing the
+            # lock. create_task only schedules — the coroutine body doesn't run
+            # until the next loop turn — so a racing stop_live always observes a
+            # set _task rather than orphaning the run.
+            _live._task = asyncio.create_task(
+                _run_live(
+                    req.arm,
+                    req.seed,
+                    ticks,
+                    runs_root,
+                    do_aar=req.aar,
+                    do_memory=req.memory,
+                    pack=pack,
+                )
             )
-        )
-        _live._task = task  # type: ignore[attr-defined]  # retain strong ref to prevent GC
 
         return JSONResponse({"live_id": live_id})
 
@@ -793,6 +809,27 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
         return JSONResponse({"ok": True})
+
+    @app.post("/api/live/stop", dependencies=[Depends(_require_token)])
+    async def stop_live() -> JSONResponse:
+        """Cancel the in-progress live run so an operator can take manual control
+        (e.g. interrupt the auto-started scripted demo to launch a real-agent run).
+        Idempotent: a no-op 200 when nothing is running."""
+        global _live
+        async with _live_lock:
+            state = _live
+            if state is None or not state.running:
+                return JSONResponse({"ok": True, "running": False})
+            # Flag stopped first so a racing inject/start sees the run as over.
+            state.running = False
+            task = state._task
+        if task is not None and not task.done():
+            task.cancel()
+            # Awaiting the cancelled task lets _run_live's finally close the WS
+            # clients and the recorder before we return.
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        return JSONResponse({"ok": True, "running": False})
 
     # ------------------------------------------------------------------
     # WS /ws/live

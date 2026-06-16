@@ -115,4 +115,9 @@ export const api = {
 
   injectEvent: (kind: string, district: string): Promise<void> =>
     post('/api/live/inject', { kind, district }),
+
+  // Cancel the in-progress live run (idempotent) so the operator can take manual
+  // control — e.g. interrupt the auto-started scripted demo to start a real run.
+  stopLive: (): Promise<{ ok: boolean; running: boolean }> =>
+    post('/api/live/stop', {}),
 }

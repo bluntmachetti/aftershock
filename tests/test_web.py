@@ -106,11 +106,14 @@ def bench_root(tmp_path: Path) -> Path:
 
 
 @pytest.fixture(autouse=True)
-def reset_live_state():
-    """Reset the module-level _live singleton before each test."""
+def reset_live_state(monkeypatch: pytest.MonkeyPatch):
+    """Reset the module-level _live singleton before each test, and neutralize the
+    live-stream tick pacing (a presentation-only wall-clock delay) so the suite stays
+    fast. The dedicated pacing test re-enables a small delay in its own body."""
     import aftershock.web as web_mod
 
     web_mod._live = None
+    monkeypatch.setattr(web_mod, "_LIVE_TICK_DELAY_S", 0.0)
     yield
     web_mod._live = None
 
@@ -433,6 +436,78 @@ def test_live_scripted_end_to_end(tmp_path: Path) -> None:
     run_dir = run_dirs[0]
     assert (run_dir / "run.json").exists()
     assert (run_dir / "ticks.ndjson").exists()
+
+
+def test_live_tick_pacing_spaces_ticks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """_LIVE_TICK_DELAY_S paces a fast scripted stream server-side, so ticks arrive
+    spaced over wall-clock instead of bursting all at once."""
+    import aftershock.web as web_mod
+
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+    delay = 0.05
+    monkeypatch.setattr(web_mod, "_LIVE_TICK_DELAY_S", delay)
+    app = create_app(runs_root)
+
+    with TestClient(app) as client:
+        resp = client.post("/api/live", json={"arm": "scripted", "seed": 3, "ticks": 8})
+        assert resp.status_code == 200
+        start = time.monotonic()
+        ticks_seen = 0
+        with client.websocket_connect("/ws/live") as ws:
+            deadline = time.monotonic() + 15.0
+            while time.monotonic() < deadline:
+                try:
+                    raw = ws.receive_json()
+                except Exception:
+                    break
+                if raw.get("type") == "tick":
+                    ticks_seen += 1
+                elif raw.get("type") == "done":
+                    break
+        elapsed = time.monotonic() - start
+
+    assert ticks_seen >= 2
+    # With a per-tick delay the run must span at least a couple of pacing gaps;
+    # the un-paced regression would burst to completion well under this bound.
+    assert elapsed >= 2 * delay
+
+
+def test_live_stop_cancels_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """POST /api/live/stop cancels an in-progress run; status returns to idle and a
+    fresh run can start (no 409 from the singleton)."""
+    import aftershock.web as web_mod
+
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+    # Pace it so the run stays in-progress long enough to interrupt.
+    monkeypatch.setattr(web_mod, "_LIVE_TICK_DELAY_S", 0.2)
+    app = create_app(runs_root)
+
+    with TestClient(app) as client:
+        resp = client.post("/api/live", json={"arm": "scripted", "seed": 7, "ticks": 60})
+        assert resp.status_code == 200
+        time.sleep(0.1)  # let the background task begin
+
+        stop = client.post("/api/live/stop")
+        assert stop.status_code == 200
+        assert stop.json()["running"] is False
+
+        assert client.get("/api/live").json()["running"] is False
+
+        # No 409 — the singleton is free again.
+        resp2 = client.post("/api/live", json={"arm": "scripted", "seed": 8, "ticks": 4})
+        assert resp2.status_code == 200
+        client.post("/api/live/stop")  # tidy up the second run
+
+
+def test_live_stop_no_run_is_noop(runs_root: Path) -> None:
+    """Stopping with no run in progress is an idempotent 200."""
+    app = create_app(runs_root)
+    with TestClient(app) as client:
+        resp = client.post("/api/live/stop")
+        assert resp.status_code == 200
+        assert resp.json()["running"] is False
 
 
 # ---------------------------------------------------------------------------

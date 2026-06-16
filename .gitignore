@@ -44,6 +44,9 @@ CLAUDE.md
 # Frontend build artifacts
 web/node_modules/
 web/dist/
+# Playwright E2E artifacts (never commit)
+web/test-results/
+web/playwright-report/
 
 # Agent-skills installers (keep third-party skills out of the repo)
 .agents/

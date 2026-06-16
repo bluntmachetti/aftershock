@@ -2,7 +2,9 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Live Negotiation Dashboard', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/')
+    // ?autostart=0 opens a static control view so these tests assert the idle
+    // surface; the auto-start behavior is covered in its own describe block below.
+    await page.goto('/?autostart=0')
     await page.getByRole('button', { name: 'live', exact: true }).click()
   })
 
@@ -69,5 +71,23 @@ test.describe('Live Negotiation Dashboard', () => {
     const startBtn = page.getByRole('button', { name: 'Start' })
     await expect(startBtn).toBeVisible()
     await expect(startBtn).toBeEnabled()
+  })
+})
+
+test.describe('Live auto-start', () => {
+  test('auto-starts a scripted stream on open and can be stopped', async ({ page }) => {
+    // Default (no ?autostart=0): opening the Live tab begins a scripted run with no click.
+    await page.goto('/')
+    await page.getByRole('button', { name: 'live', exact: true }).click()
+
+    // The status flips to RUNNING and a Stop (take-control) button appears.
+    await expect(page.getByText(/RUNNING/)).toBeVisible()
+    const stopBtn = page.getByRole('button', { name: 'Stop', exact: true })
+    await expect(stopBtn).toBeVisible()
+
+    // Taking manual control returns to idle with Start available again.
+    await stopBtn.click()
+    await expect(page.getByText('IDLE')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Start' })).toBeVisible()
   })
 })

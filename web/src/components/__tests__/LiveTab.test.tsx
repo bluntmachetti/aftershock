@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { LiveTab } from '../LiveTab'
+import { api } from '../../lib/api'
 
 // Mock the API module
 vi.mock('../../lib/api', () => ({
@@ -70,5 +71,13 @@ describe('LiveTab layout', () => {
   it('shows IDLE status when not running', () => {
     render(<LiveTab onTickReceived={vi.fn()} />)
     expect(screen.getByText(/IDLE/)).toBeInTheDocument()
+  })
+
+  it('auto-starts a scripted demo stream on mount', async () => {
+    render(<LiveTab onTickReceived={vi.fn()} />)
+    // Without any click, the tab kicks off a deterministic scripted run.
+    await waitFor(() => {
+      expect(api.startLive).toHaveBeenCalledWith('scripted', 42, 30)
+    })
   })
 })

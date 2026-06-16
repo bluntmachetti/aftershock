@@ -44,6 +44,7 @@ class Recorder:
         )
         self._ticks_file = (self._run_dir / "ticks.ndjson").open("w", encoding="utf-8")
         self._world_file = (self._run_dir / "world.ndjson").open("w", encoding="utf-8")
+        self._closed = False
 
     def write_tick(self, record: TickRecord, world_state: dict[str, Any] | None = None) -> None:
         """Append one canonical-JSON line for record, flushed immediately.
@@ -71,6 +72,9 @@ class Recorder:
         manifest_path.write_text(canonical_json(manifest), encoding="utf-8")
 
     def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
         self._ticks_file.close()
         self._world_file.close()
 
