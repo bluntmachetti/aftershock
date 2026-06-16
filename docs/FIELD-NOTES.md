@@ -399,3 +399,32 @@ waste, but a hard precondition check (only-if-blocked-and-crew) resists promptin
 a deterministic guard at the registry/heuristic layer (frozen-protocol-safe), not more prompt text. Net:
 the conformance story (the society's defensible value, §18) is now stronger and the change costs no lives,
 so it ships; I1 is the honest open edge.
+
+## 20. I1 is a model-capability floor, not a prompt or guard problem — shipped as an operating mode (2026-06-16)
+
+**The guard that wasn't.** §19 floated "a deterministic I1 guard." Tracing the path killed that idea before
+building it: `RepairRoadHandler.validate` already rejects an invalid repair (`not blocked` / `no crew`)
+**before `apply()` runs**, so it consumes nothing — an invalid repair is *outcome-neutral*. And conformance
+I1 counts the agent's *attempt*. So a registry/agent-layer guard that dropped the attempt would only **game
+the metric** (hide the LLM's behaviour) for zero outcome gain — the exact dishonesty the conformance
+contract exists to prevent. We did not build it.
+
+**The honest lever — a stronger model.** Instead we tested whether I1's stickiness is a *capability* limit.
+Re-ran the 5 society cells with **only the infra model changed**, flash → `qwen3.5-plus` (everything else =
+§19), paired by seed against the §19 cells
+([bench/results/2026-06-16-s1-infra-model/ANALYSIS.md](../bench/results/2026-06-16-s1-infra-model/ANALYSIS.md)):
+- **I1 0.560 → 0.957** (22/50 → 1/23 violations) — the rule prompting *couldn't* move. Infra role
+  conformance **0.863 → 0.986** (Δ +0.123, all 5 seeds). T5 falls to 0/0 (no invalid repairs ⇒ nothing to
+  resubmit). So infra's stickiness was a **model-capability floor**: flash won't gate `repair_road` on
+  (blocked ∩ crew) reliably; plus does.
+- **But lives are flat** (103.6 → 103.8, sign p=1.0 — I1 was outcome-neutral) and **cost is +33%**
+  ($0.041 → $0.054/run) → **lives-per-$ −24%**.
+
+**Decision — ship it as an opt-in operating mode, not the default.** Paying +33% to perfect an
+outcome-neutral discipline metric would trade away the society's headline cost-efficiency (lives-per-$ is
+the README's lead number). So the cost-optimal **default stays flash** (published numbers unchanged), and
+the bump is a documented operating mode: `--role-model infrastructure=qwen3.5-plus` (a general per-role
+override threaded through `build_arm`/`build_llm_agents`). Flip it when conformance/discipline matters more
+than cost; leave it off for the lives-per-$ story. Two honest readings of "fix I1," and the switch keeps
+both — the scientific finding (it's a capability floor) is the durable result, independent of which
+default ships.

@@ -1,0 +1,136 @@
+{
+  "arm": "society",
+  "notes": [],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 1.0,
+    "fire": 1.0,
+    "infrastructure": 0.9743589743589743,
+    "medical": 0.9565217391304348,
+    "rescue": 0.8285714285714285
+  },
+  "rules": {
+    "C1": {
+      "commander": {
+        "applicable": 11,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "C2": {},
+    "C3": {
+      "commander": {
+        "applicable": 4,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "F1": {},
+    "F2": {},
+    "I1": {
+      "infrastructure": {
+        "applicable": 6,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "I2": {},
+    "M1": {},
+    "M2": {},
+    "R1": {},
+    "R2": {},
+    "T1": {},
+    "T2": {
+      "comms": {
+        "applicable": 18,
+        "rate": 1.0,
+        "violations": []
+      },
+      "fire": {
+        "applicable": 25,
+        "rate": 1.0,
+        "violations": []
+      },
+      "infrastructure": {
+        "applicable": 30,
+        "rate": 0.9666666666666667,
+        "violations": [
+          {
+            "detail": "requested 1 'supply_truck' for 'm4' but max allowed is 0 (required=1, assigned=3)",
+            "tick": 6
+          }
+        ]
+      },
+      "medical": {
+        "applicable": 21,
+        "rate": 0.9523809523809523,
+        "violations": [
+          {
+            "detail": "requested 2 'supply_truck' for 'm4' but max allowed is 0 (required=1, assigned=3)",
+            "tick": 6
+          }
+        ]
+      },
+      "rescue": {
+        "applicable": 32,
+        "rate": 0.875,
+        "violations": [
+          {
+            "detail": "requested 1 'rescue_crew' for 'm1' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 6
+          },
+          {
+            "detail": "requested 1 'rescue_crew' for 'm10' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 26
+          },
+          {
+            "detail": "requested 1 'rescue_crew' for 'm9' but max allowed is 0 (required=1, assigned=1)",
+            "tick": 27
+          },
+          {
+            "detail": "requested 1 'rescue_crew' for 'm11' but max allowed is 0 (required=1, assigned=1)",
+            "tick": 27
+          }
+        ]
+      }
+    },
+    "T3": {
+      "fire": {
+        "applicable": 1,
+        "rate": 1.0,
+        "violations": []
+      },
+      "infrastructure": {
+        "applicable": 3,
+        "rate": 1.0,
+        "violations": []
+      },
+      "medical": {
+        "applicable": 2,
+        "rate": 1.0,
+        "violations": []
+      },
+      "rescue": {
+        "applicable": 3,
+        "rate": 0.33333333333333337,
+        "violations": [
+          {
+            "detail": "urgency=10 > 8 but severity=3 < 4 and deadline_in=14 > 4 for 'm8'",
+            "tick": 13
+          },
+          {
+            "detail": "urgency=10 > 8 but severity=3 < 4 and deadline_in=13 > 4 for 'm8'",
+            "tick": 14
+          }
+        ]
+      }
+    },
+    "T4": {},
+    "T5": {},
+    "T6": {},
+    "X1": {},
+    "X2": {}
+  },
+  "seed": 42,
+  "team_alignment": 0.9407407407407408
+}

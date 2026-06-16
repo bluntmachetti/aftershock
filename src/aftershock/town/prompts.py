@@ -137,6 +137,7 @@ def build_llm_agents(
     force_tools: bool = False,
     engine_seed: int | None = None,
     doctrine: bool = True,
+    role_models: dict[str, str] | None = None,
 ) -> dict[str, Agent]:
     """Build one LLMAgent per town role, sharing the same provider instance.
 
@@ -171,6 +172,12 @@ def build_llm_agents(
                   False the doctrine layer is omitted entirely (and doctrine.yaml is
                   not even loaded) — the doctrine-naive control for the doctrine
                   on/off ablation (FIELD-NOTES §11).
+        role_models: optional {agent_id: model} override applied per role (CLI
+                  --role-model). None (default) keeps every role's YAML model — the
+                  cost-optimal published mix. Used for operating modes like the
+                  high-conformance infra bump (FIELD-NOTES §20:
+                  infrastructure=qwen3.5-plus). Keys not matching a town role are
+                  ignored (so one override map can be reused across arms).
 
     Returns:
         dict mapping agent_id -> LLMAgent for all six town agents.
@@ -216,6 +223,11 @@ def build_llm_agents(
         updates: dict[str, object] = {}
         if system_prompt != role.system_prompt:
             updates["system_prompt"] = system_prompt
+        # role_models (CLI --role-model) overrides this role's model — e.g. the §20
+        # high-conformance operating mode (infrastructure=qwen3.5-plus). Default None
+        # keeps the YAML model, so the published cost-optimal mix is byte-identical.
+        if role_models and agent_id in role_models:
+            updates["model"] = role_models[agent_id]
         # force_tools is the opt-in switch (CLI --society-tools): flip every role
         # into native function-calling mode regardless of its YAML default, which
         # is now JSON. The role's YAML use_tools is honored when force_tools is off.

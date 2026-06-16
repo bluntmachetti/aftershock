@@ -227,6 +227,7 @@ def test_resume_skips_existing_cell(monkeypatch: pytest.MonkeyPatch) -> None:
         arm: str, seed: int, provider: Any,
         society_tools: bool = False, seed_sampler: bool = False,
         pool_sizes: dict | None = None, doctrine: bool = True,
+        **_kwargs: object,  # absorb future build_arm kwargs (e.g. role_models)
     ) -> Any:
         call_count["n"] += 1
         raise AssertionError("build_arm should not be called for a resumed cell")
@@ -381,6 +382,7 @@ def test_resume_reruns_on_tick_budget_mismatch(monkeypatch: pytest.MonkeyPatch) 
         arm: str, seed: int, provider: Any,
         society_tools: bool = False, seed_sampler: bool = False,
         pool_sizes: dict | None = None, doctrine: bool = True,
+        **_kwargs: object,  # absorb future build_arm kwargs (e.g. role_models)
     ) -> Any:
         call_count["n"] += 1
         # Return a minimal fake setup that never actually runs
@@ -425,6 +427,7 @@ def test_resume_skips_when_ticks_match(monkeypatch: pytest.MonkeyPatch) -> None:
         arm: str, seed: int, provider: Any,
         society_tools: bool = False, seed_sampler: bool = False,
         pool_sizes: dict | None = None, doctrine: bool = True,
+        **_kwargs: object,  # absorb future build_arm kwargs (e.g. role_models)
     ) -> Any:
         raise AssertionError("build_arm must not be called when ticks match")
 
@@ -467,6 +470,7 @@ def test_resume_reruns_on_corrupt_summary(monkeypatch: pytest.MonkeyPatch) -> No
         arm: str, seed: int, provider: Any,
         society_tools: bool = False, seed_sampler: bool = False,
         pool_sizes: dict | None = None, doctrine: bool = True,
+        **_kwargs: object,  # absorb future build_arm kwargs (e.g. role_models)
     ) -> Any:
         call_count["n"] += 1
         raise RuntimeError("re-run triggered")

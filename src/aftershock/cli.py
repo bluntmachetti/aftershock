@@ -98,6 +98,50 @@ def _parse_pools(spec: str | None) -> dict[str, int] | None:
     return override or None
 
 
+# Town roles a --role-model override may target (society + swarm + solo rosters).
+_ROLE_MODEL_ROLES = frozenset(
+    {"commander", "comms", "fire", "infrastructure", "medical", "rescue", "solo"}
+)
+
+
+def _parse_role_models(spec: str | None) -> dict[str, str] | None:
+    """Parse --role-model: a 'role=model,role=model' per-role model override.
+
+    Enables operating modes like the §20 high-conformance infra bump
+    (``infrastructure=qwen3.5-plus``). Returns None when spec is None (the
+    cost-optimal YAML mix). Exits 1 on a malformed entry, unknown role, or a model
+    not in the price table (an unpriced model would silently cost $0).
+    """
+    if spec is None:
+        return None
+    from aftershock.llm.provider import MODEL_PRICES_USD_PER_MTOK
+
+    override: dict[str, str] = {}
+    for part in spec.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "=" not in part:
+            print(f"error: --role-model entry {part!r} must be 'role=model'", file=sys.stderr)
+            raise SystemExit(1)
+        role, model = (s.strip() for s in part.split("=", 1))
+        if role not in _ROLE_MODEL_ROLES:
+            print(
+                f"error: unknown role {role!r}; valid: {sorted(_ROLE_MODEL_ROLES)}",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        if model not in MODEL_PRICES_USD_PER_MTOK:
+            print(
+                f"error: unknown model {model!r}; priced models: "
+                f"{sorted(MODEL_PRICES_USD_PER_MTOK)}",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        override[role] = model
+    return override or None
+
+
 # Default extra ticks past the last timeline tick, and the engine ceiling.
 _SCENARIO_TICK_PADDING = 20
 _SCENARIO_TICK_CEILING = 120
@@ -228,6 +272,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         society_tools=getattr(args, "society_tools", False),
         seed_sampler=getattr(args, "seed_sampler", False),
         pool_sizes=pool_sizes,
+        role_models=_parse_role_models(getattr(args, "role_model", None)),
     )
 
     manifest: dict[str, Any] = {
@@ -355,6 +400,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
     seed_sampler = getattr(args, "seed_sampler", False)
     society_tools = getattr(args, "society_tools", False)
     pool_sizes = _parse_pools(getattr(args, "pools", None))
+    role_models = _parse_role_models(getattr(args, "role_model", None))
     repeat = getattr(args, "repeat_seeds", 1) or 1
 
     # M2: --repeat-seeds N runs each (arm, seed) N times into ...-r{k} cells and
@@ -389,7 +435,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
         cells = run_repeat_seeds(
             requested_arms, seeds_list, repeat, manifest["ticks"],
             provider, out_dir, society_tools=society_tools, seed_sampler=seed_sampler,
-            pool_sizes=pool_sizes,
+            pool_sizes=pool_sizes, role_models=role_models,
         )
         rep = analyze_repeats(cells)
         md = render_repeats_markdown(rep)
@@ -412,6 +458,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
     cells = run_bench(
         manifest, provider=provider, out_dir=out_dir,
         society_tools=society_tools, seed_sampler=seed_sampler, pool_sizes=pool_sizes,
+        role_models=role_models,
     )
     agg = aggregate(cells)
     md = render_markdown(agg)
@@ -986,6 +1033,14 @@ def main() -> None:
             "override like 'ambulance=3,rescue_crew=2'. Ignored with --scenario."
         ),
     )
+    p_run.add_argument(
+        "--role-model", default=None,
+        help=(
+            "Operating-mode per-role model override 'role=model,...' (LLM arms only). "
+            "E.g. 'infrastructure=qwen3.5-plus' (§20 high-conformance mode). "
+            "Default keeps the cost-optimal YAML mix."
+        ),
+    )
 
     # bench
     p_bench = sub.add_parser("bench", help="Run the benchmark suite")
@@ -1032,6 +1087,14 @@ def main() -> None:
             "D2: harden the synthetic world for every cell. A preset ('tight', "
             "'scarce') or 'ambulance=3,rescue_crew=2'. Write to a distinct --out so "
             "it never overwrites the default-world benchmark."
+        ),
+    )
+    p_bench.add_argument(
+        "--role-model", default=None,
+        help=(
+            "Operating-mode per-role model override 'role=model,...' (LLM arms only). "
+            "E.g. 'infrastructure=qwen3.5-plus' (§20). Write to a distinct --out so it "
+            "never overwrites the cost-optimal default benchmark."
         ),
     )
 
