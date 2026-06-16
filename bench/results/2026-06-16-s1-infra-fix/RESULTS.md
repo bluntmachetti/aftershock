@@ -1,0 +1,12 @@
+## Benchmark Results
+
+| arm | n | mean_lives_saved | sd | mean_lives_lost | sd | mean_missions_resolved | mean_missions_failed | mean_cost_usd | mean_wall_s | lives_per_dollar (= mean lives / mean cost) | mean_team_alignment |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| society | 5 | 103.60 | 18.42 | 58.60 | 18.69 | 10.60 | 0.40 | 0.0411 | 92.96 | 2522.1848 | 0.916 |
+
+## Paired lives_saved by seed
+
+| arm | 11 | 23 | 37 | 42 | 57 |
+|---|---|---|---|---|---|
+| society | 136 | 94 | 92 | 95 | 101 |
+

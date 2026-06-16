@@ -364,3 +364,38 @@ was built for — coordination conformance (+0.156, 5/5 seeds, deterministic) �
 cost**. This is the society's honest story in miniature: the value of the written protocol shows up as
 *conformance and cost-efficiency*, not as out-saving on lives (cf. §15–17). Next: the infra role (S1) is
 the one place conformance is still leaking (0.667), and it's a cheap deterministic lever.
+
+## 19. S1 — fixing the infra prompt: urgency calibrates, preconditions don't (2026-06-16)
+
+**Setup:** §18 left infra as the lone role still leaking conformance (0.667). The diagnostic (per-rule,
+over the 5 doctrine-ON runs) showed three distinct failures, not one: **T3** urgency honesty 0.350 (it set
+urgency=9 with sev=3, deadline far), **T5** never-resubmit 0.000 (17/17 — it re-issued rejected repairs
+every tick), and **I1** repair preconditions 0.627 (28/75 — repairing non-blocked districts *and* with no
+crew). The scripted infra agent (the 1.0 anchor) gets all three right by construction. The fix was
+prompt-only and deterministic-safe: rewrite `roles/infrastructure.yaml` to tie each rule to the exact
+labels the agent already sees in its observation — repair_road only for a district on the **BLOCKED** line
+and only while **POOLS** shows `repair_crew ≥ 1` (≤ available); urgency > 8 only when `sev ≥ 4` or
+`dl_in ≤ 4`; and never reissue a decision shown under **RECENTLY REJECTED**. Re-ran 5 society cells
+(doctrine on, same seeds/ticks — only the infra prompt changed), **$0.21, 8 min**, paired by seed against
+the §18 doctrine-ON cells
+([bench/results/2026-06-16-s1-infra-fix](../bench/results/2026-06-16-s1-infra-fix/ANALYSIS.md)).
+
+**Result — a partial, honest win.** Infra role conformance **0.667 → 0.863, Δ +0.196, all 5 seeds
+positive**; team alignment +0.064 (5/5); **lives flat: 104.2 → 103.6, Δ −0.6** (per-seed [−4,+8,−1,0,−6],
+sign test p=0.625 — no regression, the gate passes). Total infra rule-violations fell **61 → 24 (−61%)**.
+But the per-rule split is the real lesson:
+- **T3 (urgency): 0.350 → 1.000** (13 → 0 violations). A concrete threshold the model could apply at
+  decision time — cleanly fixed. T2 also went 2 → 0.
+- **T5 (no-resubmit): rate still 0.000, but absolute violations 17 → 2.** It improved *upstream*, not
+  because the model learned the rule: fewer invalid repairs ⇒ fewer rejections ⇒ almost nothing to
+  resubmit. (When it *did* get a rejection it still resubmitted, 2/2 — so the rate metric is misleading
+  here; absolute count is the honest read.)
+- **I1 (repair preconditions): 0.627 → 0.560** by rate (28 → 22 absolute). **Sticky.** Even told exactly
+  which observation fields to check, the flash model still attempts some repairs on non-blocked districts /
+  with no crew. Precondition-*gating* is harder to prompt than scalar *calibration*.
+
+**Takeaway:** prompt discipline reliably fixes a numeric calibration (urgency) and removes most downstream
+waste, but a hard precondition check (only-if-blocked-and-crew) resists prompting — that's a candidate for
+a deterministic guard at the registry/heuristic layer (frozen-protocol-safe), not more prompt text. Net:
+the conformance story (the society's defensible value, §18) is now stronger and the change costs no lives,
+so it ships; I1 is the honest open edge.
