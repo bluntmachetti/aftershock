@@ -169,6 +169,7 @@ export function LiveTab({ onTickReceived }: Props) {
           )
           setLiveTicks((prev) => [...prev, msg.record!])
           setLiveWorld(msg.world ?? null)
+          setInjectMarker(null)
           onTickRef.current(msg.record, msg.world ?? null)
         } else if (msg.type === 'done') {
           appendLogRef.current('[done] run finished')
@@ -254,10 +255,7 @@ export function LiveTab({ onTickReceived }: Props) {
     setScenario(SYNTHETIC_SCENARIO)
     setAarEnabled(false)
     setMemoryEnabled(false)
-    setTimeout(() => {
-      handleStart()
-    }, 100)
-  }, [arm, seed, ticks, scenario, aarEnabled, memoryEnabled])
+  }, [])
 
   const isRunning = status?.running ?? false
 

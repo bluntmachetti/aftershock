@@ -56,9 +56,10 @@ function buildFeed(
 
     for (const evt of tick.events) {
       if (evt.payload?.injected === true) {
-        const kind = (evt.kind === 'mission_spawned')
-          ? (evt.payload.mission_kind as string ?? 'mission')
-          : evt.kind === 'road_blocked' ? 'road_block' : evt.kind
+        const kind = (evt.payload.inject_kind as string)
+          ?? (evt.kind === 'mission_spawned'
+            ? (evt.payload.mission_kind as string ?? 'mission')
+            : evt.kind === 'road_blocked' ? 'road_block' : evt.kind)
         entries.push({
           type: 'inject',
           tick: tick.tick,

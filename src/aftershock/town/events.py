@@ -272,6 +272,7 @@ def scheduled_events(
                         "lives_at_risk": lives,
                         "deadline_tick": deadline,
                         "injected": True,
+                        "inject_kind": inj_kind,
                     },
                 ))
                 events.append(WorldEvent(
