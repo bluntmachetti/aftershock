@@ -466,3 +466,45 @@ cost-efficiency win the program is about. The conformance dip is logged as a wat
 README/SUBMISSION cost figures can be refreshed downward in a later pass. (And the honest meta-result of
 the whole cost arc: the society's ~$0.04/run is *mostly structural* — re-sent semantic prompts the agents
 need — so −14% is near the safe ceiling without touching doctrine or model tier.)
+
+## 22. The protocol has a capability floor: a self-hosted size sweep (1.7B collapses, 9B carries it) (2026-06-16)
+
+§5 says "the protocol carries more than the models do." That holds only *above* a capability threshold — and
+this is where we found the floor. While waiting on cloud credits we stood the whole society up on a **self-hosted
+Qwen** (Ollama on the k12 box: Ryzen 7 + Radeon 780M iGPU, ROCm, ~11.5 tok/s, `OLLAMA_NUM_PARALLEL=1` so the six
+agents/tick serialize) and ran the same `society` arm at two sizes. **This is a separate, clearly-labelled
+robustness study, not a re-run of the published cloud numbers** — local open-weight `qwen3.5:9b` is *not*
+DashScope's hosted `qwen3.5-flash`/`-plus` (same family; different size, serving, and tune). The point isn't the
+absolute lives; it's where the protocol stops holding. Both runs cost **$0** (unpriced local tags → an honest $0
+in the ledger).
+
+**`qwen3:1.7b` collapses — the protocol does not hold** (`runs/bench-1.7b/society-seed42`, 60t, ~22 min,
+thinking-off so not a timeout artifact): **0 lives saved, 162 lost, 0 of 11 missions resolved**, team_alignment
+**0.258** (vs cloud ~0.85–0.92). Early-exit at tick 37 (all missions terminal). Per-role conformance is a
+near-total collapse — medical 0.0, rescue 0.0, fire 0.20, commander 0.25, comms 0.31 — with **infra (0.515) the
+*least* bad**, the only role still half-following the contract.
+
+**`qwen3.5:9b` (real 9.7B Q4_K_M) carries it** (`runs/run-9b/seed42-society`, 60t, ~35 min, 2 timeouts):
+**81 lives saved, 71 lost, 10 missions resolved / 1 failed**, team_alignment **0.787** — within reach of the cloud
+~0.85. Roles recover to ceiling (commander/comms/fire/rescue 1.0, medical 0.667) with **infra (0.5) now the
+*weakest*** — the same chronic infra ceiling we hit at full scale in §19–20, reproduced on a different model. (Run
+via `run --timeout 300`, not `bench`: the 45 s bench timeout can't absorb six serialized 9b agents under
+`NUM_PARALLEL=1`. Conformance is computed with `conformance.check_run` — the exact metric `bench` reports — so it
+stays apples-to-apples with the 1.7b cell.)
+
+**Verdict — there is a capability floor between 1.7B and 9B.** Below it the contract/auction/doctrine machinery
+produces noise (0 lives, 0.258 conf); above it the society works (81 lives, 0.787 conf ≈ cloud). So §5's "the
+protocol carries the result" is real but *conditional*: it needs a model good enough to sustain the protocol, and
+1.7B isn't. Two caveats keep this honest: **n=1 per model** (lives are noisy at one seed; conformance is the
+reliable signal), and **determinism is marginal** on a local greedy decode (temp 0 + seed is usually byte-identical
+but flips on near-ties) — so, like the cloud arms which ignore the seed outright (§13), these runs aren't perfectly
+reproducible; conformance, not any single record, is the stable signal.
+
+**Reproduce** (raw records live on k12, not committed): warm the model first
+(`curl …:11434/api/generate -d '{"model":"qwen3:1.7b","prompt":"hi","keep_alive":-1}'`), then
+`DASHSCOPE_BASE_URL=http://192.168.4.153:11434/v1 DASHSCOPE_MODEL=qwen3:1.7b DASHSCOPE_API_KEY=ollama uv run
+--no-sync aftershock run --arm society --seed 42 --ticks 60 --timeout 300 --out runs/<name>`. The three cloud-safe
+enablers that make this work — `DASHSCOPE_BASE_URL`, `reasoning_effort:"none"` on non-DashScope endpoints (Ollama's
+`/v1` ignores `enable_thinking`, so a Qwen3 *thinking* model otherwise burns ~300 reasoning tokens/call → ~20×
+slower → timeouts), and a `DASHSCOPE_MODEL` global override — ship in `llm/provider.py` + `cli.py` and leave the
+cloud request body byte-identical.
