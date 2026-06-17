@@ -2,16 +2,31 @@
 
 Short list of known project tasks that are not part of the current deployment path.
 
-## ▶▶ ACTIVE / IN-FLIGHT (2026-06-16) — local Qwen on k12 (UNCOMMITTED; resume here first)
+## ▶▶ LATEST SESSION (2026-06-17) — live demo + onboarding SHIPPED to prod; local-Qwen §22 landed
 
-**This session's shipped work is DONE + LIVE** (so the old "S1" section further down is complete): §18
-doctrine ablation (PR #8), §19 infra prompt fix (PR #13), §20 infra model operating-mode `--role-model`
-(PR #10), §21 contract trim −14% cost / +21% lives-per-$ (PR #11) — all **merged to main**; **deployed
-through the gate to k12 staging + Alicloud prod** (live, verified 200 at <https://aftershock.redoubtlabs.dev>);
-**Field Log 005 published** (PR #12, live). `main` is green (**861 tests**, ruff, `verify` PASS).
+**Shipped + LIVE this session** (all merged to `main` + deployed through the gate to k12 staging + Alicloud
+prod, verified at <https://aftershock.redoubtlabs.dev>):
+- **Judge-facing live demo + cold-start onboarding** (the `feature/live-negotiation-dashboard` "Feature 2"
+  thread): B1 = a paced scripted live stream + Stop/take-control; then a **server-side ambient demo loop**
+  (`AFTERSHOCK_DEMO_MODE=1` → looping scripted run over the read-only WS, read-only-by-default UI,
+  token-gated operator controls that pre-empt + resume the loop) (**PR #14**); a committed **`OBSERVATORY_BIND`**
+  knob (compose default loopback; staging sets `0.0.0.0` for LAN access); and **cold-start onboarding** — an
+  analyst "what's happening now" ticker, a dismissible per-audience briefing banner, and a `?` help drawer
+  (focus-trap/Esc) (**PR #16**, CCG + Claude PR-reviewed, 4 findings fixed). Honesty kept: the public ambient
+  stream is the **scripted** arm (not live LLM agents). Architecture/state in memory
+  `aftershock-live-ambient-demo`; the onboarding spec is `.omc/research/live-onboarding-plan.md`.
+- **Local-Qwen enablers + FIELD-NOTES §22** (**PR #15**): the 3 cloud-safe enablers (`DASHSCOPE_BASE_URL`,
+  `reasoning_effort:"none"` on non-DashScope, `DASHSCOPE_MODEL`) + the size-sweep writeup + 8 tests — this
+  CLOSED the prior handoff's "DECIDED NEXT STEP" (now merged, no longer uncommitted).
+- `main` green (vitest 150, ruff, `aftershock verify` PASS). Optional follow-ups: delete the merged remote
+  branches (`feature/live-negotiation-dashboard`, `local-qwen-endpoint`, `feat/live-onboarding`); a `blog/`
+  post (Blog Post Prize, ~17 commits since the last entry). The older S1/§18–21 work + Field Log 005 stay
+  done/live (history further below).
 
-**Active workstream: running the LLM society on a *local* Qwen (Ollama on k12) — free, while waiting on
-cloud credits.** It WORKS. State to resume:
+**▶ RESUME HERE — local-Qwen experiments backlog (free, on k12).** The enablers are MERGED and the path WORKS;
+the **size sweep is DONE (§22)**. Remaining open experiments: **(b) reproducibility measurement** (2× same-seed
+local runs → quantify digest drift; determinism is marginal — greedy temp0+seed flips on near-ties) and
+**(c) free high-n re-tests of §18 (doctrine) / §21 (contract-trim)** on a 2nd (local) model. k12 setup to resume:
 
 - **k12 = `kademolu@192.168.4.153`** (Fedora; Ryzen 7 + **Radeon 780M iGPU**, 88 GB RAM, no NVIDIA/CUDA).
   ROCm/iGPU inference works (~11.5 tok/s).
@@ -23,8 +38,7 @@ cloud credits.** It WORKS. State to resume:
   burn ~300 reasoning tokens/call (~12–40 s) → timeouts. **Fix: send `reasoning_effort:"none"`** on
   non-DashScope endpoints → ~20× faster, real negotiation, 0 timeouts. (`/no_think` and `/v1` `think:false`
   do NOT work; native `/api/chat` `think:false` works but returns md-fenced JSON.)
-- **3 code enablers — UNCOMMITTED** (on this laptop + rsync'd to `k12:~/aftershock-exp`; cloud-safe, 23
-  provider tests pass, ruff clean; cloud request stays byte-identical):
+- **3 code enablers — MERGED (PR #15)** (cloud-safe; 8 enabler tests; cloud request stays byte-identical):
   1. `llm/provider.py`: `base_url` honors `DASHSCOPE_BASE_URL` env (+ `self._is_dashscope` detection).
   2. `llm/provider.py`: adds `reasoning_effort:"none"` to the body when `not self._is_dashscope`.
   3. `cli.py`: `_resolve_role_models()` folds a `DASHSCOPE_MODEL` env (global model for all roles) into
@@ -53,27 +67,16 @@ cloud credits.** It WORKS. State to resume:
 - **SIZE-SWEEP VERDICT: the protocol has a capability floor between 1.7B and 9B.** 1.7b collapses
   (0 lives, 0.258 conf) → 9b works (81 lives, 0.787 conf ≈ cloud ~0.85). So "the protocol carries the result"
   holds only *above* a model-capability threshold. n=1 per model (lives noisy; conformance reliable).
-- **▶ DECIDED NEXT STEP (chosen, NOT yet done — do this in the fresh session):** branch `local-qwen-endpoint`
-  off main; **commit the 3 enablers** (`llm/provider.py` base_url+reasoning_effort, `cli.py` DASHSCOPE_MODEL —
-  currently UNCOMMITTED on main's working tree) + a couple of small tests (provider `_is_dashscope`/base_url
-  env; cli `_resolve_role_models` env); **write FIELD-NOTES §22** = the local size-sweep writeup (numbers
-  above; frame as a labelled robustness study on self-hosted Qwen, protocol-floor thesis, infra weakest at
-  both sizes). §22 is **NOT yet written** (drafted but un-applied). Then ruff + pytest + `aftershock verify`,
-  push, PR optional. Raw runs stay on k12 (not committed) — cite the reproduce recipe in §22.
-- **⚠️ WORKING-TREE STATE (read before committing):** HEAD is currently on branch
-  **`feature/live-negotiation-dashboard`** (NOT main), with 3 uncommitted files in the tree:
-  `src/aftershock/llm/provider.py`, `src/aftershock/cli.py`, `docs/FOLLOWUPS.md`. To land the enablers on a
-  clean branch off main: `git stash` → `git checkout main` → `git checkout -b local-qwen-endpoint` →
-  `git stash pop` → commit. (The `feature/live-negotiation-dashboard` branch is the separate Feature-2 idea;
-  don't mix the local-Qwen enablers into it.) Also: `pgrep -af aftershock` on k12 showed a **stray
-  run/bench process** even though the 9b run finished (`DONE_9B`) — check and kill any leftover before new runs.
-- **HONESTY CAVEAT:** local open-weight `qwen3.5:9b` ≠ DashScope's hosted `qwen3.5-flash/plus` (same family,
-  different size/serving/tune) → a **separate, clearly-labelled** robustness/methodology study, NOT a re-run
-  of the published cloud numbers.
-- **Next local experiments:** (a) **size sweep** 1.7b vs 9b ("how small can carry the protocol?" — the
-  1.7b's high rejection rate is the early signal); (b) **reproducibility measurement** (2× same-seed, diff
-  records); (c) free **high-n re-tests** of §18/§21 (robustness replication on a 2nd model).
-- **TODO:** commit the 3 enablers (cloud-safe, useful for any self-hosted OpenAI endpoint) — branch off main.
+- **The prior handoff's "DECIDED NEXT STEP" = DONE** (PR #15: enablers committed + §22 written + tests, all
+  merged to main; size sweep (a) complete). The remaining open experiments are **(b) reproducibility** and
+  **(c) high-n §18/§21 re-tests**, summarised at the top of this section.
+- **HONESTY CAVEAT (still applies to any local run):** local open-weight `qwen3.5:9b` ≠ DashScope's hosted
+  `qwen3.5-flash/plus` (same family, different size/serving/tune) → a **separate, clearly-labelled**
+  robustness/methodology study, NOT a re-run of the published cloud numbers.
+- **Resuming runs:** the enablers are merged, so a normal `uv run aftershock run …` (with the `DASHSCOPE_*`
+  env from the recipe above) works from any clean checkout — no more `~/aftershock-exp --no-sync`. Before new
+  runs, `pgrep -af aftershock` on k12 may show a **stray run/bench process** — kill leftovers first. Raw runs
+  stay on k12 (not committed).
 
 ## (COMPLETED 2026-06-16 — history) Tier-1 bid-discipline / S1 — the infra agent was THE lever
 
