@@ -554,10 +554,10 @@ export function LiveTab({ onTickReceived }: Props) {
         )}
         {liveWorld ? (
           <>
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10">
+            <div className="absolute top-10 left-1/2 -translate-x-1/2 z-10">
               <Scoreboard tick={latestTick} />
             </div>
-            <div className="absolute top-12 left-3 z-10 w-48">
+            <div className="absolute top-20 left-3 z-10 w-48">
               <PanicGauge panic={liveWorld.panic} />
             </div>
             <div className="flex-1 p-2">

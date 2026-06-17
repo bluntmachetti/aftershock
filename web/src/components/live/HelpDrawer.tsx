@@ -140,8 +140,8 @@ export function HelpDrawer({ open, onClose, audience }: Props) {
 
             <Section title="Arms">
               <p><strong className="text-eoc-primary">scripted</strong> — deterministic heuristics, no LLM. The public ambient demo.</p>
-              <p><strong className="text-eoc-primary">solo</strong> — one LLM agent per role, no coordination.</p>
-              <p><strong className="text-eoc-primary">swarm</strong> — LLM agents with basic coordination.</p>
+              <p><strong className="text-eoc-primary">solo</strong> — a single LLM agent handling every role (no decomposition).</p>
+              <p><strong className="text-eoc-primary">swarm</strong> — LLM agents acting independently, without the negotiation protocol (they collide on contested resources).</p>
               <p><strong className="text-signal-cyan">society</strong> — full Qwen agent society: qwen3.5-flash workers + qwen3.5-plus commander + qwen3-max analyst (AAR).</p>
             </Section>
           </>
