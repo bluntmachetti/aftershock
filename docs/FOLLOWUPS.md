@@ -2,7 +2,80 @@
 
 Short list of known project tasks that are not part of the current deployment path.
 
-## ▶ NEXT SESSION — resume here: Tier-1 bid-discipline / S1 (the infra agent is now THE lever)
+## ▶▶ ACTIVE / IN-FLIGHT (2026-06-16) — local Qwen on k12 (UNCOMMITTED; resume here first)
+
+**This session's shipped work is DONE + LIVE** (so the old "S1" section further down is complete): §18
+doctrine ablation (PR #8), §19 infra prompt fix (PR #13), §20 infra model operating-mode `--role-model`
+(PR #10), §21 contract trim −14% cost / +21% lives-per-$ (PR #11) — all **merged to main**; **deployed
+through the gate to k12 staging + Alicloud prod** (live, verified 200 at <https://aftershock.redoubtlabs.dev>);
+**Field Log 005 published** (PR #12, live). `main` is green (**861 tests**, ruff, `verify` PASS).
+
+**Active workstream: running the LLM society on a *local* Qwen (Ollama on k12) — free, while waiting on
+cloud credits.** It WORKS. State to resume:
+
+- **k12 = `kademolu@192.168.4.153`** (Fedora; Ryzen 7 + **Radeon 780M iGPU**, 88 GB RAM, no NVIDIA/CUDA).
+  ROCm/iGPU inference works (~11.5 tok/s).
+- **Ollama** = profile-gated service in `~/Projects/infra/k12-staging/compose.yaml`
+  (`docker compose --profile gpu up -d ollama`; container `k12-staging-ollama-1`, port `192.168.4.153:11434`,
+  weights on `/srv/bulk/models`, caps 10G/6cpu, **`OLLAMA_NUM_PARALLEL=1`** so 6 agents/tick serialize).
+- **Models:** `qwen3.5:9b` (real 9.7B Q4_K_M) + `qwen3:1.7b`. **Both are Qwen3 *thinking* models.**
+- **KEY FINDING + FIX:** Ollama's `/v1` endpoint **ignores** DashScope's `enable_thinking:false` → models
+  burn ~300 reasoning tokens/call (~12–40 s) → timeouts. **Fix: send `reasoning_effort:"none"`** on
+  non-DashScope endpoints → ~20× faster, real negotiation, 0 timeouts. (`/no_think` and `/v1` `think:false`
+  do NOT work; native `/api/chat` `think:false` works but returns md-fenced JSON.)
+- **3 code enablers — UNCOMMITTED** (on this laptop + rsync'd to `k12:~/aftershock-exp`; cloud-safe, 23
+  provider tests pass, ruff clean; cloud request stays byte-identical):
+  1. `llm/provider.py`: `base_url` honors `DASHSCOPE_BASE_URL` env (+ `self._is_dashscope` detection).
+  2. `llm/provider.py`: adds `reasoning_effort:"none"` to the body when `not self._is_dashscope`.
+  3. `cli.py`: `_resolve_role_models()` folds a `DASHSCOPE_MODEL` env (global model for all roles) into
+     `role_models`; explicit `--role-model` still wins per role. Unknown (local) model names → cost $0.
+- **Run recipe (on k12):** `cd ~/aftershock-exp` then
+  `DASHSCOPE_BASE_URL=http://192.168.4.153:11434/v1 DASHSCOPE_MODEL=qwen3:1.7b DASHSCOPE_API_KEY=ollama
+  uv run --no-sync aftershock bench --arms society --seeds 42 --ticks 60 --out runs/<name>`. Pin warm first:
+  `curl …/api/generate -d '{"model":"qwen3:1.7b","prompt":"hi","keep_alive":-1}'`. Launch detached:
+  `setsid nohup bash script.sh > log 2>&1 &` (a plain backgrounded SSH session dies — use setsid+nohup + poll the log).
+- **Speed:** 1.7b ~1.5 min/tick (~1 h/60-tick run); **9b ~4 h serialized**. To speed 9b: set
+  `OLLAMA_NUM_PARALLEL` >1 (one-line env on the ollama service + restart — touches their infra compose; flag first).
+- **Determinism: MARGINAL** — greedy (temp 0 + seed) is *usually* byte-identical but **flips on near-ties**,
+  so a full ~180-call run is unlikely to be perfectly reproducible. The "reproducibility" experiment is a
+  *measurement* (quantify drift), not a guaranteed win.
+- **RESULT — 1.7b collapses (size-sweep low end, DONE):** `runs/bench-1.7b/society-seed42/summary.json` —
+  **0 lives saved, 162 lost, 0/11 missions resolved, team_alignment 0.258** (vs cloud ~0.85–0.92);
+  per-role medical 0.0, rescue 0.0, fire 0.20, commander 0.25, comms 0.31, infra 0.515. Early-exit tick 37
+  (all missions terminal), ~22 min, $0, thinking-off (not a timeout artifact). **Finding: the protocol does
+  NOT hold at 1.7B** — the model can't sustain the contract/auction/doctrine.
+- **RESULT — 9b carries the protocol (size-sweep contrast, DONE):** `runs/run-9b/seed42-society/` on k12 —
+  **81 lives saved, 71 lost, 10/1 missions resolved/failed, team_alignment 0.787** (per-role: commander/
+  comms/fire/rescue 1.0, medical 0.667, **infra 0.5 — weakest, same as §19/§20**). Early-exit tick 31, ~35 min,
+  2 timeouts, $0. (`run --timeout 300`, not `bench` — the 45 s bench timeout can't absorb 6 serialized 9b
+  agents under `OLLAMA_NUM_PARALLEL=1`; conformance computed via `conformance.check_run`, the metric `bench`
+  uses → apples-to-apples with 1.7b.)
+- **SIZE-SWEEP VERDICT: the protocol has a capability floor between 1.7B and 9B.** 1.7b collapses
+  (0 lives, 0.258 conf) → 9b works (81 lives, 0.787 conf ≈ cloud ~0.85). So "the protocol carries the result"
+  holds only *above* a model-capability threshold. n=1 per model (lives noisy; conformance reliable).
+- **▶ DECIDED NEXT STEP (chosen, NOT yet done — do this in the fresh session):** branch `local-qwen-endpoint`
+  off main; **commit the 3 enablers** (`llm/provider.py` base_url+reasoning_effort, `cli.py` DASHSCOPE_MODEL —
+  currently UNCOMMITTED on main's working tree) + a couple of small tests (provider `_is_dashscope`/base_url
+  env; cli `_resolve_role_models` env); **write FIELD-NOTES §22** = the local size-sweep writeup (numbers
+  above; frame as a labelled robustness study on self-hosted Qwen, protocol-floor thesis, infra weakest at
+  both sizes). §22 is **NOT yet written** (drafted but un-applied). Then ruff + pytest + `aftershock verify`,
+  push, PR optional. Raw runs stay on k12 (not committed) — cite the reproduce recipe in §22.
+- **⚠️ WORKING-TREE STATE (read before committing):** HEAD is currently on branch
+  **`feature/live-negotiation-dashboard`** (NOT main), with 3 uncommitted files in the tree:
+  `src/aftershock/llm/provider.py`, `src/aftershock/cli.py`, `docs/FOLLOWUPS.md`. To land the enablers on a
+  clean branch off main: `git stash` → `git checkout main` → `git checkout -b local-qwen-endpoint` →
+  `git stash pop` → commit. (The `feature/live-negotiation-dashboard` branch is the separate Feature-2 idea;
+  don't mix the local-Qwen enablers into it.) Also: `pgrep -af aftershock` on k12 showed a **stray
+  run/bench process** even though the 9b run finished (`DONE_9B`) — check and kill any leftover before new runs.
+- **HONESTY CAVEAT:** local open-weight `qwen3.5:9b` ≠ DashScope's hosted `qwen3.5-flash/plus` (same family,
+  different size/serving/tune) → a **separate, clearly-labelled** robustness/methodology study, NOT a re-run
+  of the published cloud numbers.
+- **Next local experiments:** (a) **size sweep** 1.7b vs 9b ("how small can carry the protocol?" — the
+  1.7b's high rejection rate is the early signal); (b) **reproducibility measurement** (2× same-seed, diff
+  records); (c) free **high-n re-tests** of §18/§21 (robustness replication on a 2nd model).
+- **TODO:** commit the 3 enablers (cloud-safe, useful for any self-hosted OpenAI endpoint) — branch off main.
+
+## (COMPLETED 2026-06-16 — history) Tier-1 bid-discipline / S1 — the infra agent was THE lever
 
 **Status (2026-06-16): Tier-0 done; Tier-1 questions answered; the doctrine on/off ablation (§11) is now
 resolved.** The harness (M1/M2/M3/M5) + D2 were built, paid-verified, used to kill/qualify levers, and

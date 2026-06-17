@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+import pytest
 
 # The aftershock binary lives next to the Python interpreter in the venv
 _AFTERSHOCK_BIN = str(Path(sys.executable).parent / "aftershock")
@@ -465,3 +468,42 @@ def test_create_app_returns_fastapi_app() -> None:
     with tempfile.TemporaryDirectory() as td:
         app = create_app(runs_root=Path(td))
     assert isinstance(app, FastAPI)
+
+
+# ---------------------------------------------------------------------------
+# _resolve_role_models: the DASHSCOPE_MODEL global env folds into per-role
+# overrides (FIELD-NOTES §22 — point the whole society at one self-hosted model)
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_role_models_none_without_env_or_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No --role-model and no DASHSCOPE_MODEL → None (the cost-optimal YAML mix)."""
+    monkeypatch.delenv("DASHSCOPE_MODEL", raising=False)
+    from aftershock.cli import _resolve_role_models
+
+    assert _resolve_role_models(argparse.Namespace(role_model=None)) is None
+
+
+def test_resolve_role_models_global_env_applies_to_every_role(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DASHSCOPE_MODEL points every role at one self-hosted model (unpriced tag → $0)."""
+    monkeypatch.setenv("DASHSCOPE_MODEL", "qwen3.5:9b")
+    from aftershock.cli import _ROLE_MODEL_ROLES, _resolve_role_models
+
+    rm = _resolve_role_models(argparse.Namespace(role_model=None))
+    assert rm is not None
+    assert set(rm) == set(_ROLE_MODEL_ROLES)
+    assert all(v == "qwen3.5:9b" for v in rm.values())
+
+
+def test_resolve_role_models_flag_beats_global_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An explicit --role-model entry wins over the DASHSCOPE_MODEL global; other roles
+    still inherit the global."""
+    monkeypatch.setenv("DASHSCOPE_MODEL", "qwen3.5:9b")
+    from aftershock.cli import _resolve_role_models
+
+    rm = _resolve_role_models(argparse.Namespace(role_model="infrastructure=qwen3.5-plus"))
+    assert rm is not None
+    assert rm["infrastructure"] == "qwen3.5-plus"  # explicit override wins
+    assert rm["commander"] == "qwen3.5:9b"  # untouched role inherits the global

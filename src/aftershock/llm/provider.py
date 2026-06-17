@@ -72,7 +72,7 @@ class QwenProvider:
     def __init__(
         self,
         api_key: str | None = None,
-        base_url: str = DASHSCOPE_INTL_BASE,
+        base_url: str | None = None,
         timeout_s: float = 45.0,
         max_retries: int = 2,
         transport: httpx.AsyncBaseTransport | None = None,
@@ -84,7 +84,16 @@ class QwenProvider:
                 "Set the DASHSCOPE_API_KEY environment variable or pass api_key=."
             )
         self._api_key = resolved_key
-        self._base_url = base_url.rstrip("/")
+        # base_url precedence: explicit arg > DASHSCOPE_BASE_URL env > DashScope cloud.
+        # The env hook lets the whole stack point at a local OpenAI-compatible endpoint
+        # (e.g. a self-hosted Ollama at http://host:11434/v1) with no code change.
+        self._base_url = (
+            base_url or os.environ.get("DASHSCOPE_BASE_URL") or DASHSCOPE_INTL_BASE
+        ).rstrip("/")
+        # Cloud DashScope disables Qwen3 reasoning via `enable_thinking`; a self-hosted
+        # Ollama OpenAI endpoint ignores that and instead honors `reasoning_effort`.
+        # Detect the endpoint so the cloud request stays byte-identical.
+        self._is_dashscope = "dashscope" in self._base_url
         self._timeout_s = timeout_s
         self._max_retries = max_retries
         self._transport = transport
@@ -133,6 +142,10 @@ class QwenProvider:
         elif json_mode:
             body["response_format"] = {"type": "json_object"}
             body["enable_thinking"] = False
+        # Self-hosted Ollama endpoints disable Qwen3 thinking via reasoning_effort
+        # (they ignore enable_thinking). Gated on the endpoint → cloud body unchanged.
+        if not self._is_dashscope:
+            body["reasoning_effort"] = "none"
 
         url = f"{self._base_url}/chat/completions"
         backoff_delays = [0.5, 1.0, 2.0]

@@ -493,3 +493,87 @@ async def test_mock_provider_accepts_tool_calls_dict() -> None:
     assert result.text == ""
     assert result.tool_calls == tool_calls
     assert len(provider.calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# Self-hosted endpoint support (FIELD-NOTES §22): base_url precedence,
+# endpoint detection, and reasoning_effort gating. The cloud DashScope request
+# body must stay byte-identical — the local path is purely additive.
+# ---------------------------------------------------------------------------
+
+
+def test_base_url_defaults_to_dashscope_cloud(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No explicit base_url and no env → the DashScope cloud endpoint (is_dashscope)."""
+    monkeypatch.delenv("DASHSCOPE_BASE_URL", raising=False)
+    provider = QwenProvider(api_key="key")
+    assert "dashscope" in provider._base_url
+    assert provider._is_dashscope is True
+
+
+def test_base_url_honors_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DASHSCOPE_BASE_URL points the provider at a self-hosted endpoint (trailing
+    slash trimmed); such an endpoint is not DashScope."""
+    monkeypatch.setenv("DASHSCOPE_BASE_URL", "http://192.168.4.153:11434/v1/")
+    provider = QwenProvider(api_key="key")
+    assert provider._base_url == "http://192.168.4.153:11434/v1"
+    assert provider._is_dashscope is False
+
+
+def test_base_url_explicit_arg_beats_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An explicit base_url= wins over DASHSCOPE_BASE_URL (arg > env > cloud)."""
+    monkeypatch.setenv("DASHSCOPE_BASE_URL", "http://from-env:11434/v1")
+    provider = QwenProvider(api_key="key", base_url="http://explicit:8000/v1")
+    assert provider._base_url == "http://explicit:8000/v1"
+    assert provider._is_dashscope is False
+
+
+@pytest.mark.asyncio
+async def test_reasoning_effort_none_on_self_hosted_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-DashScope endpoint gets reasoning_effort:'none' so a Qwen3 thinking
+    model doesn't burn reasoning tokens (Ollama's /v1 ignores enable_thinking)."""
+    monkeypatch.delenv("DASHSCOPE_BASE_URL", raising=False)
+    captured: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(json.loads(request.content))
+        return _ok_response()
+
+    transport = httpx.MockTransport(handler)
+    provider = QwenProvider(
+        api_key="key",
+        base_url="http://localhost:11434/v1",
+        transport=transport,
+        max_retries=0,
+    )
+
+    with patch("asyncio.sleep"):
+        await provider.chat(
+            model="qwen3.5:9b", system="s", user="u", temperature=0.3, json_mode=True
+        )
+
+    assert captured[0]["reasoning_effort"] == "none"
+
+
+@pytest.mark.asyncio
+async def test_reasoning_effort_absent_on_dashscope_cloud(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The cloud body stays byte-identical: no reasoning_effort key on DashScope."""
+    monkeypatch.delenv("DASHSCOPE_BASE_URL", raising=False)
+    captured: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(json.loads(request.content))
+        return _ok_response()
+
+    transport = httpx.MockTransport(handler)
+    provider = QwenProvider(api_key="key", transport=transport, max_retries=0)
+
+    with patch("asyncio.sleep"):
+        await provider.chat(
+            model="qwen3.5-flash", system="s", user="u", temperature=0.3, json_mode=True
+        )
+
+    assert "reasoning_effort" not in captured[0]
