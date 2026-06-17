@@ -11,7 +11,7 @@ test.describe('Live Negotiation Dashboard (operator)', () => {
   test('renders 3-panel layout', async ({ page }) => {
     // Left panel: controls
     await expect(page.getByText('Start Run')).toBeVisible()
-    await expect(page.getByText('Inject Event')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Inject Event' })).toBeVisible()
 
     // Center: empty state
     await expect(page.getByText('Start a run to see the map')).toBeVisible()
@@ -83,10 +83,58 @@ test.describe('Live read-only (public, no token)', () => {
 
     // The mutating controls are gone…
     await expect(page.getByText('Start Run')).toHaveCount(0)
-    await expect(page.getByText('Inject Event')).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Inject Event' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Demo Mode' })).toHaveCount(0)
     // …replaced by the read-only note, and the watch panel remains.
     await expect(page.getByText(/Read-only view/i)).toBeVisible()
     await expect(page.getByText('Negotiation Feed')).toBeVisible()
+  })
+})
+
+test.describe('Live onboarding — public', () => {
+  test.beforeEach(async ({ page }) => {
+    // Clear onboarding state so the banner always shows
+    await page.goto('/')
+    await page.evaluate(() => {
+      localStorage.removeItem('aftershock-live-briefing-seen-v1-public')
+    })
+    await page.getByRole('button', { name: 'live', exact: true }).click()
+  })
+
+  test('briefing banner is visible with public copy', async ({ page }) => {
+    await expect(page.getByText('SYSTEM BRIEFING')).toBeVisible()
+    await expect(page.getByText(/typed auction protocol/)).toBeVisible()
+    await expect(page.getByText(/WATCHER MODE/)).toBeVisible()
+    // Public banner should NOT show the operator-specific line
+    await expect(page.getByText(/Operator session/)).toHaveCount(0)
+  })
+
+  test('help button is visible', async ({ page }) => {
+    await expect(page.getByRole('button', { name: 'Open help' })).toBeVisible()
+  })
+
+  test('banner dismiss persists across reload', async ({ page }) => {
+    await page.getByRole('button', { name: 'Dismiss briefing' }).click()
+    await expect(page.getByText('SYSTEM BRIEFING')).toHaveCount(0)
+
+    // Reload and verify it stays dismissed
+    await page.reload()
+    await page.getByRole('button', { name: 'live', exact: true }).click()
+    await expect(page.getByText('SYSTEM BRIEFING')).toHaveCount(0)
+  })
+})
+
+test.describe('Live onboarding — operator', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/?token=demo')
+    await page.evaluate(() => {
+      localStorage.removeItem('aftershock-live-briefing-seen-v1-operator')
+    })
+    await page.getByRole('button', { name: 'live', exact: true }).click()
+  })
+
+  test('briefing banner shows operator-specific copy', async ({ page }) => {
+    await expect(page.getByText('SYSTEM BRIEFING')).toBeVisible()
+    await expect(page.getByText(/Operator session/)).toBeVisible()
   })
 })
