@@ -10,6 +10,7 @@ import { NegotiationFeed } from './NegotiationFeed'
 import { ResourcePoolSidebar } from './ResourcePoolSidebar'
 import { AnalystTicker } from './live/AnalystTicker'
 import { BriefingBanner } from './live/BriefingBanner'
+import { HelpDrawer } from './live/HelpDrawer'
 import { useLiveOnboarding } from '../hooks/useLiveOnboarding'
 
 const SYNTHETIC_DEFAULT_TICKS = 60
@@ -297,7 +298,7 @@ export function LiveTab({ onTickReceived }: Props) {
   // read-only; the server enforces the gate, this just hides controls that would 401.
   const operator = api.hasToken()
 
-  const { audience, openHelp } = useLiveOnboarding()
+  const { audience, drawerOpen, openHelp, closeHelp } = useLiveOnboarding()
 
   return (
     <div className="flex h-full overflow-hidden relative">
@@ -312,6 +313,8 @@ export function LiveTab({ onTickReceived }: Props) {
       >
         ?
       </button>
+
+      <HelpDrawer open={drawerOpen} onClose={closeHelp} audience={audience} />
 
       {/* Left panel: controls */}
       <div className="w-64 shrink-0 flex flex-col gap-3 p-3 border-r border-eoc-border overflow-y-auto bg-eoc-ground">
