@@ -8,6 +8,10 @@ import { Scoreboard } from './Scoreboard'
 import { PanicGauge } from './PanicGauge'
 import { NegotiationFeed } from './NegotiationFeed'
 import { ResourcePoolSidebar } from './ResourcePoolSidebar'
+import { AnalystTicker } from './live/AnalystTicker'
+import { BriefingBanner } from './live/BriefingBanner'
+import { HelpDrawer } from './live/HelpDrawer'
+import { useLiveOnboarding } from '../hooks/useLiveOnboarding'
 
 const SYNTHETIC_DEFAULT_TICKS = 60
 const SCENARIO_TICK_PADDING = 20
@@ -294,8 +298,24 @@ export function LiveTab({ onTickReceived }: Props) {
   // read-only; the server enforces the gate, this just hides controls that would 401.
   const operator = api.hasToken()
 
+  const { audience, drawerOpen, openHelp, closeHelp } = useLiveOnboarding()
+
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full overflow-hidden relative">
+      <BriefingBanner audience={audience} />
+
+      {/* Help trigger */}
+      <button
+        type="button"
+        onClick={openHelp}
+        aria-label="Open help"
+        className="absolute top-2 right-2 z-20 w-7 h-7 flex items-center justify-center rounded border border-eoc-border bg-eoc-surface/90 backdrop-blur-sm text-eoc-secondary hover:text-eoc-primary transition-colors text-xs font-mono"
+      >
+        ?
+      </button>
+
+      <HelpDrawer open={drawerOpen} onClose={closeHelp} audience={audience} />
+
       {/* Left panel: controls */}
       <div className="w-64 shrink-0 flex flex-col gap-3 p-3 border-r border-eoc-border overflow-y-auto bg-eoc-ground">
         <div className="flex items-center gap-2">
@@ -523,12 +543,21 @@ export function LiveTab({ onTickReceived }: Props) {
 
       {/* Center: map + scoreboard overlay */}
       <div className="flex-1 flex flex-col relative overflow-hidden">
+        {liveWorld && (
+          <AnalystTicker
+            tick={latestTick}
+            world={liveWorld}
+            contention={contention}
+            inject={injectMarker}
+            arm={status?.arm}
+          />
+        )}
         {liveWorld ? (
           <>
-            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10">
+            <div className="absolute top-10 left-1/2 -translate-x-1/2 z-10">
               <Scoreboard tick={latestTick} />
             </div>
-            <div className="absolute top-12 left-3 z-10 w-48">
+            <div className="absolute top-20 left-3 z-10 w-48">
               <PanicGauge panic={liveWorld.panic} />
             </div>
             <div className="flex-1 p-2">
