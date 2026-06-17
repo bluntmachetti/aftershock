@@ -5,7 +5,9 @@ services:
     expose:
       - "8788"
     ports:
-      - "127.0.0.1:8788:8788"
+      # Default loopback-only (prod sits behind Caddy). A LAN/staging box can set
+      # OBSERVATORY_BIND=0.0.0.0 in its .env to reach the app directly at host:8788.
+      - "${OBSERVATORY_BIND:-127.0.0.1}:8788:8788"
     env_file:
       # Optional: copy .env.example to .env for live LLM runs (DASHSCOPE_API_KEY) and the
       # observatory token. A fresh clone runs without it (scripted arm + recorded-run replay).

@@ -1,16 +1,13 @@
 import type { TickRecord, ProposalRuling, Proposal } from '../types'
 import { MISSION_KIND_COLORS, STATUS_COLORS, FALLBACK_COLOR } from '../lib/palette'
 
-// Role/agent color coding for senders in the feed. commander=amber,
-// rescue=red, medical=cyan, fire=red, infrastructure=violet, comms=green.
-// Drawn from the canonical palette so no raw hex lives here.
 const ROLE_COLORS: Record<string, string> = {
-  commander: STATUS_COLORS.open, // amber
-  rescue: STATUS_COLORS.failed, // signal-red
-  medical: MISSION_KIND_COLORS.medical_surge, // cyan
-  fire: MISSION_KIND_COLORS.fire, // signal-red
-  infrastructure: MISSION_KIND_COLORS.infra_repair, // violet
-  comms: STATUS_COLORS.resolved, // green
+  commander: STATUS_COLORS.open,
+  rescue: STATUS_COLORS.failed,
+  medical: MISSION_KIND_COLORS.medical_surge,
+  fire: MISSION_KIND_COLORS.fire,
+  infrastructure: MISSION_KIND_COLORS.infra_repair,
+  comms: STATUS_COLORS.resolved,
 }
 
 function roleColor(sender: string): string {
@@ -21,36 +18,87 @@ interface FeedEntry {
   tick: number
   ruling: ProposalRuling
   proposal?: Proposal
+  type: 'ruling'
 }
 
-function buildFeed(ticks: TickRecord[], cursor: number): FeedEntry[] {
-  const entries: FeedEntry[] = []
-  // Show rulings from current tick and a few recent
-  const start = Math.max(0, cursor - 4)
-  for (let i = cursor; i >= start; i--) {
+interface InjectEntry {
+  type: 'inject'
+  tick: number
+  kind: string
+  district: string
+}
+
+type AnyEntry = FeedEntry | InjectEntry
+
+interface InjectMarker {
+  kind: string
+  district: string
+  tick: number
+}
+
+function buildFeed(
+  ticks: TickRecord[],
+  cursor: number,
+  injectMarker: InjectMarker | null,
+): AnyEntry[] {
+  const entries: AnyEntry[] = []
+
+  for (let i = Math.max(0, cursor - 4); i <= cursor; i++) {
     const tick = ticks[i]
     if (!tick) continue
-    // Build proposal map for this tick
+
     const proposals: Record<string, Proposal> = {}
     for (const resp of tick.responses) {
       for (const p of resp.proposals) {
         proposals[p.proposal_id] = p
       }
     }
+
+    for (const evt of tick.events) {
+      if (evt.payload?.injected === true) {
+        const kind = (evt.payload.inject_kind as string)
+          ?? (evt.kind === 'mission_spawned'
+            ? (evt.payload.mission_kind as string ?? 'mission')
+            : evt.kind === 'road_blocked' ? 'road_block' : evt.kind)
+        entries.push({
+          type: 'inject',
+          tick: tick.tick,
+          kind,
+          district: (evt.payload.district_id as string) ?? '',
+        })
+      }
+    }
+
     for (const ruling of [...tick.rulings].reverse()) {
-      entries.push({ tick: tick.tick, ruling, proposal: proposals[ruling.proposal_id] })
+      entries.push({
+        type: 'ruling',
+        tick: tick.tick,
+        ruling,
+        proposal: proposals[ruling.proposal_id],
+      })
     }
   }
-  return entries.slice(0, 30)
+
+  if (injectMarker && injectMarker.tick === -1) {
+    entries.unshift({
+      type: 'inject',
+      tick: cursor >= 0 ? ticks[cursor]?.tick ?? 0 : 0,
+      kind: injectMarker.kind,
+      district: injectMarker.district,
+    })
+  }
+
+  return entries.slice(0, 40)
 }
 
 interface Props {
   ticks: TickRecord[]
   cursor: number
+  injectMarker?: InjectMarker | null
 }
 
-export function NegotiationFeed({ ticks, cursor }: Props) {
-  const entries = buildFeed(ticks, cursor)
+export function NegotiationFeed({ ticks, cursor, injectMarker = null }: Props) {
+  const entries = buildFeed(ticks, cursor, injectMarker)
 
   return (
     <div className="flex flex-col gap-0 overflow-y-auto h-full">
@@ -61,6 +109,28 @@ export function NegotiationFeed({ ticks, cursor }: Props) {
         <div className="px-2 py-3 text-[11px] text-eoc-secondary font-mono">No rulings yet.</div>
       )}
       {entries.map((e, i) => {
+        if (e.type === 'inject') {
+          return (
+            <div
+              key={`inject-${i}`}
+              className="flex items-start gap-2 px-2 py-1.5 border-b border-eoc-raised text-[11px] leading-tight bg-signal-red/5"
+            >
+              <span className="font-mono text-[10px] text-eoc-secondary tabular-nums mt-0.5 w-5 shrink-0">
+                T{e.tick}
+              </span>
+              <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-signal-red shadow-[0_0_4px_rgba(239,68,68,0.5)]" />
+              <div className="flex flex-col min-w-0">
+                <span className="font-mono text-signal-red font-semibold">
+                  INJECTED: {e.kind.replace(/_/g, ' ')}
+                </span>
+                <span className="text-[10px] text-eoc-secondary">
+                  → {e.district.replace(/_/g, ' ')}
+                </span>
+              </div>
+            </div>
+          )
+        }
+
         const accepted = e.ruling.accepted
         const p = e.proposal
         const sender = p?.sender ?? ''

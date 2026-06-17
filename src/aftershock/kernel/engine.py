@@ -121,7 +121,15 @@ class Engine:
         # maps proposal_id -> Proposal
         self._pending_bilateral: dict[str, Proposal] = {}
 
-    async def run(self) -> RunSummary:
+    async def run(self, *, inter_tick_delay_s: float = 0.0) -> RunSummary:
+        """Run the deterministic tick loop to completion.
+
+        ``inter_tick_delay_s`` is an OPTIONAL wall-clock pause between ticks, used
+        only by the live observatory to pace a fast (scripted) stream at a
+        watchable cadence. It defaults to 0.0 — the cli/bench/verify paths never
+        pass it, so it cannot affect any recorded digest (the pause adds no state;
+        determinism is unchanged).
+        """
         tick = 0
         last_scores: dict[str, float] = {}
         while tick < self._max_ticks:
@@ -129,6 +137,8 @@ class Engine:
             last_scores = dict(record.scores)
             if self._society.is_over(self._world, tick):
                 break
+            if inter_tick_delay_s > 0.0:
+                await asyncio.sleep(inter_tick_delay_s)
             tick += 1
         cost = self._ledger.totals()
         self._recorder.write_final_summary(last_scores, cost)

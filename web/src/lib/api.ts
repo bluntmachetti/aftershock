@@ -85,6 +85,10 @@ export const api = {
 
   liveStatus: (): Promise<LiveStatus> => get('/api/live'),
 
+  // True when an operator token is configured (via ?token=… or stored). Gates the
+  // mutating controls in the UI; the server still enforces the gate independently.
+  hasToken: (): boolean => !!localStorage.getItem(TOKEN_KEY),
+
   aar: (runId: string): Promise<AarReport> => get(`/api/runs/${runId}/aar`),
 
   conformance: (runId: string): Promise<ConformanceReport> =>
@@ -115,4 +119,9 @@ export const api = {
 
   injectEvent: (kind: string, district: string): Promise<void> =>
     post('/api/live/inject', { kind, district }),
+
+  // Cancel the in-progress live run (idempotent) so the operator can take manual
+  // control — e.g. interrupt the auto-started scripted demo to start a real run.
+  stopLive: (): Promise<{ ok: boolean; running: boolean }> =>
+    post('/api/live/stop', {}),
 }
