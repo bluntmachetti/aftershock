@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test'
 
-test.describe('Live Negotiation Dashboard', () => {
+test.describe('Live Negotiation Dashboard (operator)', () => {
   test.beforeEach(async ({ page }) => {
-    // ?autostart=0 opens a static control view so these tests assert the idle
-    // surface; the auto-start behavior is covered in its own describe block below.
-    await page.goto('/?autostart=0')
+    // ?token=… configures an operator session so the mutating controls render; these
+    // tests assert the idle control surface. The public read-only view is covered below.
+    await page.goto('/?token=demo')
     await page.getByRole('button', { name: 'live', exact: true }).click()
   })
 
@@ -74,20 +74,19 @@ test.describe('Live Negotiation Dashboard', () => {
   })
 })
 
-test.describe('Live auto-start', () => {
-  test('auto-starts a scripted stream on open and can be stopped', async ({ page }) => {
-    // Default (no ?autostart=0): opening the Live tab begins a scripted run with no click.
+test.describe('Live read-only (public, no token)', () => {
+  test('hides the operator controls and shows the read-only note', async ({ page }) => {
+    // No ?token=: the public/judge view is read-only — the server-side ambient loop
+    // keeps it alive; the browser only watches.
     await page.goto('/')
     await page.getByRole('button', { name: 'live', exact: true }).click()
 
-    // The status flips to RUNNING and a Stop (take-control) button appears.
-    await expect(page.getByText(/RUNNING/)).toBeVisible()
-    const stopBtn = page.getByRole('button', { name: 'Stop', exact: true })
-    await expect(stopBtn).toBeVisible()
-
-    // Taking manual control returns to idle with Start available again.
-    await stopBtn.click()
-    await expect(page.getByText('IDLE')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Start' })).toBeVisible()
+    // The mutating controls are gone…
+    await expect(page.getByText('Start Run')).toHaveCount(0)
+    await expect(page.getByText('Inject Event')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Demo Mode' })).toHaveCount(0)
+    // …replaced by the read-only note, and the watch panel remains.
+    await expect(page.getByText(/Read-only view/i)).toBeVisible()
+    await expect(page.getByText('Negotiation Feed')).toBeVisible()
   })
 })

@@ -34,14 +34,9 @@ const DISTRICTS = [
 ]
 const EVENT_KINDS = ['fire', 'aftershock', 'road_block']
 
-// Auto-start a scripted demo stream when the Live tab first mounts, so a judge
-// who opens it sees a live negotiation immediately. Opt out with ?autostart=0
-// (e.g. to open a static control view). Evaluated once at module load.
-const AUTO_START_ENABLED =
-  new URLSearchParams(window.location.search).get('autostart') !== '0'
-
-// Demo defaults shared by auto-start and the Demo Mode preset, kept in one place
-// so the call args and the state setters can't drift apart.
+// Demo defaults for the Demo Mode preset (an operator control). The public Live tab
+// is kept alive by the SERVER-side ambient loop (AFTERSHOCK_DEMO_MODE) over the
+// read-only WS — the browser never starts a run, so no client mutation is needed.
 const DEMO_SEED = 42
 const DEMO_TICKS = 30
 
@@ -122,38 +117,6 @@ export function LiveTab({ onTickReceived }: Props) {
     }
   }, [])
 
-  const autoStartScripted = useCallback(async () => {
-    setStartError(null)
-    setLog([])
-    setLiveTicks([])
-    setLiveWorld(null)
-    setSelectedMission(null)
-    setInjectMarker(null)
-    setArm('scripted')
-    setSeed(DEMO_SEED)
-    setTicks(DEMO_TICKS)
-    setScenario(SYNTHETIC_SCENARIO)
-    setAarEnabled(false)
-    setMemoryEnabled(false)
-    setMemoryActive(false)
-    try {
-      await api.startLive('scripted', DEMO_SEED, DEMO_TICKS)
-      appendLog('[auto] scripted demo stream started')
-      await refreshStatus()
-    } catch (e) {
-      // On a token-gated deploy the POST may 401; the presenter can Start manually.
-      appendLog(`[auto] auto-start skipped: ${(e as Error).message}`)
-    }
-  }, [appendLog, refreshStatus])
-
-  const autoStartedRef = useRef(false)
-  useEffect(() => {
-    if (!AUTO_START_ENABLED || autoStartedRef.current || status === null) return
-    autoStartedRef.current = true
-    if (status.running) return // a run is already live — just watch it
-    void autoStartScripted()
-  }, [status, autoStartScripted])
-
   useEffect(() => {
     let cancelled = false
     api.getScenarios()
@@ -194,6 +157,10 @@ export function LiveTab({ onTickReceived }: Props) {
   })
 
   const running = status?.running ?? false
+  // Key the socket on the run IDENTITY, not just `running`: when an operator pre-empts
+  // the ambient run (or one ambient run rolls into the next) the live_id changes while
+  // `running` stays true, so we must tear down and reopen the WS to follow the new run.
+  const liveId = status?.live_id ?? null
   useEffect(() => {
     if (!running) {
       wsRef.current?.close()
@@ -244,7 +211,7 @@ export function LiveTab({ onTickReceived }: Props) {
       ws.close()
       if (wsRef.current === ws) wsRef.current = null
     }
-  }, [running])
+  }, [running, liveId])
 
   function friendlyError(e: Error): string {
     if (e.message.includes('401')) {
@@ -323,6 +290,9 @@ export function LiveTab({ onTickReceived }: Props) {
   }, [])
 
   const isRunning = status?.running ?? false
+  // Operator = an observatory token is configured (?token=…). The public/judge view is
+  // read-only; the server enforces the gate, this just hides controls that would 401.
+  const operator = api.hasToken()
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -334,7 +304,9 @@ export function LiveTab({ onTickReceived }: Props) {
           />
           <span className="text-[10px] font-mono text-eoc-secondary">
             {isRunning
-              ? `RUNNING — ${status?.arm} / seed ${status?.seed} / T${status?.tick}`
+              ? status?.mode === 'ambient'
+                ? `LIVE DEMO — ${status?.arm} / T${status?.tick}`
+                : `RUNNING — ${status?.arm} / seed ${status?.seed} / T${status?.tick}`
               : 'IDLE'}
           </span>
           {isRunning && memoryActive && (
@@ -347,6 +319,15 @@ export function LiveTab({ onTickReceived }: Props) {
           <div className="text-[10px] font-mono text-signal-red">{statusError}</div>
         )}
 
+        {!operator && (
+          <div className="text-[10px] font-mono text-eoc-secondary leading-relaxed p-2 bg-eoc-surface border border-eoc-border rounded-lg">
+            Live demo — auto-running scripted negotiations. Read-only view; append{' '}
+            <span className="text-eoc-primary">?token=…</span> to the URL for operator
+            controls.
+          </div>
+        )}
+
+        {operator && (<>
         <button
           onClick={handleDemo}
           disabled={isRunning || starting}
@@ -537,6 +518,7 @@ export function LiveTab({ onTickReceived }: Props) {
             <div className="text-[9px] font-mono text-signal-red">{injectError}</div>
           )}
         </div>
+        </>)}
       </div>
 
       {/* Center: map + scoreboard overlay */}
@@ -564,7 +546,7 @@ export function LiveTab({ onTickReceived }: Props) {
               <div className="text-eoc-secondary text-sm font-mono mb-2">
                 {isRunning ? 'Waiting for first tick…' : 'Start a run to see the map'}
               </div>
-              {!isRunning && (
+              {!isRunning && operator && (
                 <button
                   onClick={handleDemo}
                   className="px-4 py-2 rounded text-xs font-mono uppercase tracking-wider

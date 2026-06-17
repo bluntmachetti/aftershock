@@ -113,9 +113,11 @@ def reset_live_state(monkeypatch: pytest.MonkeyPatch):
     import aftershock.web as web_mod
 
     web_mod._live = None
+    web_mod._ambient_task = None
     monkeypatch.setattr(web_mod, "_LIVE_TICK_DELAY_S", 0.0)
     yield
     web_mod._live = None
+    web_mod._ambient_task = None
 
 
 # ---------------------------------------------------------------------------
@@ -508,6 +510,98 @@ def test_live_stop_no_run_is_noop(runs_root: Path) -> None:
         resp = client.post("/api/live/stop")
         assert resp.status_code == 200
         assert resp.json()["running"] is False
+
+
+# ---------------------------------------------------------------------------
+# Tests: ambient demo loop (AFTERSHOCK_DEMO_MODE)
+# ---------------------------------------------------------------------------
+
+
+def _poll_live(client: TestClient, predicate, timeout: float = 6.0) -> dict:
+    """Poll GET /api/live until predicate(status) is true (or timeout); return last."""
+    deadline = time.monotonic() + timeout
+    data = client.get("/api/live").json()
+    while time.monotonic() < deadline:
+        data = client.get("/api/live").json()
+        if predicate(data):
+            return data
+        time.sleep(0.02)
+    return data
+
+
+def test_ambient_demo_loop_starts_when_demo_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With AFTERSHOCK_DEMO_MODE set, the app lifespan auto-starts a looping scripted
+    ambient run — the public Live tab is alive with no client POST."""
+    import aftershock.web as web_mod
+
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+    monkeypatch.setenv("AFTERSHOCK_DEMO_MODE", "1")
+    monkeypatch.setattr(web_mod, "_LIVE_TICK_DELAY_S", 0.05)
+    monkeypatch.setattr(web_mod, "_AMBIENT_RESTART_DELAY_S", 0.05)
+    monkeypatch.setattr(web_mod, "_AMBIENT_POLL_S", 0.05)
+    app = create_app(runs_root)
+
+    with TestClient(app) as client:
+        data = _poll_live(client, lambda d: d["running"] and d["mode"] == "ambient")
+
+    assert data["running"] is True
+    assert data["mode"] == "ambient"
+    assert data["arm"] == "scripted"
+
+
+def test_ambient_disabled_without_demo_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without AFTERSHOCK_DEMO_MODE there is no ambient run — status stays idle."""
+    monkeypatch.delenv("AFTERSHOCK_DEMO_MODE", raising=False)
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+    app = create_app(runs_root)
+
+    with TestClient(app) as client:
+        time.sleep(0.15)
+        data = client.get("/api/live").json()
+
+    assert data["running"] is False
+    assert data["mode"] is None
+
+
+def test_manual_preempts_and_ambient_resumes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A manual operator run pre-empts the ambient loop (and blocks a second manual);
+    stopping it lets the ambient loop resume."""
+    import aftershock.web as web_mod
+
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+    monkeypatch.setenv("AFTERSHOCK_DEMO_MODE", "1")
+    monkeypatch.setattr(web_mod, "_LIVE_TICK_DELAY_S", 0.05)
+    monkeypatch.setattr(web_mod, "_AMBIENT_RESTART_DELAY_S", 0.05)
+    monkeypatch.setattr(web_mod, "_AMBIENT_POLL_S", 0.05)
+    app = create_app(runs_root)
+
+    with TestClient(app) as client:
+        _poll_live(client, lambda d: d["running"] and d["mode"] == "ambient")
+
+        # Operator takes the floor — pre-empts the ambient run.
+        resp = client.post("/api/live", json={"arm": "scripted", "seed": 99, "ticks": 60})
+        assert resp.status_code == 200
+        data = _poll_live(client, lambda d: d["mode"] == "manual")
+        assert data["mode"] == "manual"
+        assert data["seed"] == 99
+
+        # A second manual start is rejected while the manual run holds the floor.
+        resp2 = client.post("/api/live", json={"arm": "scripted", "seed": 1, "ticks": 4})
+        assert resp2.status_code == 409
+
+        # Releasing the manual run lets the ambient loop resume.
+        client.post("/api/live/stop")
+        data = _poll_live(client, lambda d: d["running"] and d["mode"] == "ambient")
+        assert data["mode"] == "ambient"
 
 
 # ---------------------------------------------------------------------------

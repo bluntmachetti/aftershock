@@ -67,6 +67,13 @@ _DEFAULT_SYNTHETIC_TICKS = 30
 # Presentation-only: passed to Engine.run(inter_tick_delay_s=...) on the live path;
 # cli/bench/verify never set it, so determinism is unaffected. Tests neutralize it.
 _LIVE_TICK_DELAY_S = 0.6
+# Ambient demo loop (enabled by AFTERSHOCK_DEMO_MODE): back-to-back scripted runs that
+# keep the public Live tab alive over the read-only WS without any client mutation. A
+# manual operator run pre-empts the current ambient run; the loop resumes after it ends.
+_AMBIENT_TICKS = 30
+_AMBIENT_SEEDS = (42, 7, 13, 23, 57)
+_AMBIENT_RESTART_DELAY_S = 4.0  # pause on the final scoreboard between ambient runs
+_AMBIENT_POLL_S = 2.0  # re-check cadence while a manual run holds the floor
 # Scenario tick budget (default + under-budget floor) comes from the shared
 # town.scenario.scenario_tick_budget helper so the CLI and the live API agree.
 _VALID_INJECT_KINDS = frozenset({"fire", "aftershock", "road_block"})
@@ -124,6 +131,10 @@ class _LiveState:
     memory: bool = False
     # AAR message stored after generation so late WS connects can replay it
     aar_msg: dict[str, Any] | None = None
+    # "ambient" = the auto-looping public demo run; "manual" = an operator run that
+    # pre-empts the ambient loop. A manual run blocks a second manual start (409);
+    # an ambient run yields to a manual start and resumes when it finishes.
+    mode: str = "manual"
     # Set by _run_live / start_live; declared so they're typed and always present
     # (a missing _task previously let stop_live silently orphan a just-started run).
     _society: Any = None
@@ -132,6 +143,9 @@ class _LiveState:
 
 _live: _LiveState | None = None
 _live_lock = asyncio.Lock()
+# Supervisor task for the ambient demo loop (AFTERSHOCK_DEMO_MODE); owned by the app
+# lifespan. Kept separate from _live._task (the current run's task).
+_ambient_task: asyncio.Task[Any] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -321,6 +335,7 @@ async def _broadcast(state: _LiveState, msg: dict[str, Any]) -> None:
 
 
 async def _run_live(
+    state: _LiveState,
     arm: str,
     seed: int,
     ticks: int,
@@ -329,12 +344,13 @@ async def _run_live(
     do_memory: bool = False,
     pack: ScenarioPack | None = None,
 ) -> None:
-    """Run one live arm in a background task, streaming tick records to WS clients."""
-    global _live
-    state = _live
-    if state is None:
-        return
+    """Run one live arm in a background task, streaming tick records to the WS clients
+    registered on ``state``.
 
+    ``state`` is the _LiveState this run owns; it is passed explicitly (not read from
+    the _live global) so that a manual run which pre-empts an ambient one can't make
+    the ambient task write into the manual run's state.
+    """
     try:
         if arm == "scripted":
             provider = None
@@ -448,6 +464,66 @@ async def _run_live(
         state.connections.clear()
 
 
+async def _ambient_demo_loop(runs_root: Path) -> None:
+    """Keep the public Live tab alive: run back-to-back scripted demo runs whenever no
+    manual (operator) run holds the floor. A manual start pre-empts the current ambient
+    run (cancelling its task); this loop resumes once that manual run finishes.
+
+    Server-driven so the demo needs no client mutation — the browser only watches the
+    ungated WS. Enabled by AFTERSHOCK_DEMO_MODE; owned and cancelled by the app lifespan.
+    """
+    global _live
+    seed_idx = 0
+    fail_streak = 0
+    while True:
+        current: asyncio.Task[Any] | None = None
+        state_ref: _LiveState | None = None
+        async with _live_lock:
+            if _live is None or not _live.running:
+                seed = _AMBIENT_SEEDS[seed_idx % len(_AMBIENT_SEEDS)]
+                seed_idx += 1
+                _live = _LiveState(
+                    live_id=str(uuid.uuid4()),
+                    arm="scripted",
+                    seed=seed,
+                    mode="ambient",
+                )
+                _live._task = asyncio.create_task(
+                    _run_live(_live, "scripted", seed, _AMBIENT_TICKS, runs_root)
+                )
+                current = _live._task
+                state_ref = _live
+        if current is not None:
+            # Wait for this ambient run to finish or be pre-empted by a manual start.
+            try:
+                await current
+            except asyncio.CancelledError:
+                # asyncio propagates an outer-task cancel down to the awaited inner task,
+                # so `current` is cancelled in BOTH cases. Distinguish via THIS task's
+                # own cancellation state: if the loop itself is being cancelled (lifespan
+                # shutdown), propagate and exit; otherwise the ambient run was pre-empted
+                # by a manual start, so keep looping.
+                self_task = asyncio.current_task()
+                if self_task is not None and self_task.cancelling() > 0:
+                    raise
+            except Exception:  # noqa: BLE001 — an ambient run error just rolls to the next
+                pass
+            # A run that never emitted a tick failed to set up (e.g. an unwritable runs
+            # dir). Back off exponentially on a persistent failure so the loop can't
+            # busy-spin or flood the logs; a successful run resets the streak.
+            if state_ref is not None and state_ref.tick < 0:
+                fail_streak += 1
+            else:
+                fail_streak = 0
+            delay = _AMBIENT_RESTART_DELAY_S
+            if fail_streak >= 3:
+                delay = min(60.0, _AMBIENT_RESTART_DELAY_S * 2 ** (fail_streak - 2))
+            await asyncio.sleep(delay)
+        else:
+            # A manual run holds the floor; re-check shortly.
+            await asyncio.sleep(_AMBIENT_POLL_S)
+
+
 # ---------------------------------------------------------------------------
 # create_app
 # ---------------------------------------------------------------------------
@@ -495,7 +571,34 @@ def create_app(
         if not x_observatory_token or not secrets.compare_digest(x_observatory_token, _app_token):
             raise HTTPException(status_code=401, detail="unauthorized")
 
-    app = FastAPI(title="Aftershock Observatory")
+    @contextlib.asynccontextmanager
+    async def _lifespan(_app: FastAPI):
+        # When AFTERSHOCK_DEMO_MODE is set (the public judge box), run the ambient demo
+        # loop for the lifetime of the app so the Live tab is alive over the read-only WS
+        # with no client mutation. Cancelled cleanly on shutdown.
+        global _ambient_task
+        if os.environ.get("AFTERSHOCK_DEMO_MODE"):
+            _ambient_task = asyncio.create_task(_ambient_demo_loop(runs_root))
+        try:
+            yield
+        finally:
+            loop_task = _ambient_task
+            _ambient_task = None
+            if loop_task is not None:
+                loop_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await loop_task
+            # Stop any in-flight run too, so shutdown leaves no dangling task.
+            state = _live
+            if state is not None and state.running:
+                state.running = False
+                run_task = state._task
+                if run_task is not None and not run_task.done():
+                    run_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError, Exception):
+                        await run_task
+
+    app = FastAPI(title="Aftershock Observatory", lifespan=_lifespan)
 
     app.add_middleware(
         CORSMiddleware,
@@ -690,6 +793,7 @@ def create_app(
                 "tick": -1,
                 "arm": None,
                 "seed": None,
+                "mode": None,
             })
         return JSONResponse({
             "running": _live.running,
@@ -697,6 +801,7 @@ def create_app(
             "tick": _live.tick,
             "arm": _live.arm,
             "seed": _live.seed,
+            "mode": _live.mode,
         })
 
     # ------------------------------------------------------------------
@@ -706,13 +811,6 @@ def create_app(
     @app.post("/api/live", dependencies=[Depends(_require_token)])
     async def start_live(req: LiveRunRequest) -> JSONResponse:
         global _live
-
-        # One at a time
-        async with _live_lock:
-            if _live is not None and _live.running:
-                raise HTTPException(
-                    status_code=409, detail="a live run is already in progress"
-                )
 
         # Resolve the scenario pack (unknown/invalid id -> 404) before computing ticks:
         # the omitted-ticks default depends on the pack's timeline.
@@ -759,19 +857,35 @@ def create_app(
         live_id = str(uuid.uuid4())
 
         async with _live_lock:
+            # One manual run at a time: this 409 check and the assignment below sit in a
+            # SINGLE lock block (no await between them) so two concurrent manual starts
+            # can't both pass. An in-flight AMBIENT demo run is pre-empted instead so the
+            # operator takes the floor; the ambient loop resumes once this run ends. We
+            # cancel the ambient task AFTER reassigning _live, outside the lock.
+            if _live is not None and _live.running and _live.mode == "manual":
+                raise HTTPException(
+                    status_code=409, detail="a live run is already in progress"
+                )
+            preempt = (
+                _live._task
+                if (_live is not None and _live.running and _live.mode == "ambient")
+                else None
+            )
             _live = _LiveState(
                 live_id=live_id,
                 arm=req.arm,
                 seed=req.seed,
                 aar=req.aar,
                 memory=req.memory,
+                mode="manual",
             )
-            # Create the task and retain a strong ref to it BEFORE releasing the
-            # lock. create_task only schedules — the coroutine body doesn't run
-            # until the next loop turn — so a racing stop_live always observes a
-            # set _task rather than orphaning the run.
+            # Create the task and retain a strong ref to it BEFORE releasing the lock.
+            # create_task only schedules — the coroutine body doesn't run until the next
+            # loop turn — so a racing stop_live always observes a set _task, and the
+            # state is passed explicitly into _run_live (no _live-global capture race).
             _live._task = asyncio.create_task(
                 _run_live(
+                    _live,
                     req.arm,
                     req.seed,
                     ticks,
@@ -781,6 +895,10 @@ def create_app(
                     pack=pack,
                 )
             )
+        if preempt is not None and not preempt.done():
+            preempt.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await preempt
 
         return JSONResponse({"live_id": live_id})
 

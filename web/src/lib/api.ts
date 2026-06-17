@@ -85,6 +85,10 @@ export const api = {
 
   liveStatus: (): Promise<LiveStatus> => get('/api/live'),
 
+  // True when an operator token is configured (via ?token=… or stored). Gates the
+  // mutating controls in the UI; the server still enforces the gate independently.
+  hasToken: (): boolean => !!localStorage.getItem(TOKEN_KEY),
+
   aar: (runId: string): Promise<AarReport> => get(`/api/runs/${runId}/aar`),
 
   conformance: (runId: string): Promise<ConformanceReport> =>

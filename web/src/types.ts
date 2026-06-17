@@ -344,6 +344,8 @@ export interface LiveStatus {
   tick: number
   arm: string
   seed: number
+  // "ambient" = the server-driven looping demo run; "manual" = an operator run.
+  mode?: 'ambient' | 'manual' | null
 }
 
 export interface AarKeyMoment {

@@ -1,15 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, act } from '@testing-library/react'
 import { LiveTab } from '../LiveTab'
 import { api } from '../../lib/api'
 
-// Mock the API module
+// Mock the API module. hasToken defaults true so the operator controls render; the
+// read-only test flips it to false.
 vi.mock('../../lib/api', () => ({
   api: {
-    liveStatus: vi.fn().mockResolvedValue({ running: false, live_id: null, tick: 0, arm: '', seed: 0 }),
+    liveStatus: vi.fn().mockResolvedValue({ running: false, live_id: null, tick: 0, arm: '', seed: 0, mode: null }),
     getScenarios: vi.fn().mockResolvedValue([]),
     startLive: vi.fn().mockResolvedValue({ live_id: 'test' }),
+    stopLive: vi.fn().mockResolvedValue({ ok: true, running: false }),
     injectEvent: vi.fn().mockResolvedValue(undefined),
+    hasToken: vi.fn().mockReturnValue(true),
   },
 }))
 
@@ -30,6 +33,10 @@ globalThis.WebSocket = MockWebSocket
 
 beforeEach(() => {
   MockWebSocket.instances = []
+  vi.mocked(api.hasToken).mockReturnValue(true)
+  vi.mocked(api.liveStatus).mockResolvedValue({
+    running: false, live_id: null, tick: 0, arm: '', seed: 0, mode: null,
+  })
 })
 
 describe('LiveTab layout', () => {
@@ -73,11 +80,36 @@ describe('LiveTab layout', () => {
     expect(screen.getByText(/IDLE/)).toBeInTheDocument()
   })
 
-  it('auto-starts a scripted demo stream on mount', async () => {
+  it('hides operator controls in the read-only (no-token) view', () => {
+    vi.mocked(api.hasToken).mockReturnValue(false)
     render(<LiveTab onTickReceived={vi.fn()} />)
-    // Without any click, the tab kicks off a deterministic scripted run.
-    await waitFor(() => {
-      expect(api.startLive).toHaveBeenCalledWith('scripted', 42, 30)
-    })
+    // The mutating controls are gone for the public/judge view…
+    expect(screen.queryByText('Start Run')).not.toBeInTheDocument()
+    expect(screen.queryByText('Inject Event')).not.toBeInTheDocument()
+    expect(screen.queryByText('Demo Mode')).not.toBeInTheDocument()
+    // …but the watchable panels remain.
+    expect(screen.getByText('Negotiation Feed')).toBeInTheDocument()
+  })
+
+  it('reopens the WS when the live run identity changes (pre-emption / rollover)', async () => {
+    vi.useFakeTimers()
+    try {
+      // First poll: an ambient run. Later polls: a different run id (an operator
+      // pre-empted it, or one ambient run rolled into the next) with running still true.
+      vi.mocked(api.liveStatus)
+        .mockResolvedValueOnce({
+          running: true, live_id: 'run-1', tick: 1, arm: 'scripted', seed: 42, mode: 'ambient',
+        })
+        .mockResolvedValue({
+          running: true, live_id: 'run-2', tick: 0, arm: 'scripted', seed: 99, mode: 'manual',
+        })
+      render(<LiveTab onTickReceived={vi.fn()} />)
+      await act(async () => { await vi.advanceTimersByTimeAsync(5) }) // poll → run-1
+      expect(MockWebSocket.instances.length).toBe(1)
+      await act(async () => { await vi.advanceTimersByTimeAsync(2000) }) // poll → run-2
+      expect(MockWebSocket.instances.length).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
