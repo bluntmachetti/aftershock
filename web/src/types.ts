@@ -304,6 +304,14 @@ export interface RunSummary {
   // Compact {id, name, hazard} from the run manifest; null/absent for synthetic
   // runs (the UI treats absence as SYN·QUAKE).
   scenario?: ScenarioCompact | null
+  // Counterfactual branch metadata; present only on branch runs.
+  counterfactual?: {
+    at_tick: number
+    kind: string
+    target: string
+    params: Record<string, unknown>
+    branch_of: string | null
+  }
 }
 
 /** GET /api/runs/{id} detail. The full scenario manifest block (or null for a

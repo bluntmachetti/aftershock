@@ -109,6 +109,17 @@ class InjectRequest(BaseModel):
     district: str
 
 
+class CounterfactualRequest(BaseModel):
+    arm: str
+    seed: int
+    ticks: int
+    at_tick: int
+    kind: str
+    target: str = ""
+    params: dict[str, Any] = {}
+    baseline_run_id: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Live-run state (module-level singleton, one run at a time)
 # ---------------------------------------------------------------------------
@@ -457,6 +468,73 @@ async def _run_live(
         # (the Stop button is built for repeated use within a demo session).
         with contextlib.suppress(Exception):
             recorder.close()
+        state.running = False
+        for ws in list(state.connections):
+            with contextlib.suppress(Exception):
+                await ws.close()
+        state.connections.clear()
+
+
+async def _run_counterfactual_live(
+    state: _LiveState,
+    req: CounterfactualRequest,
+    runs_root: Path,
+) -> None:
+    """Run one counterfactual branch in a background task, streaming to the WS clients
+    on ``state`` exactly like _run_live. The branch lands in runs/ under a distinct
+    run_id and is replayable by Compare against its baseline.
+    """
+    from aftershock.town.counterfactual import Intervention, run_counterfactual
+
+    def _on_tick(record: Any, world_state_dict: dict[str, Any] | None = None) -> None:
+        tick_dict = record.model_dump(mode="json")
+        msg: dict[str, Any] = {"type": "tick", "record": tick_dict, "world": world_state_dict}
+        state.tick = record.tick
+        state.buffer.append(msg)
+        asyncio.ensure_future(_broadcast(state, msg))
+
+    try:
+        provider = None
+        if req.arm != "scripted":
+            from aftershock.llm.provider import QwenProvider
+
+            provider = QwenProvider()
+
+        intervention = Intervention(
+            at_tick=req.at_tick, kind=req.kind, target=req.target, params=dict(req.params)
+        )
+        tag = req.kind if req.kind == "none" else f"{req.kind}@{req.at_tick}"
+        run_id = f"cf-{state.live_id[:8]}-{tag}"
+
+        summary_run = await run_counterfactual(
+            arm=req.arm,
+            seed=req.seed,
+            ticks=req.ticks,
+            intervention=intervention,
+            runs_root=runs_root,
+            run_id=run_id,
+            provider=provider,
+            baseline_run_id=req.baseline_run_id,
+            tick_listener=_on_tick,
+        )
+        summary_dict: dict[str, Any] = {
+            "run_id": summary_run.run_id,
+            "seed": summary_run.seed,
+            "ticks_run": summary_run.ticks_run,
+            "final_scores": summary_run.final_scores,
+            "cost": summary_run.cost,
+            "run_dir": summary_run.run_dir,
+            "arm": req.arm,
+        }
+        state.summary = summary_dict
+        await _broadcast(state, {"type": "done", "summary": summary_dict})
+    except Exception as exc:  # noqa: BLE001
+        logger.error("counterfactual run failed", exc_info=exc)
+        with contextlib.suppress(Exception):
+            await _broadcast(
+                state, {"type": "error", "detail": "counterfactual run encountered an error"}
+            )
+    finally:
         state.running = False
         for ws in list(state.connections):
             with contextlib.suppress(Exception):
@@ -948,6 +1026,53 @@ def create_app(
             with contextlib.suppress(asyncio.CancelledError):
                 await task
         return JSONResponse({"ok": True, "running": False})
+
+    # ------------------------------------------------------------------
+    # POST /api/counterfactual
+    # ------------------------------------------------------------------
+
+    @app.post("/api/counterfactual", dependencies=[Depends(_require_token)])
+    async def start_counterfactual(req: CounterfactualRequest) -> JSONResponse:
+        """Branch a run: re-run the seed with one intervention at tick N, streaming
+        the branch over the same /ws/live channel as a live run. The client then
+        flips Compare to (baseline_run_id, branch_run_id)."""
+        global _live
+
+        if req.at_tick < 0 or req.at_tick >= req.ticks:
+            raise HTTPException(
+                status_code=422,
+                detail=f"at_tick must be in [0, {req.ticks}) (got {req.at_tick})",
+            )
+        if req.ticks > _MAX_TICKS_LIVE:
+            raise HTTPException(status_code=422, detail=f"ticks must be <= {_MAX_TICKS_LIVE}")
+
+        llm_arms = ("solo", "swarm", "society")
+        if req.arm in llm_arms and not os.environ.get("DASHSCOPE_API_KEY"):
+            raise HTTPException(
+                status_code=503,
+                detail="DASHSCOPE_API_KEY is not set; set it to run LLM arms",
+            )
+
+        live_id = str(uuid.uuid4())
+        async with _live_lock:
+            if _live is not None and _live.running and _live.mode == "manual":
+                raise HTTPException(
+                    status_code=409, detail="a live run is already in progress"
+                )
+            preempt = (
+                _live._task
+                if (_live is not None and _live.running and _live.mode == "ambient")
+                else None
+            )
+            _live = _LiveState(live_id=live_id, arm=req.arm, seed=req.seed, mode="manual")
+            _live._task = asyncio.create_task(
+                _run_counterfactual_live(_live, req, runs_root)
+            )
+        if preempt is not None and not preempt.done():
+            preempt.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await preempt
+        return JSONResponse({"live_id": live_id})
 
     # ------------------------------------------------------------------
     # WS /ws/live

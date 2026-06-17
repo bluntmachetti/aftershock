@@ -21,6 +21,7 @@ from aftershock.kernel.registry import DecisionRegistry
 from aftershock.kernel.roles import RoleSpec, load_roles
 from aftershock.llm.agent import LLMAgent
 from aftershock.llm.contract import decision_contract
+from aftershock.town.counterfactual import GatedAgent, Intervention, SwitchingResolver
 from aftershock.town.decisions import register_all
 from aftershock.town.doctrine import doctrine_blocks, load_doctrine
 from aftershock.town.heuristics import (
@@ -73,6 +74,7 @@ def build_arm(
     pool_sizes: dict[str, int] | None = None,
     doctrine: bool = True,
     role_models: dict[str, str] | None = None,
+    intervention: Intervention | None = None,
 ) -> ArmSetup:
     """Build all components for one (arm, seed) benchmark cell.
 
@@ -137,24 +139,51 @@ def build_arm(
     engine_seed = seed if seed_sampler else None
 
     if arm == "scripted":
-        return _build_scripted(world, registry, seed)
-    if arm == "society":
-        return _build_society(
+        setup = _build_scripted(world, registry, seed)
+    elif arm == "society":
+        setup = _build_society(
             world, registry, seed, provider, lessons=lessons, use_tools=society_tools,
             engine_seed=engine_seed, doctrine=doctrine, role_models=role_models,
         )
-    if arm == "swarm":
-        return _build_swarm(
+    elif arm == "swarm":
+        setup = _build_swarm(
             world, registry, seed, provider, engine_seed=engine_seed, doctrine=doctrine,
             role_models=role_models,
         )
-    if arm == "solo":
-        return _build_solo(
+    elif arm == "solo":
+        setup = _build_solo(
             world, registry, seed, provider, engine_seed=engine_seed, doctrine=doctrine,
             role_models=role_models,
         )
+    else:
+        raise ValueError(f"unhandled arm {arm!r}")  # unreachable
 
-    raise ValueError(f"unhandled arm {arm!r}")  # unreachable
+    if intervention is not None:
+        setup = _apply_intervention(setup, intervention)
+    return setup
+
+
+def _apply_intervention(setup: ArmSetup, intervention: Intervention) -> ArmSetup:
+    """Wrap the arm's resolver/agents for a counterfactual run.
+
+    ``none`` and ``inject_event`` leave the wiring untouched (inject_event is
+    scheduled by the runner via society.inject_event); ``drop_protocol`` swaps the
+    resolver at the branch tick; ``kill_agent`` gates the named agent.
+    """
+    if intervention.kind in ("none", "inject_event"):
+        return setup
+    if intervention.kind == "drop_protocol":
+        setup.resolver = SwitchingResolver(setup.resolver, intervention.at_tick)
+        return setup
+    if intervention.kind == "kill_agent":
+        target = intervention.target
+        if target not in setup.agents:
+            raise ValueError(
+                f"kill_agent target {target!r} not in roster {sorted(setup.agents)}"
+            )
+        setup.agents[target] = GatedAgent(setup.agents[target], intervention.at_tick)
+        return setup
+    raise ValueError(f"unhandled intervention kind {intervention.kind!r}")  # unreachable
 
 
 # ---------------------------------------------------------------------------

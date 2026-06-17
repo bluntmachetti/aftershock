@@ -440,6 +440,79 @@ def test_live_scripted_end_to_end(tmp_path: Path) -> None:
     assert (run_dir / "ticks.ndjson").exists()
 
 
+# ---------------------------------------------------------------------------
+# Tests: POST /api/counterfactual
+# ---------------------------------------------------------------------------
+
+
+def test_counterfactual_bad_at_tick_422(runs_root: Path) -> None:
+    app = create_app(runs_root)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/counterfactual",
+            json={"arm": "scripted", "seed": 1, "ticks": 10, "at_tick": 10,
+                  "kind": "drop_protocol"},
+        )
+    assert resp.status_code == 422
+
+
+def test_counterfactual_llm_arm_no_key_503(
+    runs_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+    app = create_app(runs_root)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/counterfactual",
+            json={"arm": "society", "seed": 1, "ticks": 10, "at_tick": 5,
+                  "kind": "drop_protocol"},
+        )
+    assert resp.status_code == 503
+
+
+def test_counterfactual_scripted_end_to_end(tmp_path: Path) -> None:
+    """POST /api/counterfactual streams ticks + done over /ws/live and writes a
+    branch run dir whose manifest carries the counterfactual spec."""
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+    app = create_app(runs_root)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/counterfactual",
+            json={"arm": "scripted", "seed": 3, "ticks": 12, "at_tick": 5,
+                  "kind": "drop_protocol", "baseline_run_id": "seed3-scripted"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["live_id"]
+        time.sleep(0.5)
+
+        tick_messages: list[dict] = []
+        done_message: dict | None = None
+        with client.websocket_connect("/ws/live") as ws:
+            deadline = time.monotonic() + 15.0
+            while time.monotonic() < deadline:
+                try:
+                    raw = ws.receive_json()
+                    if raw.get("type") == "tick":
+                        tick_messages.append(raw)
+                    elif raw.get("type") == "done":
+                        done_message = raw
+                        break
+                except Exception:
+                    break
+
+    assert len(tick_messages) >= 1
+    assert done_message is not None
+    run_dirs = [d for d in runs_root.iterdir() if d.is_dir()]
+    assert len(run_dirs) == 1
+    manifest = json.loads((run_dirs[0] / "run.json").read_text(encoding="utf-8"))
+    cf = manifest["counterfactual"]
+    assert cf["kind"] == "drop_protocol"
+    assert cf["at_tick"] == 5
+    assert cf["branch_of"] == "seed3-scripted"
+
+
 def test_live_tick_pacing_spaces_ticks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """_LIVE_TICK_DELAY_S paces a fast scripted stream server-side, so ticks arrive
     spaced over wall-clock instead of bursting all at once."""
