@@ -124,4 +124,34 @@ export const api = {
   // control — e.g. interrupt the auto-started scripted demo to start a real run.
   stopLive: (): Promise<{ ok: boolean; running: boolean }> =>
     post('/api/live/stop', {}),
+
+  // Counterfactual branch: re-run a seed with one intervention at tick N, streaming
+  // over the same /ws/live channel. The branch lands in runs/ under a distinct run_id
+  // and is replayable by Compare against its baseline.
+  counterfactual: (
+    body: {
+      arm: string
+      seed: number
+      ticks: number
+      atTick: number
+      kind: string
+      target?: string
+      params?: Record<string, unknown>
+      baselineRunId?: string
+      // The baseline's scenario id, so a scenario-pack branch rebuilds the same
+      // world (omitted for synthetic baselines).
+      scenario?: string | null
+    },
+  ): Promise<{ live_id: string; run_id: string }> =>
+    post('/api/counterfactual', {
+      arm: body.arm,
+      seed: body.seed,
+      ticks: body.ticks,
+      at_tick: body.atTick,
+      kind: body.kind,
+      target: body.target ?? '',
+      params: body.params ?? {},
+      baseline_run_id: body.baselineRunId ?? null,
+      ...(body.scenario ? { scenario: body.scenario } : {}),
+    }),
 }

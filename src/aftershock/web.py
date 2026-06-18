@@ -109,6 +109,21 @@ class InjectRequest(BaseModel):
     district: str
 
 
+class CounterfactualRequest(BaseModel):
+    arm: str
+    seed: int
+    ticks: int
+    at_tick: int
+    kind: str
+    target: str = ""
+    params: dict[str, Any] = {}
+    baseline_run_id: str | None = None
+    # When the baseline was recorded from a scenario pack, the branch must rebuild
+    # the SAME scenario world (else the prefix is not byte-identical). The client
+    # passes the baseline's scenario id; the server loads the committed pack.
+    scenario: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Live-run state (module-level singleton, one run at a time)
 # ---------------------------------------------------------------------------
@@ -307,6 +322,9 @@ def _scan_runs(runs_root: Path) -> list[dict[str, Any]]:
                 "cost": manifest.get("cost", {}),
                 "has_world": has_world,
                 "scenario": _scenario_compact_from_manifest(manifest),
+                # Branch metadata (only on counterfactual runs); the Compare tab
+                # reads divergeTick from this list row to draw the DIVERGES marker.
+                "counterfactual": manifest.get("counterfactual"),
             }
             mtime = entry.stat().st_mtime
             results.append((mtime, result))
@@ -457,6 +475,94 @@ async def _run_live(
         # (the Stop button is built for repeated use within a demo session).
         with contextlib.suppress(Exception):
             recorder.close()
+        state.running = False
+        for ws in list(state.connections):
+            with contextlib.suppress(Exception):
+                await ws.close()
+        state.connections.clear()
+
+
+def _cf_run_id(live_id: str, req: CounterfactualRequest) -> str:
+    """Deterministic branch run id, shared by the endpoint (returned to the client)
+    and the background runner so Compare can select the branch once it appears.
+
+    Must match _RUN_ID_RE (^[A-Za-z0-9._-]+$) so the run is loadable via
+    /api/runs/{id} — hence "-at{N}" rather than "@{N}"."""
+    tag = req.kind if req.kind == "none" else f"{req.kind}-at{req.at_tick}"
+    return f"cf-{live_id[:8]}-{tag}"
+
+
+async def _run_counterfactual_live(
+    state: _LiveState,
+    req: CounterfactualRequest,
+    runs_root: Path,
+    run_id: str,
+    scenario_pack: ScenarioPack | None = None,
+) -> None:
+    """Run one counterfactual branch in a background task, streaming to the WS clients
+    on ``state`` exactly like _run_live. The branch lands in runs/ under a distinct
+    run_id and is replayable by Compare against its baseline.
+    """
+    from aftershock.town.counterfactual import Intervention, run_counterfactual
+
+    def _on_tick(record: Any, world_state_dict: dict[str, Any] | None = None) -> None:
+        tick_dict = record.model_dump(mode="json")
+        msg: dict[str, Any] = {"type": "tick", "record": tick_dict, "world": world_state_dict}
+        state.tick = record.tick
+        state.buffer.append(msg)
+        asyncio.ensure_future(_broadcast(state, msg))
+
+    try:
+        provider = None
+        if req.arm != "scripted":
+            from aftershock.llm.provider import QwenProvider
+
+            provider = QwenProvider()
+
+        intervention = Intervention(
+            at_tick=req.at_tick, kind=req.kind, target=req.target, params=dict(req.params)
+        )
+        # When branching a scenario baseline, record its provenance block so the branch
+        # is honestly labelled REAL (and its world — same pack + seed — yields a truly
+        # byte-identical prefix to the scenario baseline).
+        extra_manifest = (
+            {"scenario": _scenario_manifest_block(scenario_pack)} if scenario_pack else None
+        )
+
+        summary_run = await run_counterfactual(
+            arm=req.arm,
+            seed=req.seed,
+            ticks=req.ticks,
+            intervention=intervention,
+            runs_root=runs_root,
+            run_id=run_id,
+            provider=provider,
+            scenario=scenario_pack,
+            baseline_run_id=req.baseline_run_id,
+            tick_listener=_on_tick,
+            # No inter-tick pacing: Compare REPLAYS the completed branch via its
+            # playback clock (it doesn't watch the live WS stream), so pacing the
+            # run here would only delay when the branch becomes replayable.
+            extra_manifest=extra_manifest,
+        )
+        summary_dict: dict[str, Any] = {
+            "run_id": summary_run.run_id,
+            "seed": summary_run.seed,
+            "ticks_run": summary_run.ticks_run,
+            "final_scores": summary_run.final_scores,
+            "cost": summary_run.cost,
+            "run_dir": summary_run.run_dir,
+            "arm": req.arm,
+        }
+        state.summary = summary_dict
+        await _broadcast(state, {"type": "done", "summary": summary_dict})
+    except Exception as exc:  # noqa: BLE001
+        logger.error("counterfactual run failed", exc_info=exc)
+        with contextlib.suppress(Exception):
+            await _broadcast(
+                state, {"type": "error", "detail": "counterfactual run encountered an error"}
+            )
+    finally:
         state.running = False
         for ws in list(state.connections):
             with contextlib.suppress(Exception):
@@ -948,6 +1054,84 @@ def create_app(
             with contextlib.suppress(asyncio.CancelledError):
                 await task
         return JSONResponse({"ok": True, "running": False})
+
+    # ------------------------------------------------------------------
+    # POST /api/counterfactual
+    # ------------------------------------------------------------------
+
+    @app.post("/api/counterfactual", dependencies=[Depends(_require_token)])
+    async def start_counterfactual(req: CounterfactualRequest) -> JSONResponse:
+        """Branch a run: re-run the seed with one intervention at tick N, streaming
+        the branch over the same /ws/live channel as a live run. The client then
+        flips Compare to (baseline_run_id, branch_run_id)."""
+        from aftershock.town.counterfactual import INTERVENTION_KINDS
+
+        global _live
+
+        if req.at_tick < 0 or req.at_tick >= req.ticks:
+            raise HTTPException(
+                status_code=422,
+                detail=f"at_tick must be in [0, {req.ticks}) (got {req.at_tick})",
+            )
+        if req.ticks > _MAX_TICKS_LIVE:
+            raise HTTPException(status_code=422, detail=f"ticks must be <= {_MAX_TICKS_LIVE}")
+
+        # Validate the intervention synchronously (422) so the operator gets immediate
+        # feedback rather than a vague async WS error. (A bad inject district is world-
+        # dependent and is caught eagerly inside run_counterfactual, surfacing loudly.)
+        if req.kind not in INTERVENTION_KINDS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"invalid kind {req.kind!r}; valid: {sorted(INTERVENTION_KINDS)}",
+            )
+        if req.kind == "inject_event":
+            event = str(req.params.get("event", "fire"))
+            if event not in _VALID_INJECT_KINDS:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"invalid inject event {event!r}; valid: {sorted(_VALID_INJECT_KINDS)}",
+                )
+            if not req.target:
+                raise HTTPException(
+                    status_code=422, detail="inject_event requires a target district"
+                )
+        if req.kind == "kill_agent" and not req.target:
+            raise HTTPException(status_code=422, detail="kill_agent requires a target agent id")
+
+        llm_arms = ("solo", "swarm", "society")
+        if req.arm in llm_arms and not os.environ.get("DASHSCOPE_API_KEY"):
+            raise HTTPException(
+                status_code=503,
+                detail="DASHSCOPE_API_KEY is not set; set it to run LLM arms",
+            )
+
+        # Scenario baseline: load the committed pack (404 on a bad id) so the branch
+        # rebuilds the SAME world and the byte-identical-prefix claim actually holds.
+        scenario_pack: ScenarioPack | None = None
+        if req.scenario:
+            scenario_pack = _load_pack_or_404(req.scenario, scenarios_root)
+
+        live_id = str(uuid.uuid4())
+        run_id = _cf_run_id(live_id, req)
+        async with _live_lock:
+            if _live is not None and _live.running and _live.mode == "manual":
+                raise HTTPException(
+                    status_code=409, detail="a live run is already in progress"
+                )
+            preempt = (
+                _live._task
+                if (_live is not None and _live.running and _live.mode == "ambient")
+                else None
+            )
+            _live = _LiveState(live_id=live_id, arm=req.arm, seed=req.seed, mode="manual")
+            _live._task = asyncio.create_task(
+                _run_counterfactual_live(_live, req, runs_root, run_id, scenario_pack)
+            )
+        if preempt is not None and not preempt.done():
+            preempt.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await preempt
+        return JSONResponse({"live_id": live_id, "run_id": run_id})
 
     # ------------------------------------------------------------------
     # WS /ws/live

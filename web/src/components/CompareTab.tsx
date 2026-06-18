@@ -25,7 +25,12 @@ import {
   winnerColor,
 } from '../lib/compare'
 import { usePlaybackClock as useSharedClock } from '../lib/usePlaybackClock'
-import { ARM_COLORS, HAZARD_SYNTHETIC_ACCENT, hazardAccent } from '../lib/palette'
+import {
+  ARM_COLORS,
+  COUNTERFACTUAL_ACCENT,
+  HAZARD_SYNTHETIC_ACCENT,
+  hazardAccent,
+} from '../lib/palette'
 import {
   mapTimelineIndexToMissionId,
   agentLatencyMinutes,
@@ -34,6 +39,7 @@ import {
 import { api } from '../lib/api'
 import { TownMap } from './TownMap'
 import { RealityStrip } from './RealityStrip'
+import { CounterfactualControls } from './CounterfactualControls'
 
 // ---- Hazard chip (UX delta #7) ----
 // In a run/side HEADER the hazard chip reads STRONGER than RunPicker's dim row
@@ -69,6 +75,15 @@ function HazardChip({ scenario }: { scenario: ScenarioCompact | null | undefined
       {label}
     </span>
   )
+}
+
+/** Short label for a counterfactual branch badge, e.g. "DROP_PROTOCOL @T5",
+ *  "KILL_AGENT commander @T10", or "CONTROL". Honestly marks the branch side as a
+ *  fabricated what-if, never a measured outcome. */
+function cfLabel(cf: NonNullable<RunSummary['counterfactual']>): string {
+  if (cf.kind === 'none') return 'control'
+  const tgt = cf.target ? ` ${cf.target}` : ''
+  return `${cf.kind}${tgt} @T${cf.at_tick}`
 }
 
 /** Each arm's MEAN spawn→first-arrival latency in minutes across its timeline
@@ -115,6 +130,9 @@ interface Props {
   initialRight?: string
   cursorTick?: number
   onStateChange?: (s: CompareController) => void
+  /** Re-fetch the run list (owned by App). Returns the fresh list so the branch
+   *  flow can wait for a just-started counterfactual to land, then select it. */
+  onRunsRefresh?: () => Promise<RunSummary[]>
 }
 
 /**
@@ -133,6 +151,7 @@ export function CompareTab({
   initialRight,
   cursorTick,
   onStateChange,
+  onRunsRefresh,
 }: Props) {
   const [left, dispatchLeft] = useReducer(timelineReducer, initialTimelineState)
   const [right, dispatchRight] = useReducer(timelineReducer, initialTimelineState)
@@ -142,6 +161,9 @@ export function CompareTab({
     rightRunId: initialRight ?? null,
     cursorTick: cursorTick ?? 0,
   })
+  // True while a counterfactual branch is running server-side and we're waiting
+  // for it to land in the run list so we can select it on the right.
+  const [branching, setBranching] = useState(false)
 
   const runById = useMemo(() => {
     const m = new Map<string, RunSummary>()
@@ -272,6 +294,43 @@ export function CompareTab({
   const scrub = (tick: number) =>
     setController((s) => ({ ...s, cursorTick: Math.max(0, Math.min(tick, endTick)), playing: false }))
 
+  // After a branch starts server-side, poll the (App-owned) run list until the
+  // branch lands with final_scores (= the run finished and run.json was finalized),
+  // then auto-select it on the RIGHT so the divergence is replayable immediately —
+  // no manual reload. Falls back to clearing the spinner after a bounded number of
+  // tries so a failed branch can't wedge the controls.
+  const handleBranchStarted = useCallback(
+    (runId: string) => {
+      if (!onRunsRefresh) return
+      setBranching(true)
+      let attempts = 0
+      const MAX_ATTEMPTS = 30
+      const poll = async () => {
+        attempts += 1
+        try {
+          const list = await onRunsRefresh()
+          const branch = list.find((r) => r.run_id === runId)
+          const done =
+            !!branch && !!branch.final_scores && Object.keys(branch.final_scores).length > 0
+          if (done) {
+            setController((s) => ({ ...s, rightRunId: runId, cursorTick: 0, playing: false }))
+            setBranching(false)
+            return
+          }
+        } catch {
+          // transient refresh error — keep polling until the cap
+        }
+        if (attempts >= MAX_ATTEMPTS) {
+          setBranching(false)
+          return
+        }
+        window.setTimeout(poll, 600)
+      }
+      void poll()
+    },
+    [onRunsRefresh],
+  )
+
   // ---- Derived readouts ----
   const leftSide = useMemo(
     () => deriveSide(left.ticks, left.worlds, controller.cursorTick),
@@ -282,6 +341,9 @@ export function CompareTab({
     [right.ticks, right.worlds, controller.cursorTick],
   )
   const delta = useMemo(() => computeDeltaStrip(leftSide, rightSide), [leftSide, rightSide])
+
+  // Counterfactual divergence tick: the right-side run's intervention point, if present.
+  const divergeTick = rightRun?.counterfactual?.at_tick ?? null
 
   const bothSelected = controller.leftRunId != null && controller.rightRunId != null
   const worldless = worldlessRuns(leftRun, rightRun)
@@ -417,6 +479,15 @@ export function CompareTab({
       </div>
 
       {/* Shared control bar */}
+      <CounterfactualControls
+        baselineRunId={controller.leftRunId}
+        baselineArm={leftRun?.arm ?? null}
+        baselineSeed={leftRun?.seed ?? null}
+        baselineTicks={leftRun?.ticks ?? null}
+        baselineScenarioId={leftRun?.scenario?.id ?? null}
+        running={branching}
+        onBranchStarted={handleBranchStarted}
+      />
       <CompareControls
         controller={controller}
         endTick={endTick}
@@ -425,6 +496,7 @@ export function CompareTab({
         onTogglePlay={togglePlay}
         onCycleSpeed={cycleSpeed}
         onScrub={scrub}
+        divergeTick={divergeTick}
       />
     </div>
   )
@@ -559,6 +631,19 @@ function SidePanel({ run, side, align }: SidePanelProps) {
           {run ? `seed ${run.seed} · T${finalTick}` : '—'}
         </span>
         <HazardChip scenario={run?.scenario} />
+        {run?.counterfactual && (
+          <span
+            className="shrink-0 rounded-sm border px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider"
+            style={{
+              color: COUNTERFACTUAL_ACCENT,
+              borderColor: `${COUNTERFACTUAL_ACCENT}aa`,
+              background: `${COUNTERFACTUAL_ACCENT}22`,
+            }}
+            title="Counterfactual what-if branch — a re-run with one intervention, not a measured outcome"
+          >
+            {`WHAT-IF · ${cfLabel(run.counterfactual)}`}
+          </span>
+        )}
       </div>
 
       {/* Map — quiet effects in compare (no scanlines/animated rings competing) */}
@@ -720,6 +805,7 @@ interface CompareControlsProps {
   onTogglePlay: () => void
   onCycleSpeed: () => void
   onScrub: (tick: number) => void
+  divergeTick?: number | null
 }
 
 function CompareControls({
@@ -730,7 +816,8 @@ function CompareControls({
   onTogglePlay,
   onCycleSpeed,
   onScrub,
-}: CompareControlsProps) {
+  divergeTick,
+}: { divergeTick?: number | null } & Omit<CompareControlsProps, 'divergeTick'>) {
   const error = leftError ?? rightError
   return (
     <div className="flex flex-col">
@@ -765,16 +852,38 @@ function CompareControls({
           {controller.speed}×
         </button>
 
-        <input
-          type="range"
-          min={0}
-          max={Math.max(0, endTick)}
-          value={Math.min(controller.cursorTick, endTick)}
-          onChange={(e) => onScrub(parseInt(e.target.value, 10))}
-          className="h-1 flex-1 cursor-pointer"
-          style={{ accentColor: SCRUB_ACCENT }}
-          aria-label="Shared scrubber"
-        />
+        <div className="relative h-1 flex-1">
+          <input
+            type="range"
+            min={0}
+            max={Math.max(0, endTick)}
+            value={Math.min(controller.cursorTick, endTick)}
+            onChange={(e) => onScrub(parseInt(e.target.value, 10))}
+            className="h-1 w-full cursor-pointer"
+            style={{ accentColor: SCRUB_ACCENT }}
+            aria-label="Shared scrubber"
+          />
+          {divergeTick != null && divergeTick >= 0 && divergeTick <= endTick && (
+            <div
+              className="pointer-events-none absolute top-0 flex h-full flex-col items-center"
+              style={{
+                left: `${(divergeTick / Math.max(1, endTick)) * 100}%`,
+                transform: 'translateX(-50%)',
+              }}
+            >
+              <div
+                className="h-full w-px"
+                style={{ backgroundColor: COUNTERFACTUAL_ACCENT }}
+              />
+              <span
+                className="absolute -top-4 whitespace-nowrap text-[9px] font-bold uppercase tracking-wider"
+                style={{ color: COUNTERFACTUAL_ACCENT }}
+              >
+                DIVERGES
+              </span>
+            </div>
+          )}
+        </div>
 
         <span className="shrink-0 text-[11px] tabular-nums text-eoc-secondary">
           T{controller.cursorTick} / {endTick}

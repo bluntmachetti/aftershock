@@ -351,6 +351,88 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_counterfactual(args: argparse.Namespace) -> int:
+    """Run a counterfactual branch: re-run a seed with one intervention at tick N.
+
+    The intervention runs from tick N onward; the run shares a byte-identical prefix
+    with the equivalent baseline (same seed) and diverges only at N. The branch is
+    written to a distinct run_id (so it never overwrites a baseline run) and is
+    replayable by every observatory surface.
+    """
+    from aftershock.town.counterfactual import Intervention, run_counterfactual
+
+    arm: str = args.arm
+    out_dir = Path(args.out)
+    quiet: bool = args.quiet
+    seed: int = args.seed
+    ticks: int = args.ticks
+    at_tick: int = args.at
+    kind: str = args.kind
+
+    if at_tick < 0 or at_tick >= ticks:
+        print(
+            f"error: --at must be in [0, {ticks}) (got {at_tick})", file=sys.stderr
+        )
+        return 1
+
+    params: dict[str, Any] = {}
+    if kind == "inject_event":
+        if not args.target:
+            print("error: --target <district> is required for inject_event", file=sys.stderr)
+            return 1
+        params["event"] = args.event
+    if kind == "kill_agent" and not args.target:
+        print("error: --target <agent_id> is required for kill_agent", file=sys.stderr)
+        return 1
+
+    try:
+        intervention = Intervention(
+            at_tick=at_tick, kind=kind, target=args.target or "", params=params
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    _ARM_DEFAULT_TIMEOUT = {"scripted": 5.0, "solo": 90.0, "swarm": 45.0, "society": 45.0}
+    timeout_s = _ARM_DEFAULT_TIMEOUT.get(arm, 30.0)
+    provider = _provider_for_arm(arm, timeout_s)
+
+    baseline_run_id = _run_id(seed, arm)
+    # "-at{N}" (not "@{N}") so the run id stays loadable via /api/runs/{id}
+    # (web's _RUN_ID_RE forbids "@").
+    tag = kind if kind == "none" else f"{kind}-at{at_tick}"
+    run_id = f"{baseline_run_id}-cf-{tag}"
+
+    try:
+        summary = asyncio.run(
+            run_counterfactual(
+                arm=arm,
+                seed=seed,
+                ticks=ticks,
+                intervention=intervention,
+                runs_root=out_dir,
+                run_id=run_id,
+                provider=provider,
+                baseline_run_id=baseline_run_id,
+            )
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if not quiet:
+        s = summary.final_scores
+        print(f"Counterfactual {summary.run_id}  ({kind} @ tick {at_tick})")
+        print("-" * 60)
+        print(f"  Branch of:    {baseline_run_id}")
+        print(f"  Lives saved:  {int(s.get('lives_saved', 0))}")
+        print(f"  Lives lost:   {int(s.get('lives_lost', 0))}")
+        print(f"  Missions failed:   {int(s.get('missions_failed', 0))}")
+        print(f"  Run dir:      {summary.run_dir}")
+
+    return 0
+
+
 def cmd_bench(args: argparse.Namespace) -> int:
     """Run the benchmark suite from a manifest with optional flag overrides."""
     # Invariant 3 (bench fairness): scenario packs are demo/observatory surfaces
@@ -1058,6 +1140,32 @@ def main() -> None:
         ),
     )
 
+    # counterfactual
+    p_cf = sub.add_parser(
+        "counterfactual",
+        help="Re-run a seed with one intervention at tick N (branch + compare)",
+    )
+    p_cf.add_argument("--seed", type=int, required=True, help="Engine seed (matches the baseline)")
+    p_cf.add_argument("--ticks", type=int, required=True, help="Tick budget")
+    p_cf.add_argument("--arm", default="scripted", choices=list(ARMS))
+    p_cf.add_argument("--at", type=int, required=True, help="Intervention tick N")
+    p_cf.add_argument(
+        "--kind",
+        required=True,
+        choices=["drop_protocol", "kill_agent", "inject_event", "none"],
+        help="Intervention kind",
+    )
+    p_cf.add_argument(
+        "--target", default="",
+        help="agent_id (kill_agent) or district_id (inject_event)",
+    )
+    p_cf.add_argument(
+        "--event", default="fire", choices=["fire", "aftershock", "road_block"],
+        help="Event kind for inject_event (default: fire)",
+    )
+    p_cf.add_argument("--out", default="runs")
+    p_cf.add_argument("--quiet", action="store_true")
+
     # bench
     p_bench = sub.add_parser("bench", help="Run the benchmark suite")
     p_bench.add_argument("--manifest", default=None,
@@ -1287,6 +1395,8 @@ def main() -> None:
 
     if args.command == "run":
         sys.exit(cmd_run(args))
+    elif args.command == "counterfactual":
+        sys.exit(cmd_counterfactual(args))
     elif args.command == "bench":
         sys.exit(cmd_bench(args))
     elif args.command == "verify":

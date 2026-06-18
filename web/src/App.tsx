@@ -89,6 +89,15 @@ export default function App() {
     }
   }, [timeline.runId, timeline.ticks.length])
 
+  // Re-fetch the run list on demand (the mount effect below only loads once).
+  // CompareTab uses this to surface a freshly-branched counterfactual run without
+  // a page reload; returns the fresh list so the caller can act on it.
+  const refreshRuns = useCallback(async (): Promise<RunSummary[]> => {
+    const list = await api.runs()
+    setRuns(list)
+    return list
+  }, [])
+
   // Load run list on mount, then apply any deep link AFTER runs resolve.
   useEffect(() => {
     let cancelled = false
@@ -256,6 +265,7 @@ export default function App() {
             initialRight={compareInit?.right}
             cursorTick={compareInit?.tick}
             onStateChange={setCompareState}
+            onRunsRefresh={refreshRuns}
           />
         )}
       </main>

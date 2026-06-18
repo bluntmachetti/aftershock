@@ -440,6 +440,143 @@ def test_live_scripted_end_to_end(tmp_path: Path) -> None:
     assert (run_dir / "ticks.ndjson").exists()
 
 
+# ---------------------------------------------------------------------------
+# Tests: POST /api/counterfactual
+# ---------------------------------------------------------------------------
+
+
+def test_counterfactual_bad_at_tick_422(runs_root: Path) -> None:
+    app = create_app(runs_root)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/counterfactual",
+            json={"arm": "scripted", "seed": 1, "ticks": 10, "at_tick": 10,
+                  "kind": "drop_protocol"},
+        )
+    assert resp.status_code == 422
+
+
+def test_counterfactual_llm_arm_no_key_503(
+    runs_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+    app = create_app(runs_root)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/counterfactual",
+            json={"arm": "society", "seed": 1, "ticks": 10, "at_tick": 5,
+                  "kind": "drop_protocol"},
+        )
+    assert resp.status_code == 503
+
+
+def test_counterfactual_scripted_end_to_end(tmp_path: Path) -> None:
+    """POST /api/counterfactual streams ticks + done over /ws/live and writes a
+    branch run dir whose manifest carries the counterfactual spec."""
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+    app = create_app(runs_root)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/counterfactual",
+            json={"arm": "scripted", "seed": 3, "ticks": 12, "at_tick": 5,
+                  "kind": "drop_protocol", "baseline_run_id": "seed3-scripted"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["live_id"]
+        time.sleep(0.5)
+
+        tick_messages: list[dict] = []
+        done_message: dict | None = None
+        with client.websocket_connect("/ws/live") as ws:
+            deadline = time.monotonic() + 15.0
+            while time.monotonic() < deadline:
+                try:
+                    raw = ws.receive_json()
+                    if raw.get("type") == "tick":
+                        tick_messages.append(raw)
+                    elif raw.get("type") == "done":
+                        done_message = raw
+                        break
+                except Exception:
+                    break
+
+    assert len(tick_messages) >= 1
+    assert done_message is not None
+    run_dirs = [d for d in runs_root.iterdir() if d.is_dir()]
+    assert len(run_dirs) == 1
+    manifest = json.loads((run_dirs[0] / "run.json").read_text(encoding="utf-8"))
+    cf = manifest["counterfactual"]
+    assert cf["kind"] == "drop_protocol"
+    assert cf["at_tick"] == 5
+    assert cf["branch_of"] == "seed3-scripted"
+
+
+def test_counterfactual_bad_kind_422(runs_root: Path) -> None:
+    app = create_app(runs_root)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/counterfactual",
+            json={"arm": "scripted", "seed": 1, "ticks": 10, "at_tick": 3, "kind": "teleport"},
+        )
+    assert resp.status_code == 422
+
+
+def test_counterfactual_inject_bad_event_422(runs_root: Path) -> None:
+    app = create_app(runs_root)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/counterfactual",
+            json={"arm": "scripted", "seed": 1, "ticks": 10, "at_tick": 3,
+                  "kind": "inject_event", "target": "market", "params": {"event": "meteor"}},
+        )
+    assert resp.status_code == 422
+
+
+def test_counterfactual_inject_missing_target_422(runs_root: Path) -> None:
+    app = create_app(runs_root)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/counterfactual",
+            json={"arm": "scripted", "seed": 1, "ticks": 10, "at_tick": 3,
+                  "kind": "inject_event", "params": {"event": "fire"}},
+        )
+    assert resp.status_code == 422
+
+
+def test_counterfactual_run_list_surfaces_metadata_and_is_loadable(tmp_path: Path) -> None:
+    """After a branch finishes, GET /api/runs carries the counterfactual block (so the
+    Compare tab can draw the DIVERGES marker + WHAT-IF badge), and the branch run id is
+    loadable via /api/runs/{id} (guards the run-id grammar — no '@')."""
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+    app = create_app(runs_root)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/counterfactual",
+            json={"arm": "scripted", "seed": 3, "ticks": 12, "at_tick": 5,
+                  "kind": "drop_protocol"},
+        )
+        assert resp.status_code == 200
+        run_id = resp.json()["run_id"]
+        # Branch finishes when run.json gains final_scores (written at recorder close).
+        deadline = time.monotonic() + 15.0
+        row: dict | None = None
+        while time.monotonic() < deadline:
+            rows = client.get("/api/runs").json()
+            row = next((r for r in rows if r["run_id"] == run_id), None)
+            if row and row.get("final_scores"):
+                break
+            time.sleep(0.2)
+        assert row is not None, "branch run never appeared in /api/runs"
+        assert row["counterfactual"]["at_tick"] == 5
+        assert row["counterfactual"]["kind"] == "drop_protocol"
+        # The branch must be loadable by Compare (run id has no '@' → no 404).
+        assert client.get(f"/api/runs/{run_id}").status_code == 200
+        assert client.get(f"/api/runs/{run_id}/ticks?start=0&limit=100").status_code == 200
+
+
 def test_live_tick_pacing_spaces_ticks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """_LIVE_TICK_DELAY_S paces a fast scripted stream server-side, so ticks arrive
     spaced over wall-clock instead of bursting all at once."""

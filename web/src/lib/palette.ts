@@ -139,3 +139,12 @@ export const CONDITION_COLORS = {
 
 /** EOC condition levels, brightest (most urgent) first. */
 export type ConditionLevel = keyof typeof CONDITION_COLORS
+
+// ---------------------------------------------------------------------------
+// Counterfactual (intervention replay)
+// ---------------------------------------------------------------------------
+
+/** Accent for the divergence marker on the scrubber — a magenta-pink that
+ *  is deliberately distinct from both cyan (society) and amber (baseline),
+ *  so "DIVERGES HERE" reads as a unique intervention callout. */
+export const COUNTERFACTUAL_ACCENT = '#e879f9'
