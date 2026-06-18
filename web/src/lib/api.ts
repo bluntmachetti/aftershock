@@ -138,8 +138,11 @@ export const api = {
       target?: string
       params?: Record<string, unknown>
       baselineRunId?: string
+      // The baseline's scenario id, so a scenario-pack branch rebuilds the same
+      // world (omitted for synthetic baselines).
+      scenario?: string | null
     },
-  ): Promise<{ live_id: string }> =>
+  ): Promise<{ live_id: string; run_id: string }> =>
     post('/api/counterfactual', {
       arm: body.arm,
       seed: body.seed,
@@ -149,5 +152,6 @@ export const api = {
       target: body.target ?? '',
       params: body.params ?? {},
       baseline_run_id: body.baselineRunId ?? null,
+      ...(body.scenario ? { scenario: body.scenario } : {}),
     }),
 }

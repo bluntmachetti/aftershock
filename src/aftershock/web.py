@@ -118,6 +118,10 @@ class CounterfactualRequest(BaseModel):
     target: str = ""
     params: dict[str, Any] = {}
     baseline_run_id: str | None = None
+    # When the baseline was recorded from a scenario pack, the branch must rebuild
+    # the SAME scenario world (else the prefix is not byte-identical). The client
+    # passes the baseline's scenario id; the server loads the committed pack.
+    scenario: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -318,6 +322,9 @@ def _scan_runs(runs_root: Path) -> list[dict[str, Any]]:
                 "cost": manifest.get("cost", {}),
                 "has_world": has_world,
                 "scenario": _scenario_compact_from_manifest(manifest),
+                # Branch metadata (only on counterfactual runs); the Compare tab
+                # reads divergeTick from this list row to draw the DIVERGES marker.
+                "counterfactual": manifest.get("counterfactual"),
             }
             mtime = entry.stat().st_mtime
             results.append((mtime, result))
@@ -475,10 +482,22 @@ async def _run_live(
         state.connections.clear()
 
 
+def _cf_run_id(live_id: str, req: CounterfactualRequest) -> str:
+    """Deterministic branch run id, shared by the endpoint (returned to the client)
+    and the background runner so Compare can select the branch once it appears.
+
+    Must match _RUN_ID_RE (^[A-Za-z0-9._-]+$) so the run is loadable via
+    /api/runs/{id} — hence "-at{N}" rather than "@{N}"."""
+    tag = req.kind if req.kind == "none" else f"{req.kind}-at{req.at_tick}"
+    return f"cf-{live_id[:8]}-{tag}"
+
+
 async def _run_counterfactual_live(
     state: _LiveState,
     req: CounterfactualRequest,
     runs_root: Path,
+    run_id: str,
+    scenario_pack: ScenarioPack | None = None,
 ) -> None:
     """Run one counterfactual branch in a background task, streaming to the WS clients
     on ``state`` exactly like _run_live. The branch lands in runs/ under a distinct
@@ -503,8 +522,12 @@ async def _run_counterfactual_live(
         intervention = Intervention(
             at_tick=req.at_tick, kind=req.kind, target=req.target, params=dict(req.params)
         )
-        tag = req.kind if req.kind == "none" else f"{req.kind}@{req.at_tick}"
-        run_id = f"cf-{state.live_id[:8]}-{tag}"
+        # When branching a scenario baseline, record its provenance block so the branch
+        # is honestly labelled REAL (and its world — same pack + seed — yields a truly
+        # byte-identical prefix to the scenario baseline).
+        extra_manifest = (
+            {"scenario": _scenario_manifest_block(scenario_pack)} if scenario_pack else None
+        )
 
         summary_run = await run_counterfactual(
             arm=req.arm,
@@ -514,8 +537,13 @@ async def _run_counterfactual_live(
             runs_root=runs_root,
             run_id=run_id,
             provider=provider,
+            scenario=scenario_pack,
             baseline_run_id=req.baseline_run_id,
             tick_listener=_on_tick,
+            # No inter-tick pacing: Compare REPLAYS the completed branch via its
+            # playback clock (it doesn't watch the live WS stream), so pacing the
+            # run here would only delay when the branch becomes replayable.
+            extra_manifest=extra_manifest,
         )
         summary_dict: dict[str, Any] = {
             "run_id": summary_run.run_id,
@@ -1036,6 +1064,8 @@ def create_app(
         """Branch a run: re-run the seed with one intervention at tick N, streaming
         the branch over the same /ws/live channel as a live run. The client then
         flips Compare to (baseline_run_id, branch_run_id)."""
+        from aftershock.town.counterfactual import INTERVENTION_KINDS
+
         global _live
 
         if req.at_tick < 0 or req.at_tick >= req.ticks:
@@ -1046,6 +1076,28 @@ def create_app(
         if req.ticks > _MAX_TICKS_LIVE:
             raise HTTPException(status_code=422, detail=f"ticks must be <= {_MAX_TICKS_LIVE}")
 
+        # Validate the intervention synchronously (422) so the operator gets immediate
+        # feedback rather than a vague async WS error. (A bad inject district is world-
+        # dependent and is caught eagerly inside run_counterfactual, surfacing loudly.)
+        if req.kind not in INTERVENTION_KINDS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"invalid kind {req.kind!r}; valid: {sorted(INTERVENTION_KINDS)}",
+            )
+        if req.kind == "inject_event":
+            event = str(req.params.get("event", "fire"))
+            if event not in _VALID_INJECT_KINDS:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"invalid inject event {event!r}; valid: {sorted(_VALID_INJECT_KINDS)}",
+                )
+            if not req.target:
+                raise HTTPException(
+                    status_code=422, detail="inject_event requires a target district"
+                )
+        if req.kind == "kill_agent" and not req.target:
+            raise HTTPException(status_code=422, detail="kill_agent requires a target agent id")
+
         llm_arms = ("solo", "swarm", "society")
         if req.arm in llm_arms and not os.environ.get("DASHSCOPE_API_KEY"):
             raise HTTPException(
@@ -1053,7 +1105,14 @@ def create_app(
                 detail="DASHSCOPE_API_KEY is not set; set it to run LLM arms",
             )
 
+        # Scenario baseline: load the committed pack (404 on a bad id) so the branch
+        # rebuilds the SAME world and the byte-identical-prefix claim actually holds.
+        scenario_pack: ScenarioPack | None = None
+        if req.scenario:
+            scenario_pack = _load_pack_or_404(req.scenario, scenarios_root)
+
         live_id = str(uuid.uuid4())
+        run_id = _cf_run_id(live_id, req)
         async with _live_lock:
             if _live is not None and _live.running and _live.mode == "manual":
                 raise HTTPException(
@@ -1066,13 +1125,13 @@ def create_app(
             )
             _live = _LiveState(live_id=live_id, arm=req.arm, seed=req.seed, mode="manual")
             _live._task = asyncio.create_task(
-                _run_counterfactual_live(_live, req, runs_root)
+                _run_counterfactual_live(_live, req, runs_root, run_id, scenario_pack)
             )
         if preempt is not None and not preempt.done():
             preempt.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await preempt
-        return JSONResponse({"live_id": live_id})
+        return JSONResponse({"live_id": live_id, "run_id": run_id})
 
     # ------------------------------------------------------------------
     # WS /ws/live

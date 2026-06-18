@@ -398,21 +398,27 @@ def cmd_counterfactual(args: argparse.Namespace) -> int:
     provider = _provider_for_arm(arm, timeout_s)
 
     baseline_run_id = _run_id(seed, arm)
-    tag = kind if kind == "none" else f"{kind}@{at_tick}"
+    # "-at{N}" (not "@{N}") so the run id stays loadable via /api/runs/{id}
+    # (web's _RUN_ID_RE forbids "@").
+    tag = kind if kind == "none" else f"{kind}-at{at_tick}"
     run_id = f"{baseline_run_id}-cf-{tag}"
 
-    summary = asyncio.run(
-        run_counterfactual(
-            arm=arm,
-            seed=seed,
-            ticks=ticks,
-            intervention=intervention,
-            runs_root=out_dir,
-            run_id=run_id,
-            provider=provider,
-            baseline_run_id=baseline_run_id,
+    try:
+        summary = asyncio.run(
+            run_counterfactual(
+                arm=arm,
+                seed=seed,
+                ticks=ticks,
+                intervention=intervention,
+                runs_root=out_dir,
+                run_id=run_id,
+                provider=provider,
+                baseline_run_id=baseline_run_id,
+            )
         )
-    )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
 
     if not quiet:
         s = summary.final_scores

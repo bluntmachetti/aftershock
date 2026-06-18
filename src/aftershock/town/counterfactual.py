@@ -136,6 +136,8 @@ async def run_counterfactual(
     scenario: ScenarioPack | None = None,
     baseline_run_id: str | None = None,
     tick_listener: Callable[[TickRecord, dict[str, Any]], None] | None = None,
+    inter_tick_delay_s: float = 0.0,
+    extra_manifest: dict[str, Any] | None = None,
 ) -> RunSummary:
     """Run one counterfactual: re-run from tick 0 with the intervention scheduled at N.
 
@@ -151,6 +153,26 @@ async def run_counterfactual(
         arm, seed, provider, scenario=scenario, intervention=intervention
     )
 
+    # Validate an inject_event target up front — BEFORE the recorder exists — so a
+    # bad district/kind aborts loudly instead of being silently swallowed. (For
+    # at_tick > 0 the injection runs inside a tick_listener, which the engine fires
+    # under contextlib.suppress(Exception); without this eager check a bad target
+    # would no-op and the branch would masquerade as a valid intervention.)
+    if intervention.kind == "inject_event":
+        from aftershock.town.society import _INJECT_KINDS
+
+        event_kind = intervention.params.get("event", "fire")
+        district = intervention.target
+        valid_districts = set(setup.world.districts)
+        if event_kind not in _INJECT_KINDS:
+            raise ValueError(
+                f"unknown inject event {event_kind!r}; valid: {sorted(_INJECT_KINDS)}"
+            )
+        if district not in valid_districts:
+            raise ValueError(
+                f"unknown district {district!r}; valid: {sorted(valid_districts)}"
+            )
+
     manifest: dict[str, Any] = {
         "run_id": run_id,
         "seed": seed,
@@ -164,45 +186,56 @@ async def run_counterfactual(
             "branch_of": baseline_run_id,
         },
     }
+    # Caller-supplied manifest extras (e.g. the scenario provenance block, so a
+    # scenario-backed branch is honestly labelled REAL and its prefix is byte-
+    # identical to the scenario baseline). Never override the keys set above.
+    if extra_manifest:
+        for key, value in extra_manifest.items():
+            manifest.setdefault(key, value)
 
     runs_root.mkdir(parents=True, exist_ok=True)
     recorder = Recorder(runs_root, run_id, manifest)
+    try:
+        # inject_event: queue the injection so it drains in at_tick's scheduled_events.
+        # The society drains its queue on the NEXT scheduled_events call, so queue it at
+        # the end of tick at_tick-1 (or immediately, before the loop, when at_tick == 0).
+        listener = tick_listener
+        if intervention.kind == "inject_event":
+            event_kind = intervention.params.get("event", "fire")
+            district = intervention.target
+            society = setup.society
 
-    # inject_event: queue the injection so it drains in at_tick's scheduled_events.
-    # The society drains its queue on the NEXT scheduled_events call, so queue it at
-    # the end of tick at_tick-1 (or immediately, before the loop, when at_tick == 0).
-    listener = tick_listener
-    if intervention.kind == "inject_event":
-        event_kind = intervention.params.get("event", "fire")
-        district = intervention.target
-        society = setup.society
+            if intervention.at_tick == 0:
+                society.inject_event(event_kind, district)
+            else:
+                queue_after = intervention.at_tick - 1
 
-        if intervention.at_tick == 0:
-            society.inject_event(event_kind, district)
-        else:
-            queue_after = intervention.at_tick - 1
+                def _inject_listener(
+                    record: TickRecord, world_state: dict[str, Any]
+                ) -> None:
+                    if record.tick == queue_after:
+                        society.inject_event(event_kind, district)
+                    if tick_listener is not None:
+                        tick_listener(record, world_state)
 
-            def _inject_listener(
-                record: TickRecord, world_state: dict[str, Any]
-            ) -> None:
-                if record.tick == queue_after:
-                    society.inject_event(event_kind, district)
-                if tick_listener is not None:
-                    tick_listener(record, world_state)
+                listener = _inject_listener
 
-            listener = _inject_listener
-
-    engine = Engine(
-        world=setup.world,
-        society=setup.society,
-        agents=setup.agents,
-        registry=setup.registry,
-        roles=setup.roles,
-        resolver=setup.resolver,
-        recorder=recorder,
-        seed=seed,
-        max_ticks=ticks,
-        agent_timeout_s=setup.default_timeout_s,
-        tick_listener=listener,
-    )
-    return await engine.run()
+        engine = Engine(
+            world=setup.world,
+            society=setup.society,
+            agents=setup.agents,
+            registry=setup.registry,
+            roles=setup.roles,
+            resolver=setup.resolver,
+            recorder=recorder,
+            seed=seed,
+            max_ticks=ticks,
+            agent_timeout_s=setup.default_timeout_s,
+            tick_listener=listener,
+        )
+        return await engine.run(inter_tick_delay_s=inter_tick_delay_s)
+    finally:
+        # engine.run() closes the recorder on its happy path; this finally guards the
+        # error path so a mid-run failure can't leak file handles or leave an
+        # unfinalized run.json (Recorder.close is idempotent).
+        recorder.close()

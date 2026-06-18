@@ -77,6 +77,15 @@ function HazardChip({ scenario }: { scenario: ScenarioCompact | null | undefined
   )
 }
 
+/** Short label for a counterfactual branch badge, e.g. "DROP_PROTOCOL @T5",
+ *  "KILL_AGENT commander @T10", or "CONTROL". Honestly marks the branch side as a
+ *  fabricated what-if, never a measured outcome. */
+function cfLabel(cf: NonNullable<RunSummary['counterfactual']>): string {
+  if (cf.kind === 'none') return 'control'
+  const tgt = cf.target ? ` ${cf.target}` : ''
+  return `${cf.kind}${tgt} @T${cf.at_tick}`
+}
+
 /** Each arm's MEAN spawn→first-arrival latency in minutes across its timeline
  *  missions, or null when no comparable arrival exists. Injection-safe (only
  *  timeline missions count). Shared by both compare arms against the one real
@@ -121,6 +130,9 @@ interface Props {
   initialRight?: string
   cursorTick?: number
   onStateChange?: (s: CompareController) => void
+  /** Re-fetch the run list (owned by App). Returns the fresh list so the branch
+   *  flow can wait for a just-started counterfactual to land, then select it. */
+  onRunsRefresh?: () => Promise<RunSummary[]>
 }
 
 /**
@@ -139,6 +151,7 @@ export function CompareTab({
   initialRight,
   cursorTick,
   onStateChange,
+  onRunsRefresh,
 }: Props) {
   const [left, dispatchLeft] = useReducer(timelineReducer, initialTimelineState)
   const [right, dispatchRight] = useReducer(timelineReducer, initialTimelineState)
@@ -148,6 +161,9 @@ export function CompareTab({
     rightRunId: initialRight ?? null,
     cursorTick: cursorTick ?? 0,
   })
+  // True while a counterfactual branch is running server-side and we're waiting
+  // for it to land in the run list so we can select it on the right.
+  const [branching, setBranching] = useState(false)
 
   const runById = useMemo(() => {
     const m = new Map<string, RunSummary>()
@@ -277,6 +293,43 @@ export function CompareTab({
     })
   const scrub = (tick: number) =>
     setController((s) => ({ ...s, cursorTick: Math.max(0, Math.min(tick, endTick)), playing: false }))
+
+  // After a branch starts server-side, poll the (App-owned) run list until the
+  // branch lands with final_scores (= the run finished and run.json was finalized),
+  // then auto-select it on the RIGHT so the divergence is replayable immediately —
+  // no manual reload. Falls back to clearing the spinner after a bounded number of
+  // tries so a failed branch can't wedge the controls.
+  const handleBranchStarted = useCallback(
+    (runId: string) => {
+      if (!onRunsRefresh) return
+      setBranching(true)
+      let attempts = 0
+      const MAX_ATTEMPTS = 30
+      const poll = async () => {
+        attempts += 1
+        try {
+          const list = await onRunsRefresh()
+          const branch = list.find((r) => r.run_id === runId)
+          const done =
+            !!branch && !!branch.final_scores && Object.keys(branch.final_scores).length > 0
+          if (done) {
+            setController((s) => ({ ...s, rightRunId: runId, cursorTick: 0, playing: false }))
+            setBranching(false)
+            return
+          }
+        } catch {
+          // transient refresh error — keep polling until the cap
+        }
+        if (attempts >= MAX_ATTEMPTS) {
+          setBranching(false)
+          return
+        }
+        window.setTimeout(poll, 600)
+      }
+      void poll()
+    },
+    [onRunsRefresh],
+  )
 
   // ---- Derived readouts ----
   const leftSide = useMemo(
@@ -431,7 +484,9 @@ export function CompareTab({
         baselineArm={leftRun?.arm ?? null}
         baselineSeed={leftRun?.seed ?? null}
         baselineTicks={leftRun?.ticks ?? null}
-        running={false}
+        baselineScenarioId={leftRun?.scenario?.id ?? null}
+        running={branching}
+        onBranchStarted={handleBranchStarted}
       />
       <CompareControls
         controller={controller}
@@ -576,6 +631,19 @@ function SidePanel({ run, side, align }: SidePanelProps) {
           {run ? `seed ${run.seed} · T${finalTick}` : '—'}
         </span>
         <HazardChip scenario={run?.scenario} />
+        {run?.counterfactual && (
+          <span
+            className="shrink-0 rounded-sm border px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider"
+            style={{
+              color: COUNTERFACTUAL_ACCENT,
+              borderColor: `${COUNTERFACTUAL_ACCENT}aa`,
+              background: `${COUNTERFACTUAL_ACCENT}22`,
+            }}
+            title="Counterfactual what-if branch — a re-run with one intervention, not a measured outcome"
+          >
+            {`WHAT-IF · ${cfLabel(run.counterfactual)}`}
+          </span>
+        )}
       </div>
 
       {/* Map — quiet effects in compare (no scanlines/animated rings competing) */}
@@ -795,7 +863,7 @@ function CompareControls({
             style={{ accentColor: SCRUB_ACCENT }}
             aria-label="Shared scrubber"
           />
-          {divergeTick != null && divergeTick > 0 && divergeTick <= endTick && (
+          {divergeTick != null && divergeTick >= 0 && divergeTick <= endTick && (
             <div
               className="pointer-events-none absolute top-0 flex h-full flex-col items-center"
               style={{

@@ -8,11 +8,14 @@ interface Props {
   baselineArm: string | null
   baselineSeed: number | null
   baselineTicks: number | null
+  /** The baseline's scenario id (when it was recorded from a real-data pack), so
+   *  the branch rebuilds the SAME world. null/undefined for synthetic baselines. */
+  baselineScenarioId?: string | null
   /** Whether a live/counterfactual run is already streaming. */
   running: boolean
-  /** Called after the branch starts; receives the live_id so the caller can
-   *  connect to /ws/live and flip Compare when the branch completes. */
-  onBranchStarted?: (liveId: string) => void
+  /** Called after the branch starts; receives the branch run_id so the caller can
+   *  select it on the right side once it completes. */
+  onBranchStarted?: (runId: string) => void
 }
 
 const INTERVENTIONS = [
@@ -31,6 +34,7 @@ export function CounterfactualControls({
   baselineArm,
   baselineSeed,
   baselineTicks,
+  baselineScenarioId,
   running,
   onBranchStarted,
 }: Props) {
@@ -61,8 +65,9 @@ export function CounterfactualControls({
         target: kind === 'kill_agent' ? target : kind === 'inject_event' ? target : '',
         params: kind === 'inject_event' ? { event: eventKind } : {},
         baselineRunId: baselineRunId!,
+        scenario: baselineScenarioId ?? null,
       })
-      onBranchStarted?.(res.live_id)
+      onBranchStarted?.(res.run_id)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -148,7 +153,13 @@ export function CounterfactualControls({
 
       <button
         onClick={handleSubmit}
-        disabled={submitting || running || (kind !== 'none' && !target)}
+        // A target is required ONLY for kinds that expose a selector (kill_agent /
+        // inject_event). drop_protocol (the headline) and none take no target, so
+        // they must stay submittable — gating them on `target` left the Branch
+        // button permanently disabled for the default intervention.
+        disabled={
+          submitting || running || ((kind === 'kill_agent' || kind === 'inject_event') && !target)
+        }
         className="shrink-0 rounded px-2 py-0.5 text-[11px] font-semibold transition-colors disabled:opacity-40"
         style={{
           backgroundColor: `${COUNTERFACTUAL_ACCENT}20`,

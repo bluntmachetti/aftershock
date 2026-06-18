@@ -25,6 +25,11 @@ test.describe('Counterfactual controls', () => {
     await secondRight.click()
 
     await expect(page.getByText('What-if')).toBeVisible({ timeout: 10000 })
-    await expect(page.getByRole('button', { name: 'Branch' })).toBeVisible()
+    // The default intervention is drop_protocol (the headline). Its Branch button
+    // must be ENABLED — it exposes no target selector, and gating it on a target
+    // left it permanently disabled (regression guard).
+    const branch = page.getByRole('button', { name: 'Branch' })
+    await expect(branch).toBeVisible()
+    await expect(branch).toBeEnabled()
   })
 })
