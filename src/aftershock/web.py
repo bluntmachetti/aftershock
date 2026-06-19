@@ -843,7 +843,10 @@ def create_app(
             tmp = Path(td)
             a = await _run_into(tmp / "a", "a")
             b = await _run_into(tmp / "b", "b")
-        passed = a == b
+        # Guard against an empty digest list returning a vacuous pass —
+        # defense-in-depth (not reachable today: the scripted engine always
+        # emits >=1 tick, but a future early-exit path could change that).
+        passed = bool(a) and a == b
         return {
             "arm": "scripted",
             "seed": _DETERMINISM_SEED,

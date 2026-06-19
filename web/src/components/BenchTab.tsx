@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { BenchResult, BenchArm, PairedComparison, DeterminismReport } from '../types'
 import { api } from '../lib/api'
-import { ARM_COLORS } from '../lib/palette'
+import { ARM_COLORS, STATUS_COLORS, FALLBACK_COLOR, VERDICT_COLORS } from '../lib/palette'
 
 // Canonical arm coding (palette.ts): society = cyan, every baseline
 // (scripted/solo/swarm) = amber. Kept in lock-step with COMPARE's "good vs
@@ -190,9 +190,10 @@ function verdictStyle(verdict: PairedComparison['verdict']): { color: string; la
   // Honesty: "credible" = green check ONLY when CI excludes 0 AND sign test is
   // significant. "suggestive" (CI only) and "noise" (CI includes 0) never get a
   // green check — a non-significant effect is shown as non-significant.
-  if (verdict === 'credible') return { color: '#4ade80', label: 'credible' }
-  if (verdict === 'suggestive') return { color: '#f59e0b', label: 'suggestive' }
-  return { color: '#94a3b8', label: 'not significant' }
+  // Accents come from VERDICT_COLORS (palette) — no raw hex in this component.
+  if (verdict === 'credible') return { color: VERDICT_COLORS.credible, label: 'credible' }
+  if (verdict === 'suggestive') return { color: VERDICT_COLORS.suggestive, label: 'suggestive' }
+  return { color: VERDICT_COLORS.noise, label: 'not significant' }
 }
 
 function PairedStats({ comparisons }: { comparisons: PairedComparison[] }) {
@@ -234,12 +235,12 @@ function PairedStats({ comparisons }: { comparisons: PairedComparison[] }) {
               <Stat
                 label="95% bootstrap CI"
                 value={`[${c.ci.lower.toFixed(1)}, ${c.ci.upper.toFixed(1)}]`}
-                accent={c.ci_excludes_zero ? '#4ade80' : '#94a3b8'}
+                accent={c.ci_excludes_zero ? STATUS_COLORS.resolved : FALLBACK_COLOR}
               />
               <Stat
                 label="sign-test p"
                 value={c.sign_test_p < 0.001 ? '<0.001' : c.sign_test_p.toFixed(3)}
-                accent={c.sign_significant ? '#4ade80' : '#94a3b8'}
+                accent={c.sign_significant ? STATUS_COLORS.resolved : FALLBACK_COLOR}
               />
               <Stat
                 label="observed power"
@@ -270,7 +271,7 @@ function DeterminismBadge({ report }: { report: DeterminismReport | null }) {
   if (!report) return null
   // Scoped to the scripted engine ONLY — never implies LLM/society is reproducible.
   const passed = report.passed
-  const color = passed ? '#4ade80' : '#ef4444'
+  const color = passed ? STATUS_COLORS.resolved : STATUS_COLORS.failed
   return (
     <div
       className="flex items-start gap-2 rounded-lg border px-3 py-2 text-[10px] font-mono leading-relaxed"
