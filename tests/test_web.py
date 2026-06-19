@@ -366,6 +366,60 @@ def test_bench_reads_fixture(runs_root: Path, bench_root: Path) -> None:
     assert arms_seen == {"scripted", "society"}
 
 
+@pytest.fixture()
+def paired_bench_root(tmp_path: Path) -> Path:
+    """A bench_root with ONE results.json whose `paired` table shares seeds
+    across scripted (control) + society (treatment) so paired_stats is computed."""
+    br = tmp_path / "bench_results"
+    br.mkdir()
+    results = {
+        "arms": {
+            "scripted": {"n": 5, "mean_lives_saved": 100.0, "sd_lives_saved": 5.0},
+            "society": {"n": 5, "mean_lives_saved": 110.0, "sd_lives_saved": 6.0},
+        },
+        # society beats scripted on 4/5 seeds, ties on 1 → sign test not sig at
+        # n=5; bootstrap CI may or may not exclude 0. Verdict is suggestive/noise.
+        "paired": {
+            "scripted": {42: 100.0, 7: 95.0, 13: 102.0, 23: 98.0, 57: 105.0},
+            "society": {42: 108.0, 7: 101.0, 13: 100.0, 23: 110.0, 57: 112.0},
+        },
+    }
+    (br / "results.json").write_text(json.dumps(results), encoding="utf-8")
+    return br
+
+
+def test_bench_serves_paired_stats(runs_root: Path, paired_bench_root: Path) -> None:
+    app = create_app(runs_root, bench_root=paired_bench_root)
+    with TestClient(app) as client:
+        resp = client.get("/api/bench")
+    data = resp.json()
+    assert len(data) == 1
+    ps = data[0]["paired_stats"]
+    # One comparison: society vs scripted (the control).
+    assert len(ps) == 1
+    cmp = ps[0]
+    assert cmp["control"] == "scripted"
+    assert cmp["treatment"] == "society"
+    assert cmp["n"] == 5
+    assert "ci" in cmp and "lower" in cmp["ci"] and "upper" in cmp["ci"]
+    assert "sign_test_p" in cmp
+    assert "observed_power" in cmp
+    assert cmp["verdict"] in ("noise", "suggestive", "credible")
+    # Honesty: the verdict field + ci_excludes_zero + sign_significant are all
+    # present so the UI never has to re-derive significance.
+
+
+def test_bench_paired_stats_omits_no_common_seeds(
+    runs_root: Path, bench_root: Path
+) -> None:
+    """The fixture's two results have disjoint seeds → paired_stats is []."""
+    app = create_app(runs_root, bench_root=bench_root)
+    with TestClient(app) as client:
+        resp = client.get("/api/bench")
+    for result in resp.json():
+        assert result.get("paired_stats") == []
+
+
 # ---------------------------------------------------------------------------
 # Tests: /api/live status when no run
 # ---------------------------------------------------------------------------
@@ -427,6 +481,94 @@ def test_status_with_key(runs_root: Path, monkeypatch: pytest.MonkeyPatch) -> No
     with TestClient(app) as client:
         resp = client.get("/api/status")
     assert resp.json()["llm_key"] is True
+
+
+# ---------------------------------------------------------------------------
+# Tests: GET /api/determinism — scripted-engine verify, scoped + cached
+# ---------------------------------------------------------------------------
+
+
+def test_determinism_passes_and_scoped_to_scripted(runs_root: Path) -> None:
+    # Reset the per-process cache so this test runs the check fresh.
+    import aftershock.web as web_mod
+
+    web_mod._determinism_cache = None
+    app = create_app(runs_root)
+    with TestClient(app) as client:
+        resp = client.get("/api/determinism")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["passed"] is True
+    assert body["arm"] == "scripted"
+    assert body["seed"] == 42
+    # Honesty: the scope + note must NOT imply LLM/society arms are reproducible.
+    assert "scripted" in body["scope"].lower()
+    assert "not" in body["note"].lower() and "reproducible" in body["note"].lower()
+
+
+def test_determinism_cached_on_second_call(runs_root: Path) -> None:
+    """The verify re-run is ~seconds; the second call must be a cache hit
+    (identical body, no second engine run)."""
+    import aftershock.web as web_mod
+
+    web_mod._determinism_cache = None
+    app = create_app(runs_root)
+    with TestClient(app) as client:
+        first = client.get("/api/determinism").json()
+        second = client.get("/api/determinism").json()
+    assert first == second
+    assert first["passed"] is True
+
+
+# ---------------------------------------------------------------------------
+# Tests: bench.paired_comparisons (pure stats adapter)
+# ---------------------------------------------------------------------------
+
+
+def test_paired_comparisons_no_common_seeds() -> None:
+    from aftershock.bench import paired_comparisons
+
+    paired = {"scripted": {1: 10.0}, "society": {2: 20.0}}
+    assert paired_comparisons(paired) == []
+
+
+def test_paired_comparisons_no_control() -> None:
+    from aftershock.bench import paired_comparisons
+
+    # No scripted control → empty (graceful, not an error).
+    assert paired_comparisons({"society": {1: 10.0}}) == []
+
+
+def test_paired_comparisons_verdict_fields() -> None:
+    from aftershock.bench import paired_comparisons
+
+    # society beats scripted on every seed → delta always positive.
+    paired = {
+        "scripted": {1: 100.0, 2: 100.0, 3: 100.0, 4: 100.0, 5: 100.0},
+        "society": {1: 120.0, 2: 118.0, 3: 122.0, 4: 119.0, 5: 121.0},
+    }
+    out = paired_comparisons(paired)
+    assert len(out) == 1
+    cmp = out[0]
+    assert cmp["n"] == 5
+    assert cmp["n_positive"] == 5
+    assert cmp["n_negative"] == 0
+    assert cmp["mean_delta"] > 0
+    assert cmp["ci"]["lower"] > 0  # excludes 0
+    assert cmp["verdict"] in ("suggestive", "credible")
+
+
+def test_paired_comparisons_noise_when_ci_includes_zero() -> None:
+    from aftershock.bench import paired_comparisons
+
+    # Mixed deltas straddling 0 → CI includes 0 → "noise".
+    paired = {
+        "scripted": {1: 100.0, 2: 100.0, 3: 100.0, 4: 100.0, 5: 100.0},
+        "society": {1: 110.0, 2: 90.0, 3: 105.0, 4: 95.0, 5: 100.0},
+    }
+    out = paired_comparisons(paired)
+    assert out[0]["verdict"] == "noise"
+    assert out[0]["ci_excludes_zero"] is False
 
 
 # ---------------------------------------------------------------------------

@@ -317,6 +317,94 @@ def aggregate(cells: list[dict[str, Any]]) -> dict[str, Any]:
     return {"arms": arm_stats, "paired": paired}
 
 
+# Fixed bootstrap seed so the served CI is byte-stable across re-serves of the
+# same results.json (deterministic presentation, not a re-roll per request).
+_PAIRED_BOOTSTRAP_SEED = 20260619
+
+
+def paired_comparisons(
+    paired: dict[str, dict[int, float]],
+    control: str = "scripted",
+    *,
+    alpha: float = 0.05,
+) -> list[dict[str, Any]]:
+    """Pure paired control-vs-treatment stats from the ``paired`` table.
+
+    For each non-control arm sharing seeds with ``control``, computes the
+    per-seed lives_saved delta and reports: mean_delta, a bootstrap CI, an exact
+    two-sided sign-test p-value, observed power, and a structured verdict.
+
+    This is the small pure adapter the BenchTab serves — it does NOT reuse
+    ``analyze_ablation`` (which is hard-coded control-vs-treatment and raises on
+    no common seeds). Graceful: an arm with no common seeds is omitted (not an
+    error), so a single-arm results.json yields an empty list rather than 500.
+
+    Verdict mirrors ``analyze_ablation`` (FIELD-NOTES §16–17): "credible"
+    requires the bootstrap CI to exclude 0 AND the sign test to be significant;
+    CI-excludes-0 but sign test not significant = "suggestive"; otherwise
+    "noise". This stops the percentile CI from over-claiming on small skewed
+    samples.
+    """
+    ctrl = paired.get(control, {})
+    if not ctrl:
+        return []
+    out: list[dict[str, Any]] = []
+    # society first, then the rest alphabetically (matches render_markdown order).
+    arms = sorted(
+        (a for a in paired if a != control),
+        key=lambda a: (0 if a == "society" else 1, a),
+    )
+    for arm in arms:
+        treat = paired[arm]
+        common = sorted(set(ctrl) & set(treat))
+        if not common:
+            continue
+        diffs = [treat[s] - ctrl[s] for s in common]
+        n = len(diffs)
+        mean_delta = stats.mean(diffs)
+        sd_delta = stats.sample_sd(diffs)
+        ci = stats.bootstrap_ci(
+            diffs, confidence=1.0 - alpha, rng_seed=_PAIRED_BOOTSTRAP_SEED
+        )
+        sign_p = stats.sign_test_p(diffs)
+        observed_power = (
+            stats.power_for_n(mean_delta, sd_delta, n, alpha)
+            if mean_delta != 0.0
+            else None
+        )
+        ci_excludes_zero = not (ci.lower <= 0.0 <= ci.upper)
+        sign_significant = sign_p < alpha
+        if not ci_excludes_zero:
+            verdict = "noise"
+        elif not sign_significant:
+            verdict = "suggestive"
+        else:
+            verdict = "credible"
+        out.append({
+            "control": control,
+            "treatment": arm,
+            "n": n,
+            "seeds": common,
+            "mean_delta": mean_delta,
+            "sd_delta": sd_delta,
+            "n_positive": sum(1 for d in diffs if d > 0),
+            "n_negative": sum(1 for d in diffs if d < 0),
+            "n_tied": sum(1 for d in diffs if d == 0),
+            "sign_test_p": sign_p,
+            "verdict": verdict,
+            "ci_excludes_zero": ci_excludes_zero,
+            "sign_significant": sign_significant,
+            "ci": {
+                "lower": ci.lower,
+                "upper": ci.upper,
+                "confidence": ci.confidence,
+                "n_resamples": ci.n_resamples,
+            },
+            "observed_power": observed_power,
+        })
+    return out
+
+
 def render_markdown(agg: dict[str, Any]) -> str:
     """Render RESULTS.md content: headline table + paired lives_saved table.
 

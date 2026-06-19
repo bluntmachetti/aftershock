@@ -86,6 +86,18 @@ _AMBIENT_POLL_S = 2.0  # re-check cadence while a manual run holds the floor
 _VALID_INJECT_KINDS = frozenset({"fire", "aftershock", "road_block"})
 _MAX_PENDING_INJECTIONS = 50
 
+# The LLM arms that need DASHSCOPE_API_KEY (society live/branch 503 without it).
+# Module-level so /api/status, /api/live, and /api/counterfactual share one list.
+_LLM_ARMS = ("solo", "swarm", "society")
+
+# Cached scripted-engine determinism check (GET /api/determinism). The verify
+# re-run is ~seconds for the scripted arm; cache it per-process so the BenchTab
+# badge is instant after the first hit. Reset only on server restart.
+_DETERMINISM_SEED = 42
+_DETERMINISM_TICKS = 60
+_determinism_cache: dict[str, Any] | None = None
+_determinism_lock: asyncio.Lock | None = None
+
 # Per-pack caveat lines (DESIGN.md task #4, invariant 4 — chosen per pack so it never
 # claims a category the pack's field_provenance does not support). A pack with a
 # populated reference.missions carries a real latency baseline (dispatch pack); a pack
@@ -774,7 +786,6 @@ def create_app(
     # live-engine offline (voucher pending)" chip instead of a raw 503 when an
     # operator picks a solo/swarm/society live or counterfactual run. Scripted
     # arms are keyless and never gated. Does NOT leak the key itself.
-    _LLM_ARMS = ("solo", "swarm", "society")
 
     @app.get("/api/status")
     async def status() -> JSONResponse:
@@ -785,6 +796,82 @@ def create_app(
                 "llm_arms": list(_LLM_ARMS),
             }
         )
+
+    # ------------------------------------------------------------------
+    # GET /api/determinism
+    # ------------------------------------------------------------------
+    # Re-runs the SCRIPTED engine twice (seed 42, 60 ticks — the canonical
+    # `aftershock verify` command) and compares world_digest sequences. Cached
+    # per-process after the first call so the BenchTab badge is instant. The
+    # claim is scoped to the scripted arm ONLY — DashScope ignores `seed`, so
+    # LLM/society arms are irreducibly stochastic and never implied reproducible.
+
+    async def _run_determinism_check() -> dict[str, Any]:
+        import tempfile
+
+        from aftershock.kernel.engine import Engine as _Engine
+        from aftershock.kernel.recorder import Recorder as _Recorder
+        from aftershock.town.arms import build_arm as _build_arm
+
+        async def _run_into(tmp: Path, tag: str) -> list[str]:
+            run_id = f"verify-{tag}"
+            setup = _build_arm("scripted", _DETERMINISM_SEED, None)
+            manifest = {
+                "run_id": run_id,
+                "seed": _DETERMINISM_SEED,
+                "ticks": _DETERMINISM_TICKS,
+                "arm": "scripted",
+            }
+            recorder = _Recorder(tmp, run_id, manifest)
+            engine = _Engine(
+                world=setup.world,
+                society=setup.society,
+                agents=setup.agents,
+                registry=setup.registry,
+                roles=setup.roles,
+                resolver=setup.resolver,
+                recorder=recorder,
+                seed=_DETERMINISM_SEED,
+                max_ticks=_DETERMINISM_TICKS,
+                agent_timeout_s=setup.default_timeout_s,
+            )
+            await engine.run()
+            _, records, _worlds = load_run(tmp / run_id)
+            return [r.world_digest for r in records]
+
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            a = await _run_into(tmp / "a", "a")
+            b = await _run_into(tmp / "b", "b")
+        passed = a == b
+        return {
+            "arm": "scripted",
+            "seed": _DETERMINISM_SEED,
+            "ticks": _DETERMINISM_TICKS,
+            "passed": passed,
+            "n_digests": len(a),
+            # Explicit honesty boundary: only the scripted arm is verified.
+            "scope": "scripted engine only",
+            "note": (
+                "Two seeded scripted runs produce identical world-digest "
+                "sequences. DashScope ignores `seed`, so LLM/society arms are "
+                "NOT reproducible."
+            ),
+        }
+
+    @app.get("/api/determinism")
+    async def determinism() -> JSONResponse:
+        global _determinism_cache, _determinism_lock
+        if _determinism_cache is not None:
+            return JSONResponse(_determinism_cache)
+        if _determinism_lock is None:
+            _determinism_lock = asyncio.Lock()
+        async with _determinism_lock:
+            # Re-check inside the lock — a racing caller may have populated it.
+            if _determinism_cache is not None:
+                return JSONResponse(_determinism_cache)
+            _determinism_cache = await _run_determinism_check()
+        return JSONResponse(_determinism_cache)
 
     # ------------------------------------------------------------------
     # GET /api/runs
@@ -920,7 +1007,20 @@ def create_app(
             except Exception:  # noqa: BLE001
                 continue
         results.sort(key=lambda x: x[0], reverse=True)
-        return JSONResponse([r for _, r in results])
+        # Attach a pure paired-stats block (bootstrap CI + sign-test p + power +
+        # verdict) to each result, computed server-side from its `paired` table
+        # so the BenchTab never reimplements stats in TS. Control = the
+        # deterministic scripted baseline; an arm with no common seeds is omitted
+        # (never an error), so a single-arm result yields an empty list.
+        from aftershock.bench import paired_comparisons
+
+        served: list[dict[str, Any]] = []
+        for _, data in results:
+            if isinstance(data, dict) and isinstance(data.get("paired"), dict):
+                data = dict(data)
+                data["paired_stats"] = paired_comparisons(data["paired"])
+            served.append(data)
+        return JSONResponse(served)
 
     # ------------------------------------------------------------------
     # GET /api/scenarios  (ungated, like every other GET)

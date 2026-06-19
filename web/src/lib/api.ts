@@ -5,6 +5,7 @@ import type {
   BenchResult,
   LiveStatus,
   StatusInfo,
+  DeterminismReport,
   AarReport,
   ConformanceReport,
   ScenarioSummary,
@@ -83,6 +84,10 @@ export const api = {
     get(`/api/runs/${runId}/ticks?start=${start}&limit=${limit}`),
 
   bench: (): Promise<BenchResult[]> => get('/api/bench'),
+
+  // Scripted-engine determinism verify (re-run twice, identical digests).
+  // Cached server-side after the first call. Scoped to the scripted arm ONLY.
+  determinism: (): Promise<DeterminismReport> => get('/api/determinism'),
 
   liveStatus: (): Promise<LiveStatus> => get('/api/live'),
 
