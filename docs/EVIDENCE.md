@@ -29,9 +29,11 @@ simulated.
 | Road blockages | — | Synthetic (no ground truth) |
 | Lives saved / lost / outcomes | — | Fully simulated model — never claimed as real |
 
-Source: `scenarios/nyc-ida-2021/scenario.json` → `field_provenance` +
-`reference.caveat_line`: *"Demand: real · Latency baseline: real · Lives &
-outcomes: simulated model."*
+Source: `scenarios/nyc-ida-2021/scenario.json` → `field_provenance`. The
+caveat line *"Demand: real · Latency baseline: real · Lives & outcomes:
+simulated model."* is emitted by the loader (`src/aftershock/town/scenario.py`)
+and stored in each scenario run's manifest (`runs/seed91-society/run.json` →
+`scenario.caveat_line`).
 
 ## 3. The benchmark result
 
@@ -43,7 +45,7 @@ outcomes: simulated model."*
 | **scripted** (expert heuristics, $0) | 106.8 | $0.0000 | — (free) | control |
 | **society** (6-role Qwen, negotiation) | 103.2 | $0.0423 | 2,441 | −3.6 (p=0.375, noise) |
 | **solo** (one big Qwen model) | 104.2 | $0.0649 | 1,606 | −2.6 (p=1.000, noise) |
-| **swarm** (flat swarm, no protocol) | 75.6 | $0.0161 | 4,710 | −31.2 (p=0.375, noise) |
+| **swarm** (flat swarm, no protocol) | 75.6 | $0.0161 | 4,710 | −31.2 (p=0.0625, 5/5 loss) |
 
 **The protocol's value — society vs swarm (the headline):**
 
@@ -134,14 +136,19 @@ society-wide rate.
 | Run | Ticks | team_alignment | Source |
 |---|---|---|---|
 | `seed42-society` (synthetic) | 5 | 1.0000 | `runs/seed42-society/conformance.json` |
-| `seed91-society` (NYC Ida) | 80 | 0.9517 | `runs/seed91-society/conformance.json` |
+| `seed91-society` (NYC Ida) | 65 recorded (80 budget) | 0.9517 | `runs/seed91-society/conformance.json` |
 | `ep1-seed100-society` (episode) | 30 | 0.7588 | `runs/episodes/ep1-seed100-society/conformance.json` |
 
-The demo run (`seed91-society`, 80 ticks on real NYC Ida demand) achieves
-**0.9517** — Qwen follows the structured doctrine 95% of the time over a full
-scenario. The shorter runs reach perfect alignment. (Never cite 0.915 — that was
-a hallucinated figure from an early review that couldn't read the gitignored
-file; the real ep1 value is 0.7588.)
+The demo run (`seed91-society`, 65 recorded ticks on real NYC Ida demand)
+achieves **0.9517** — Qwen follows the structured doctrine 95% of the time over
+a full scenario. The shorter runs reach perfect alignment. (Never cite 0.915 —
+that was a hallucinated figure from an early review that couldn't read the
+gitignored file; the real ep1 value is 0.7588.)
+
+> **Conformance ≠ outcome.** High doctrine alignment means the agents followed
+> the protocol — it does *not* mean they saved everyone. On `seed91-society`
+> the society saved 8 and lost 82 lives (outcomes are fully simulated, §2).
+> The conformance number proves instruction-following, not rescue quality.
 
 ### Real Qwen rationales
 
@@ -167,12 +174,12 @@ outcome — with no counterfactual calls.
 |---|---|---|
 | Pack ID | `nyc-ida-2021` | `scenarios/nyc-ida-2021/scenario.json` |
 | Hazard | hurricane_flood | same |
-| config_sha256 | `5d7485f3d9dad82359f183412e5b6071287adcb2c2cb2aa479b070154b4784bb` | same |
-| pack_digest | `38d5e4a9a21c8900e7f3b11b9b73b02928468a4e51ecc3b4c6c571969b946782` | same |
+| config_sha256 | `5d7485f3d9dad82359f183412e5b6071287adcb2c2cb2aa479b070154b4784bb` | `scenarios/nyc-ida-2021/scenario.json` → `config_sha256` |
+| pack_digest | `38d5e4a9a21c8900e7f3b11b9b73b02928468a4e51ecc3b4c6c571969b946782` | computed at load time by `src/aftershock/town/scenario.py` (`_compute_digest`); stored in the run manifest `runs/seed91-society/run.json` → `scenario.pack_digest` (not in `scenario.json` itself) |
 | Window | 2021-09-01 18:00 → 09-02 06:00 EDT | same |
 | Sources | FDNY EMS Dispatch (76xm-jjuj, 2,003 rows) + Fire Dispatch (8m42-w767, 2,022 rows) | same → `source[]` |
-| Real incidents in window | 2,212 | same → `reference.n_incidents` |
-| Real mean latency | 948 s | same → `reference.mean_latency_s` |
+| Real incidents in window | 2,212 | same → `reference.aggregates.n_incidents` |
+| Real mean latency | 948 s | same → `reference.aggregates.mean_latency_s` |
 
 **Per-field provenance (the hard honesty contract):**
 
@@ -194,7 +201,7 @@ the simulated arm; ProvenancePanel badges every field.
 | Run ID | Purpose | Arm | Seed | Key stat |
 |---|---|---|---|---|
 | `ep1-seed100-society` | Society episode (receipt demo) | society | 100 | $0.044, 113 lives, alignment 0.759 |
-| `seed91-society` | NYC Ida scenario run | society | 91 | 80 ticks, alignment 0.952 |
+| `seed91-society` | NYC Ida scenario run | society | 91 | 65 ticks, alignment 0.952, 8 saved / 82 lost |
 | `seed42-society` | Synthetic society run | society | 42 | alignment 1.000 |
 | `seed42-scripted` | Determinism demo | scripted | 42 | verify PASS |
 

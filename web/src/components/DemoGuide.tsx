@@ -11,8 +11,8 @@ const STEPS: Array<{ n: number; title: string; body: string; tab: string }> = [
   },
   {
     n: 2,
-    title: 'Decision',
-    body: 'Click a ruling in the Negotiation Feed → the Decision Receipt chains the kernel ruling, the agent-stated rationale, the cost, and the recorded outcome.',
+    title: 'Negotiation',
+    body: 'The Negotiation Feed shows the live auction log: which role requested resources, whether the kernel GRANTED or declined (with reason), and the contention overlay on the map.',
     tab: 'Map',
   },
   {
