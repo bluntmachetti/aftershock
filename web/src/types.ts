@@ -349,6 +349,10 @@ export interface BenchResult {
   // no common seeds. The BenchTab renders CI whiskers + sign-test p + power +
   // verdict from this so stats are never reimplemented in TS.
   paired_stats?: PairedComparison[]
+  // Source batch dir (bench/results/<batch>/) + whether it's the canonical
+  // published demo batch that BenchTab headlines (server-tagged).
+  batch?: string
+  canonical?: boolean
 }
 
 /** One paired control-vs-treatment comparison (server-computed). Mirrors the

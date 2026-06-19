@@ -90,6 +90,12 @@ _MAX_PENDING_INJECTIONS = 50
 # Module-level so /api/status, /api/live, and /api/counterfactual share one list.
 _LLM_ARMS = ("solo", "swarm", "society")
 
+# The canonical published 4-arm benchmark batch (bench/results/<dir>/). BenchTab
+# headlines THIS batch — the +28 society-vs-swarm result the narration + evidence
+# pack cite — rather than the newest-by-mtime one, so later research-ablation
+# batches stay available via /api/bench but never headline the judge-facing view.
+_CANONICAL_BENCH_DIR = "2026-06-11"
+
 # Cached scripted-engine determinism check (GET /api/determinism). The verify
 # re-run is ~seconds for the scripted arm; cache it per-process so the BenchTab
 # badge is instant after the first hit. Reset only on server restart.
@@ -999,17 +1005,18 @@ def create_app(
     async def bench_results() -> JSONResponse:
         if not bench_root.exists():
             return JSONResponse([])
-        results: list[tuple[float, Any]] = []
+        results: list[tuple[float, str, Any]] = []
         # results.json files live in dated subdirectories (bench/results/<date>/),
         # or directly under bench_root — scan recursively for the canonical name.
         for entry in sorted(bench_root.rglob("results.json")):
             try:
                 data = json.loads(entry.read_text(encoding="utf-8"))
                 mtime = entry.stat().st_mtime
-                results.append((mtime, data))
+                results.append((mtime, entry.parent.name, data))
             except Exception:  # noqa: BLE001
                 continue
-        results.sort(key=lambda x: x[0], reverse=True)
+        # Canonical demo batch first, then the rest newest-first by mtime.
+        results.sort(key=lambda x: (x[1] != _CANONICAL_BENCH_DIR, -x[0]))
         # Attach a pure paired-stats block (bootstrap CI + sign-test p + power +
         # verdict) to each result, computed server-side from its `paired` table
         # so the BenchTab never reimplements stats in TS. Control = the
@@ -1018,10 +1025,13 @@ def create_app(
         from aftershock.bench import paired_comparisons
 
         served: list[dict[str, Any]] = []
-        for _, data in results:
-            if isinstance(data, dict) and isinstance(data.get("paired"), dict):
+        for _, dirname, data in results:
+            if isinstance(data, dict):
                 data = dict(data)
-                data["paired_stats"] = paired_comparisons(data["paired"])
+                data["batch"] = dirname
+                data["canonical"] = dirname == _CANONICAL_BENCH_DIR
+                if isinstance(data.get("paired"), dict):
+                    data["paired_stats"] = paired_comparisons(data["paired"])
             served.append(data)
         return JSONResponse(served)
 
