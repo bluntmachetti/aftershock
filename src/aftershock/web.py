@@ -59,6 +59,13 @@ logger = logging.getLogger(__name__)
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 # Scenario id grammar (matches the dir name; same as town/scenario.py loader).
 _SCENARIO_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+# Subdirectory under runs_root that holds the curated society "episode" runs
+# (e.g. runs/episodes/ep1-seed100-society). Their leaf names match _RUN_ID_RE but
+# the slash-forbidding regex means they cannot be addressed as "episodes/ep1-…";
+# _validate_run_id and _scan_runs fall back to / list this subdir so the episodes
+# are reachable as plain run_ids (ep1-seed100-society) without filesystem
+# symlinks that would need re-wiring per deployment.
+_EPISODES_SUBDIR = "episodes"
 _MAX_TICKS_LIVE = 120
 _MAX_LIMIT = 200
 _DEFAULT_SYNTHETIC_TICKS = 30
@@ -168,20 +175,45 @@ _ambient_task: asyncio.Task[Any] | None = None
 # ---------------------------------------------------------------------------
 
 
+def _resolve_run_dir(run_id: str, runs_root: Path) -> Path | None:
+    """Resolve a run_id to its on-disk directory, or None if not found.
+
+    Tries ``runs_root/run_id`` first, then falls back to
+    ``runs_root/<_EPISODES_SUBDIR>/run_id`` so the curated society episodes
+    nested under ``runs/episodes/`` are reachable by their leaf run_id. The
+    fallback candidate is validated to stay within ``runs_root`` (path-traversal
+    guard), and ``run_id`` is regex-bound (no slashes), so this cannot escape
+    the served root.
+    """
+    if not _RUN_ID_RE.match(run_id) or run_id in {".", ".."}:
+        return None
+    resolved_root = runs_root.resolve()
+    direct = (runs_root / run_id).resolve()
+    try:
+        direct.relative_to(resolved_root)
+    except ValueError:
+        return None
+    if direct.is_dir():
+        return direct
+    # Episodes fallback: runs_root/<_EPISODES_SUBDIR>/run_id
+    nested = (runs_root / _EPISODES_SUBDIR / run_id).resolve()
+    try:
+        nested.relative_to(resolved_root)
+    except ValueError:
+        return None
+    if nested.is_dir():
+        return nested
+    return None
+
+
 def _validate_run_id(run_id: str, runs_root: Path) -> Path:
     """Validate run_id and return the resolved run directory.
 
-    Raises HTTPException(404) for any invalid or path-traversal input.
+    Raises HTTPException(404) for any invalid or path-traversal input. Resolves
+    nested episode dirs (see ``_resolve_run_dir``) transparently.
     """
-    if not _RUN_ID_RE.match(run_id) or run_id in {".", ".."}:
-        raise HTTPException(status_code=404, detail="not found")
-    resolved_root = runs_root.resolve()
-    candidate = (runs_root / run_id).resolve()
-    try:
-        candidate.relative_to(resolved_root)
-    except ValueError:
-        raise HTTPException(status_code=404, detail="not found") from None
-    if not candidate.exists() or not candidate.is_dir():
+    candidate = _resolve_run_dir(run_id, runs_root)
+    if candidate is None:
         raise HTTPException(status_code=404, detail="not found")
     return candidate
 
@@ -292,44 +324,64 @@ def _scenario_compact_from_manifest(manifest: dict[str, Any]) -> dict[str, Any] 
 
 
 def _scan_runs(runs_root: Path) -> list[dict[str, Any]]:
-    """Scan runs_root for valid run directories, newest first."""
+    """Scan runs_root for valid run directories, newest first.
+
+    Also descends one level into ``runs_root/<_EPISODES_SUBDIR>/`` so the
+    curated society episodes are listed alongside regular runs (their leaf
+    run_ids are unique and regex-safe). A run_id collision (same leaf name in
+    both roots) keeps the direct-child entry; episode entries are skipped then.
+    """
     if not runs_root.exists():
         return []
     results: list[tuple[float, dict[str, Any]]] = []
-    for entry in runs_root.iterdir():
-        if not entry.is_dir():
-            continue
-        run_json = entry / "run.json"
-        if not run_json.exists():
-            continue
-        try:
-            manifest = json.loads(run_json.read_text(encoding="utf-8"))
-            ticks_path = entry / "ticks.ndjson"
-            ticks_count = 0
-            if ticks_path.exists():
-                ticks_count = sum(
-                    1
-                    for ln in ticks_path.read_text(encoding="utf-8").splitlines()
-                    if ln.strip()
-                )
-            has_world = (entry / "world.ndjson").exists()
-            result: dict[str, Any] = {
-                "run_id": entry.name,
-                "seed": manifest.get("seed"),
-                "arm": manifest.get("arm"),
-                "ticks": ticks_count,
-                "final_scores": manifest.get("final_scores", {}),
-                "cost": manifest.get("cost", {}),
-                "has_world": has_world,
-                "scenario": _scenario_compact_from_manifest(manifest),
-                # Branch metadata (only on counterfactual runs); the Compare tab
-                # reads divergeTick from this list row to draw the DIVERGES marker.
-                "counterfactual": manifest.get("counterfactual"),
-            }
-            mtime = entry.stat().st_mtime
-            results.append((mtime, result))
-        except Exception:  # noqa: BLE001
-            continue
+    seen_ids: set[str] = set()
+
+    scan_dirs: list[Path] = [runs_root]
+    episodes_root = runs_root / _EPISODES_SUBDIR
+    if episodes_root.is_dir():
+        scan_dirs.append(episodes_root)
+
+    for scan_root in scan_dirs:
+        for entry in scan_root.iterdir():
+            if not entry.is_dir():
+                continue
+            run_json = entry / "run.json"
+            if not run_json.exists():
+                continue
+            run_id = entry.name
+            # Skip an episode whose run_id collides with a direct-child run
+            # (the direct child wins; episodes are additive only).
+            if scan_root is episodes_root and run_id in seen_ids:
+                continue
+            try:
+                manifest = json.loads(run_json.read_text(encoding="utf-8"))
+                ticks_path = entry / "ticks.ndjson"
+                ticks_count = 0
+                if ticks_path.exists():
+                    ticks_count = sum(
+                        1
+                        for ln in ticks_path.read_text(encoding="utf-8").splitlines()
+                        if ln.strip()
+                    )
+                has_world = (entry / "world.ndjson").exists()
+                result: dict[str, Any] = {
+                    "run_id": run_id,
+                    "seed": manifest.get("seed"),
+                    "arm": manifest.get("arm"),
+                    "ticks": ticks_count,
+                    "final_scores": manifest.get("final_scores", {}),
+                    "cost": manifest.get("cost", {}),
+                    "has_world": has_world,
+                    "scenario": _scenario_compact_from_manifest(manifest),
+                    # Branch metadata (only on counterfactual runs); the Compare tab
+                    # reads divergeTick from this list row to draw the DIVERGES marker.
+                    "counterfactual": manifest.get("counterfactual"),
+                }
+                mtime = entry.stat().st_mtime
+                results.append((mtime, result))
+                seen_ids.add(run_id)
+            except Exception:  # noqa: BLE001
+                continue
     results.sort(key=lambda x: x[0], reverse=True)
     return [r for _, r in results]
 
@@ -715,6 +767,26 @@ def create_app(
     )
 
     # ------------------------------------------------------------------
+    # GET /api/status
+    # ------------------------------------------------------------------
+    # Voucher/key detection for graceful UI degradation. Reports whether the
+    # DashScope key is configured so the frontend can show a "Qwen society
+    # live-engine offline (voucher pending)" chip instead of a raw 503 when an
+    # operator picks a solo/swarm/society live or counterfactual run. Scripted
+    # arms are keyless and never gated. Does NOT leak the key itself.
+    _LLM_ARMS = ("solo", "swarm", "society")
+
+    @app.get("/api/status")
+    async def status() -> JSONResponse:
+        return JSONResponse(
+            {
+                "llm_key": bool(os.environ.get("DASHSCOPE_API_KEY")),
+                "demo_mode": bool(os.environ.get("AFTERSHOCK_DEMO_MODE")),
+                "llm_arms": list(_LLM_ARMS),
+            }
+        )
+
+    # ------------------------------------------------------------------
     # GET /api/runs
     # ------------------------------------------------------------------
 
@@ -953,8 +1025,7 @@ def create_app(
             )
 
         # LLM arms need API key
-        llm_arms = ("solo", "swarm", "society")
-        if req.arm in llm_arms and not os.environ.get("DASHSCOPE_API_KEY"):
+        if req.arm in _LLM_ARMS and not os.environ.get("DASHSCOPE_API_KEY"):
             raise HTTPException(
                 status_code=503,
                 detail="DASHSCOPE_API_KEY is not set; set it to run LLM arms",
@@ -1098,8 +1169,7 @@ def create_app(
         if req.kind == "kill_agent" and not req.target:
             raise HTTPException(status_code=422, detail="kill_agent requires a target agent id")
 
-        llm_arms = ("solo", "swarm", "society")
-        if req.arm in llm_arms and not os.environ.get("DASHSCOPE_API_KEY"):
+        if req.arm in _LLM_ARMS and not os.environ.get("DASHSCOPE_API_KEY"):
             raise HTTPException(
                 status_code=503,
                 detail="DASHSCOPE_API_KEY is not set; set it to run LLM arms",

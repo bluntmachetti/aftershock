@@ -356,6 +356,17 @@ export interface LiveStatus {
   mode?: 'ambient' | 'manual' | null
 }
 
+/** GET /api/status — voucher/key detection for graceful UI degradation.
+ *  `llm_key` is true when the server has DASHSCOPE_API_KEY configured; when
+ *  false, solo/swarm/society live + counterfactual requests 503 and the UI
+ *  should show a "voucher pending" chip instead of a raw error. Scripted arms
+ *  are keyless and never gated. The key itself is never leaked. */
+export interface StatusInfo {
+  llm_key: boolean
+  demo_mode: boolean
+  llm_arms: string[]
+}
+
 export interface AarKeyMoment {
   tick: number
   description: string

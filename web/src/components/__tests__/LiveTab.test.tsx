@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, act } from '@testing-library/react'
+import { render, screen, act, fireEvent } from '@testing-library/react'
 import { LiveTab } from '../LiveTab'
 import { api } from '../../lib/api'
 
@@ -9,6 +9,7 @@ vi.mock('../../lib/api', () => ({
   api: {
     liveStatus: vi.fn().mockResolvedValue({ running: false, live_id: null, tick: 0, arm: '', seed: 0, mode: null }),
     getScenarios: vi.fn().mockResolvedValue([]),
+    status: vi.fn().mockResolvedValue({ llm_key: true, demo_mode: false, llm_arms: ['solo', 'swarm', 'society'] }),
     startLive: vi.fn().mockResolvedValue({ live_id: 'test' }),
     stopLive: vi.fn().mockResolvedValue({ ok: true, running: false }),
     injectEvent: vi.fn().mockResolvedValue(undefined),
@@ -111,5 +112,23 @@ describe('LiveTab layout', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('LiveTab — voucher-pending graceful degradation', () => {
+  it('shows the voucher chip and does not call startLive for a society arm with no key', async () => {
+    vi.mocked(api.status).mockResolvedValue({
+      llm_key: false, demo_mode: false, llm_arms: ['solo', 'swarm', 'society'],
+    })
+    render(<LiveTab onTickReceived={vi.fn()} />)
+    // Select the society arm — the voucher chip renders only for an LLM arm
+    // when the key is absent.
+    fireEvent.click(screen.getByText('society'))
+    await screen.findByText(/Qwen society live-engine offline/i)
+    // Start — should degrade gracefully, not fire the request.
+    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    expect(api.startLive).not.toHaveBeenCalled()
+    // The voucher chip (role=status) remains the graceful surface.
+    expect(screen.getByRole('status')).toBeInTheDocument()
   })
 })

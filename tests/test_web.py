@@ -150,6 +150,84 @@ def test_list_runs_with_run(seeded_runs_root: tuple[Path, str]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Tests: nested episode reachability (runs/episodes/<run_id>)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def episodes_root(tmp_path: Path) -> Path:
+    """A runs_root with a direct-child run AND a nested episode run under
+    runs/episodes/. The episode's leaf run_id does NOT collide with the
+    direct-child run."""
+    root = tmp_path / "runs"
+    root.mkdir()
+    _run_scripted_8(root, seed=7)
+    episodes = root / "episodes"
+    episodes.mkdir()
+    # Run a second scripted run whose recorder writes into runs/episodes/.
+    ep_id = _run_scripted_8(episodes, seed=11)
+    assert ep_id == "scripted-seed11"
+    return root
+
+
+def test_list_runs_includes_nested_episode(episodes_root: Path) -> None:
+    app = create_app(episodes_root)
+    with TestClient(app) as client:
+        resp = client.get("/api/runs")
+    assert resp.status_code == 200
+    ids = {r["run_id"] for r in resp.json()}
+    assert "scripted-seed7" in ids  # direct child
+    assert "scripted-seed11" in ids  # nested episode
+
+
+def test_run_detail_loads_nested_episode(episodes_root: Path) -> None:
+    app = create_app(episodes_root)
+    with TestClient(app) as client:
+        resp = client.get("/api/runs/scripted-seed11")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["run_id"] == "scripted-seed11"
+    assert data["n_ticks"] == 8
+
+
+def test_run_ticks_load_nested_episode(episodes_root: Path) -> None:
+    app = create_app(episodes_root)
+    with TestClient(app) as client:
+        resp = client.get("/api/runs/scripted-seed11/ticks", params={"limit": 3})
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 8
+
+
+def test_episodes_subdir_non_run_files_are_skipped(tmp_path: Path) -> None:
+    """runs/episodes/ also holds episodes.json / episodes.md / memory.json —
+    these have no run.json and must not appear in /api/runs."""
+    root = tmp_path / "runs"
+    root.mkdir()
+    eps = root / "episodes"
+    eps.mkdir()
+    (eps / "episodes.json").write_text("[]", encoding="utf-8")
+    (eps / "episodes.md").write_text("# eps", encoding="utf-8")
+    app = create_app(root)
+    with TestClient(app) as client:
+        resp = client.get("/api/runs")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_episodes_path_traversal_still_404(runs_root: Path) -> None:
+    """A nested-episode fallback must not open a traversal path. 'episodes'
+    itself is a real subdir under runs_root, but addressing it as a run_id
+    (no run.json) must 404, and the standard traversal patterns still 404
+    even with an episodes/ subdir present."""
+    (runs_root / "episodes").mkdir()
+    app = create_app(runs_root)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        assert client.get("/api/runs/episodes").status_code == 404
+        for bad in ("../etc", "..%2fetc", "%2e%2e", "a/b"):
+            assert client.get(f"/api/runs/{bad}").status_code in (404, 422)
+
+
+# ---------------------------------------------------------------------------
 # Tests: run detail
 # ---------------------------------------------------------------------------
 
@@ -324,6 +402,31 @@ def test_live_llm_arm_solo_no_key_503(runs_root: Path, monkeypatch: pytest.Monke
     with TestClient(app) as client:
         resp = client.post("/api/live", json={"arm": "solo", "seed": 1, "ticks": 5})
     assert resp.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# Tests: GET /api/status — voucher/key detection for graceful UI degradation
+# ---------------------------------------------------------------------------
+
+
+def test_status_no_key(runs_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+    monkeypatch.delenv("AFTERSHOCK_DEMO_MODE", raising=False)
+    app = create_app(runs_root)
+    with TestClient(app) as client:
+        resp = client.get("/api/status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["llm_key"] is False
+    assert body["llm_arms"] == ["solo", "swarm", "society"]
+
+
+def test_status_with_key(runs_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-test")
+    app = create_app(runs_root)
+    with TestClient(app) as client:
+        resp = client.get("/api/status")
+    assert resp.json()["llm_key"] is True
 
 
 # ---------------------------------------------------------------------------
