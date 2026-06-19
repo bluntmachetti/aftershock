@@ -31,9 +31,9 @@ simulated.
 
 Source: `scenarios/nyc-ida-2021/scenario.json` → `field_provenance`. The
 caveat line *"Demand: real · Latency baseline: real · Lives & outcomes:
-simulated model."* is emitted by the loader (`src/aftershock/town/scenario.py`)
-and stored in each scenario run's manifest (`runs/seed91-society/run.json` →
-`scenario.caveat_line`).
+simulated model."* is chosen per pack by `_caveat_line_for_pack` (the
+`_CAVEAT_DISPATCH` constant in `src/aftershock/web.py`) and stored in each
+scenario run's manifest (`runs/seed91-society/run.json` → `scenario.caveat_line`).
 
 ## 3. The benchmark result
 
