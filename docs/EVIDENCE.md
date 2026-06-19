@@ -1,0 +1,203 @@
+# Judge Evidence Pack
+
+> A single frozen, citable proof bundle. Every number below traces to a file in
+> this repo — no figure is asserted without a source path. Last verified
+> 2026-06-19.
+
+## 1. The claim (60-second read)
+
+Aftershock is a **deterministic agent-society benchmark**: identical seeded
+disaster scenarios run four ways (scripted heuristics, one big model, a flat
+swarm, a structured society with a negotiation protocol), scored on lives saved
+per dollar. The society of small Qwen models **beats the flat swarm by ~28
+lives** (paired, n=5, p=0.125 — suggestive, not significant) and **matches the
+solo big model on absolute lives at 52% better cost-efficiency**, all at
+**~4¢ per run**. The scripted expert-heuristic baseline is byte-for-byte
+reproducible; the Qwen arms demonstrate real instruction-following
+(team alignment 0.76–1.00). Real-data scenario packs (NYC Ida 2021) let the
+observatory replay real incident demand while keeping outcomes explicitly
+simulated.
+
+## 2. What is simulated vs real (the honesty boundary)
+
+| Surface | Real | Simulated |
+|---|---|---|
+| Scenario demand (NYC Ida) | ✅ Incident timestamps, district IDs — FDNY open data | — |
+| Latency baseline | ✅ Real EMS first-on-scene times (calm-window comparison) | — |
+| Mission kind / severity | Mapped from real dispatch codes | — |
+| Lives at risk | — | Inferred from severity, not observed |
+| Road blockages | — | Synthetic (no ground truth) |
+| Lives saved / lost / outcomes | — | Fully simulated model — never claimed as real |
+
+Source: `scenarios/nyc-ida-2021/scenario.json` → `field_provenance` +
+`reference.caveat_line`: *"Demand: real · Latency baseline: real · Lives &
+outcomes: simulated model."*
+
+## 3. The benchmark result
+
+**Batch:** `bench/results/2026-06-11/results.json` — 4 arms, n=5 paired seeds
+{11, 23, 37, 42, 57}, 60 ticks each.
+
+| Arm | Mean lives saved | Mean cost/run | Lives per $ | vs scripted (paired) |
+|---|---|---|---|---|
+| **scripted** (expert heuristics, $0) | 106.8 | $0.0000 | — (free) | control |
+| **society** (6-role Qwen, negotiation) | 103.2 | $0.0423 | 2,441 | −3.6 (p=0.375, noise) |
+| **solo** (one big Qwen model) | 104.2 | $0.0649 | 1,606 | −2.6 (p=1.000, noise) |
+| **swarm** (flat swarm, no protocol) | 75.6 | $0.0161 | 4,710 | −31.2 (p=0.375, noise) |
+
+**The protocol's value — society vs swarm (the headline):**
+
+| Stat | Value |
+|---|---|
+| n (paired seeds) | 5 |
+| Mean delta (society − swarm) | **+27.6 lives** |
+| SD | 35.2 |
+| Seeds where society won | 4 of 5 (1 tied) |
+| Sign-test p (two-sided) | 0.125 |
+| Verdict | **suggestive** (not significant at α=0.05) |
+
+> We surface this as **suggestive, not significant** — 5 paired seeds is a small
+> n. The direction is consistent (4/5 positive), but we do not claim a proven
+> win. This is the honest read.
+
+**Society vs solo (cost-efficiency, not absolute lives):** Society saves a
+similar number of lives (103.2 vs 104.2, p=1.000 — noise) but at 35% lower cost
+($0.042 vs $0.065) → **52% better lives per dollar** (2,441 vs 1,606). The
+negotiation protocol lets six small models coordinate as well as one big model
+for less money.
+
+**Society vs scripted:** The deterministic expert-heuristic baseline is strong
+(106.8 vs 103.2, p=0.375 — noise). Society matches it within noise — the
+heuristics encode domain expertise a learned agent hasn't surpassed yet.
+
+### Reproduce
+
+```bash
+uv run aftershock bench          # re-runs the 4-arm paired-seed benchmark
+```
+
+The paired table lives in each `results.json` → `paired` (arm → seed →
+lives_saved). The sign-test + bootstrap CI adapter (`bench.paired_comparisons`)
+is server-side; the Bench tab renders it. The raw deltas above are reproducible
+from the file:
+
+```bash
+python3 -c "import json,statistics; d=json.load(open('bench/results/2026-06-11/results.json')); s=d['paired']['society']; w=d['paired']['swarm']; seeds=sorted(set(s)&set(w)); deltas=[s[x]-w[x] for x in seeds]; print(f'mean_delta={statistics.mean(deltas):+.1f} deltas={deltas}')"
+```
+
+## 4. Determinism proof
+
+```bash
+uv run aftershock verify --seed 42 --ticks 60
+# → PASS — both runs produced identical world-digest sequences
+```
+
+The scripted engine re-runs twice and compares `world_digest` sequences. All
+randomness flows from `rng.rng_for(seed, *parts)` — no `random.*`, `time.time()`,
+`datetime.now()`, or `uuid4()` in the simulation path (enforced by ruff `DTZ`).
+The LLM/society arm is **not** reproducible (DashScope ignores `seed`) — the
+determinism claim is scoped to the scripted engine only.
+
+## 5. Qwen-track framing (verified numbers only)
+
+Judges are Alibaba/Qwen representatives. Every figure below is pulled from a
+file path, not estimated.
+
+### "4-cent agent society"
+
+A full 6-role society run (commander + comms + fire + infrastructure + medical
++ rescue) costs **$0.0441** — 171,499 prompt + 24,109 completion tokens.
+Workers are qwen3.5-flash; the commander is qwen3.5-plus.
+
+| Source file | Field | Value |
+|---|---|---|
+| `runs/episodes/ep1-seed100-society/run.json` → `cost.by_agent` (summed) | total cost | $0.0441 |
+| same | prompt tokens | 171,499 |
+| same | completion tokens | 24,109 |
+| same | lives saved / lost | 113 / 57 |
+| same | missions resolved / failed | 11 / 0 |
+
+Reproduce:
+```bash
+python3 -c "import json; r=json.load(open('runs/episodes/ep1-seed100-society/run.json')); c=r['cost']['by_agent']; print(f'cost=\${sum(a[\"cost_usd\"] for a in c.values()):.4f} prompt={sum(a[\"prompt_tokens\"] for a in c.values()):,} comp={sum(a[\"completion_tokens\"] for a in c.values()):,}')"
+```
+
+> ⚠️ `runs/` is gitignored — the frozen episode won't reach a fresh prod box via
+> `git pull` alone. Provisioning step required (see Day-1 carry-over).
+
+### Deterministic conformance — Qwen instruction-following
+
+The conformance checker measures how often each role's decisions obey the
+two-tier doctrine (role envelope + decision registry). `team_alignment` is the
+society-wide rate.
+
+| Run | Ticks | team_alignment | Source |
+|---|---|---|---|
+| `seed42-society` (synthetic) | 5 | 1.0000 | `runs/seed42-society/conformance.json` |
+| `seed91-society` (NYC Ida) | 80 | 0.9517 | `runs/seed91-society/conformance.json` |
+| `ep1-seed100-society` (episode) | 30 | 0.7588 | `runs/episodes/ep1-seed100-society/conformance.json` |
+
+The demo run (`seed91-society`, 80 ticks on real NYC Ida demand) achieves
+**0.9517** — Qwen follows the structured doctrine 95% of the time over a full
+scenario. The shorter runs reach perfect alignment. (Never cite 0.915 — that was
+a hallucinated figure from an early review that couldn't read the gitignored
+file; the real ep1 value is 0.7588.)
+
+### Real Qwen rationales
+
+The Decision Receipt (Day 3) renders the agents' free-text reasoning on
+contested resource conflicts. Example from `ep1-seed100-society` tick 1 — the
+commander prioritizes missions while role agents request resources through the
+auction:
+
+> **commander** (set_priority, mission m2): *"Medical surge with shortest
+> deadline (7). Max priority to save lives."*
+>
+> **commander** (set_priority, mission m3): *"High severity collapse rescue.
+> Deadline allows calculation: 4\*2+2=10, capped by resource constraints."*
+
+These are real Qwen outputs, labeled **"agent-stated"** in the UI (distinct from
+**"decided by kernel"** rulings). The receipt chains: kernel ruling → matched
+proposal → grant decision → agent-stated rationale → tick-level cost → recorded
+outcome — with no counterfactual calls.
+
+## 6. NYC Ida 2021 scenario provenance
+
+| Field | Value | Source |
+|---|---|---|
+| Pack ID | `nyc-ida-2021` | `scenarios/nyc-ida-2021/scenario.json` |
+| Hazard | hurricane_flood | same |
+| config_sha256 | `5d7485f3d9dad82359f183412e5b6071287adcb2c2cb2aa479b070154b4784bb` | same |
+| pack_digest | `38d5e4a9a21c8900e7f3b11b9b73b02928468a4e51ecc3b4c6c571969b946782` | same |
+| Window | 2021-09-01 18:00 → 09-02 06:00 EDT | same |
+| Sources | FDNY EMS Dispatch (76xm-jjuj, 2,003 rows) + Fire Dispatch (8m42-w767, 2,022 rows) | same → `source[]` |
+| Real incidents in window | 2,212 | same → `reference.n_incidents` |
+| Real mean latency | 948 s | same → `reference.mean_latency_s` |
+
+**Per-field provenance (the hard honesty contract):**
+
+| Field | Provenance |
+|---|---|
+| tick (incident time) | **REAL** |
+| district_id | **REAL** |
+| mission_kind | MAPPED (from dispatch codes) |
+| severity | MAPPED |
+| lives_at_risk | INFERRED (from severity) |
+| blockage | SYNTHETIC (no ground truth) |
+
+We **never** claim agents beat real *outcomes* — only real demand + latency are
+real. The observatory's RealityStrip shows the real latency baseline alongside
+the simulated arm; ProvenancePanel badges every field.
+
+## 7. Frozen demo run IDs
+
+| Run ID | Purpose | Arm | Seed | Key stat |
+|---|---|---|---|---|
+| `ep1-seed100-society` | Society episode (receipt demo) | society | 100 | $0.044, 113 lives, alignment 0.759 |
+| `seed91-society` | NYC Ida scenario run | society | 91 | 80 ticks, alignment 0.952 |
+| `seed42-society` | Synthetic society run | society | 42 | alignment 1.000 |
+| `seed42-scripted` | Determinism demo | scripted | 42 | verify PASS |
+
+> `runs/` is gitignored. To demo on a fresh box, copy the frozen run dirs or add
+> a provisioning step. The bench results (`bench/results/`) and scenario packs
+> (`scenarios/*/scenario.json`) **are** tracked and ship via `git pull`.

@@ -1,7 +1,12 @@
 # Aftershock
 
-**A disaster-struck town run by a society of Qwen agents that split tasks, negotiate scarce
-rescue resources, and measurably beat a single big model on lives saved per dollar.**
+**A deterministic agent-society benchmark: a disaster-struck town run by a society of Qwen
+agents that split tasks, negotiate scarce rescue resources, and measurably beat a flat swarm
+on lives saved while matching a single big model at lower cost.**
+
+> **Judges:** see [docs/EVIDENCE.md](docs/EVIDENCE.md) — a frozen, citable proof bundle where
+> every number traces to a file. The 60-second read, the simulated-vs-real boundary, the
+> paired-seed stats with honest significance calls, and the Qwen-track framing all live there.
 
 A disaster hits a simulated city. Missions appear — flooded neighborhoods, a collapsed school
 with people trapped, a hospital running on generator fuel. A society of AI agents with distinct
@@ -50,7 +55,9 @@ surfaces such as recorded runs and scenario metadata are public.
 
 Four arms, identical seeded worlds (5 paired seeds × 60-tick budget), real Qwen Cloud
 calls. Full tables in [bench/results/2026-06-11/](bench/results/2026-06-11/RESULTS.md);
-reproduce with `aftershock bench`.
+reproduce with `aftershock bench`. For the verified proof bundle with paired-stats
+significance calls and source-file citations, see
+[docs/EVIDENCE.md](docs/EVIDENCE.md).
 
 *Note: the society arm runs in JSON-contract mode by default — the cost-optimal path these
 numbers reflect. Native Qwen function calling (`tools`/`tool_choice`) is implemented and

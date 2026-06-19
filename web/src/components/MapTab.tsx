@@ -37,6 +37,7 @@ import { Scrubber } from './Scrubber'
 import { RunPicker } from './RunPicker'
 import { AarDrawer } from './AarDrawer'
 import { Legend } from './Legend'
+import { DemoGuide } from './DemoGuide'
 
 // Left-rail (run picker + pools) width bounds + persistence key. The rail is
 // drag-resizable so a long run list / long run ids stay readable.
@@ -384,6 +385,8 @@ export function MapTab({
               />
               {/* Dismissible legend overlay (self-suppresses via localStorage) */}
               <Legend />
+              {/* Judge demo guide — dismissible 5-step arc overlay (Day 4) */}
+              <DemoGuide />
             </div>
           )}
           {!timeline.hasWorld && timeline.runId && !timeline.loading && (
