@@ -2,7 +2,51 @@
 
 Short list of known project tasks that are not part of the current deployment path.
 
-## ▶▶ LATEST SESSION (2026-06-17) — live demo + onboarding SHIPPED to prod; local-Qwen §22 landed
+## ▶▶ LATEST SESSION (2026-06-18/19) — counterfactual review→fix→prod + resizable rail + CodeQL/ruleset
+
+**All LIVE on prod** (<https://aftershock.redoubtlabs.dev>); `main` = `3b31fcf`; staging (k12 .153) + prod
+(Alicloud 43.98.166.22) both at `3b31fcf`; bundle `index-18OpTP8i.js`. Working tree clean.
+
+- **Counterfactual intervention-replay (PR #17, merged `1daabc1`).** Review found the backend/determinism
+  *sound* but the judge-facing Compare demo non-functional + partly misleading. Fixed + tested + shipped:
+  - drop_protocol Branch button was permanently disabled (gated on a target it never has) → fixed.
+  - Branch never surfaced (no `onBranchStarted` wire-back) → Compare now polls `/api/runs` until the branch
+    has `final_scores`, then auto-selects it on the right (App passes `onRunsRefresh`).
+  - DIVERGES marker never rendered (`_scan_runs` dropped `manifest['counterfactual']`) → now surfaced.
+  - Scenario baselines silently branched into a synthetic `new_town(seed)` world (honesty-contract break) →
+    `scenario` now threaded through `CounterfactualRequest`→`run_counterfactual(scenario=)` + provenance block
+    recorded; branch shows REAL.
+  - WHAT-IF badge added on the branch side (fabricated what-if ≠ measured outcome).
+  - inject_event with a bad district was silently swallowed (engine suppresses the tick-listener) → eager
+    validation in `run_counterfactual` (raises) + sync 422 in the API.
+  - `run_counterfactual` recorder wrapped in try/finally (no FD leak on mid-run error).
+  - **Latent bug caught:** branch run-ids used `@N` which `_RUN_ID_RE` rejects → would 404 on load once
+    selected; changed to `-atN` (web + CLI). Tests assert loadability.
+  - +13 pytest / +4 vitest. Gate: ruff clean, `aftershock verify` PASS, 903 pytest, 154 vitest, web build OK.
+    Frozen `kernel/protocol.py` + snapshot untouched.
+- **Resizable Map left rail (`850e474`).** With ~7400 recorded runs the fixed `max-h-48` run list was a tiny
+  scroll window. Rail is now drag-resizable (handle on the right edge; width clamped 180–560px, persisted to
+  localStorage key `map-sidebar-width`) and the run list fills the rail height with panic+pools pinned below;
+  added a count to the "Recorded Runs" header (`RunPicker.tsx`, `MapTab.tsx`).
+- **CodeQL + branch protection (`3b31fcf`).** Added `.github/workflows/codeql.yml` (python + js/ts, on
+  push/PR to main; first run green). The `main` ruleset **"Protect-main" (id 17802930)** is **ACTIVE** with
+  three rules: `deletion`, `non_fast_forward`, `code_scanning` (CodeQL, `high_or_higher`). 9 `py/path-injection`
+  alerts (all in `web.py`'s `_validate_run_id`/`_validate_scenario_id` — guarded by regex + `resolved().
+  relative_to(root)`) were **dismissed as false positive**; 0 open high+ alerts.
+
+**▶ Operational note — merging to `main` now requires a PR with CodeQL passing.** Direct admin-merge is
+blocked when CodeQL hasn't reported. Normal flow: open a PR → CodeQL runs on the PR → merge when green.
+Escape hatch if ever wedged by a scanner misconfig: `gh api -X PUT
+repos/bluntmachetti/aftershock/rulesets/17802930 -f enforcement=disabled` (merge) then `-f enforcement=active`
+to restore. (This session disabled→merged→re-enabled because the rule required CodeQL before CodeQL existed.)
+
+**Open/optional (not blockers):** (a) Field Log blog is ~31 commits behind — optional post on the
+counterfactual causal-proof + the "review caught a broken demo" arc; (b) `RunPicker` renders *all* ~7400 run
+rows into the DOM (pre-existing) — if the list keeps growing, add virtualization/pagination; (c) the orphaned
+`web/e2e/counterfactual.spec.ts` now has a `test:e2e` script but still isn't run by any CI (only `pages.yml`
+exists, blog-only) — wire Playwright into CI if e2e coverage should actually gate.
+
+## PRIOR SESSION (2026-06-17) — live demo + onboarding SHIPPED to prod; local-Qwen §22 landed
 
 **Shipped + LIVE this session** (all merged to `main` + deployed through the gate to k12 staging + Alicloud
 prod, verified at <https://aftershock.redoubtlabs.dev>):
