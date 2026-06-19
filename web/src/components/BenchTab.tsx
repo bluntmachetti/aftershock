@@ -243,7 +243,7 @@ function PairedStats({ comparisons }: { comparisons: PairedComparison[] }) {
                 accent={c.sign_significant ? STATUS_COLORS.resolved : FALLBACK_COLOR}
               />
               <Stat
-                label="observed power"
+                label="post-hoc power"
                 value={c.observed_power == null ? '—' : `${(c.observed_power * 100).toFixed(0)}%`}
               />
               <Stat
@@ -391,8 +391,9 @@ export function BenchTab() {
             <p className="text-[10px] text-eoc-secondary font-mono mt-3">
               Paired seeds (n={methodN}): per-seed lives-saved delta of each arm vs
               the deterministic scripted control. 95% percentile bootstrap CI
-              (10k resamples, fixed seed) + two-sided exact sign-test p + observed
-              power (normal approx). Verdict: "credible" requires the CI to exclude
+              (10k resamples, fixed seed) + two-sided exact sign-test p + post-hoc
+              power (normal approx at the observed Δ/sd — a function of the
+              p-value, not a study-design target). Verdict: "credible" requires the CI to exclude
               0 AND p&lt;0.05; "suggestive" = CI only; otherwise "not significant".
             </p>
           </div>

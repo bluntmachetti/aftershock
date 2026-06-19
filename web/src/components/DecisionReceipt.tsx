@@ -3,6 +3,7 @@ import type {
   ProposalRuling,
   Proposal,
   Decision,
+  Rejection,
   WorldState,
   ProvenanceLabel,
 } from '../types'
@@ -55,6 +56,14 @@ function findProposal(tick: TickRecord, proposalId: string): Proposal | undefine
 function findGrantDecision(tick: TickRecord, proposalId: string): Decision | undefined {
   const grantId = `${proposalId}-grant`
   return tick.accepted.find((d) => d.decision_id === grantId)
+}
+
+/** Find a kernel REJECTION of the grant: the auction accepted the bid, but the
+ *  dispatch was refused downstream (e.g. the mission is no longer open). Same
+ *  `{proposal_id}-grant` id convention, but in tick.rejected. */
+function findGrantRejection(tick: TickRecord, proposalId: string): Rejection | undefined {
+  const grantId = `${proposalId}-grant`
+  return tick.rejected.find((d) => d.decision_id === grantId)
 }
 
 /** Agent-stated rationales: any agent `set_priority` decision for the same
@@ -166,7 +175,20 @@ export function DecisionReceipt({
 }: Props) {
   const proposal = findProposal(tick, ruling.proposal_id)
   const isAuction = ruling.decided_by === 'kernel:auction'
+  // A ruling is kernel-decided only when decided_by starts with "kernel:". The
+  // commander (an LLM arbiter) also issues rulings — those must NOT be labeled
+  // "decided by kernel" (honesty contract): attribute them to their decider.
+  const isKernelRuling = ruling.decided_by.startsWith('kernel:')
+  const rulingLabel = isKernelRuling ? KERNEL_LABEL : `decided by ${ruling.decided_by}`
+  const rulingLabelKind: 'kernel' | 'agent' = isKernelRuling ? 'kernel' : 'agent'
   const grant = ruling.accepted && isAuction ? findGrantDecision(tick, ruling.proposal_id) : undefined
+  // Auction accepted the bid but the kernel refused the dispatch downstream
+  // (the grant id is in tick.rejected, not tick.accepted): surface it so a
+  // GRANTED ruling is never shown without the failure that followed.
+  const grantRejection =
+    ruling.accepted && isAuction && !grant
+      ? findGrantRejection(tick, ruling.proposal_id)
+      : undefined
   const missionId =
     (proposal?.body as { mission_id?: string } | undefined)?.mission_id ??
     (grant?.params as { mission_id?: string } | undefined)?.mission_id ??
@@ -211,8 +233,9 @@ export function DecisionReceipt({
       </div>
 
       <div className="px-2 py-1">
-        {/* Kernel ruling — factual, "decided by kernel" */}
-        <Row label={KERNEL_LABEL} labelKind="kernel">
+        {/* Ruling — kernel:auction/default/broadcast => "decided by kernel";
+            a commander ruling is an LLM arbiter, labeled by its decider. */}
+        <Row label={rulingLabel} labelKind={rulingLabelKind}>
           <div className="font-mono">
             <span className="text-eoc-primary">{ruling.decided_by}</span>{' '}
             <span style={{ color: ruling.accepted ? STATUS_COLORS.resolved : STATUS_COLORS.failed }}>
@@ -274,9 +297,19 @@ export function DecisionReceipt({
           </Row>
         ) : null}
 
+        {/* Auction accepted the bid, but the kernel refused the dispatch
+            downstream — show it so GRANTED is never shown alone. */}
+        {grantRejection && (
+          <Row label={`${KERNEL_LABEL} · dispatch rejected`} labelKind="neutral">
+            <div className="font-mono text-[10px]" style={{ color: STATUS_COLORS.failed }}>
+              {grantRejection.decision_id} · {grantRejection.reason}
+            </div>
+          </Row>
+        )}
+
         {/* Rejected reason — ruling + reason only, no matched decision */}
         {!ruling.accepted && ruling.reason && (
-          <Row label={`${KERNEL_LABEL} · reason`} labelKind="kernel">
+          <Row label={`${rulingLabel} · reason`} labelKind={rulingLabelKind}>
             <span className="text-eoc-primary">{ruling.reason}</span>
           </Row>
         )}

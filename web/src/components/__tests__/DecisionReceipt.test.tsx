@@ -266,4 +266,68 @@ describe('DecisionReceipt', () => {
     render(<DecisionReceipt ruling={tick.rulings[0]} tick={tick} />)
     expect(screen.queryByText(/agent-stated · rationale/i)).not.toBeInTheDocument()
   })
+
+  it('labels a commander (non-kernel) ruling by its decider, not the kernel, and suppresses the auction grant row', () => {
+    const ruling = makeRuling({
+      proposal_id: 'fire-t1-p1',
+      decided_by: 'commander',
+      accepted: true,
+    })
+    const tick = makeTick({
+      rulings: [ruling],
+      accepted: [],
+      responses: [
+        makeResponse('fire', {
+          proposals: [
+            makeProposal({
+              proposal_id: 'fire-t1-p1',
+              sender: 'fire',
+              body: { mission_id: 'm4', resource: 'engine', qty: 1, urgency: 8 },
+            }),
+          ],
+        }),
+      ],
+    })
+    render(<DecisionReceipt ruling={ruling} tick={tick} />)
+    expect(screen.getByText(/decided by commander/i)).toBeInTheDocument()
+    // An LLM arbiter must NOT be attributed to the kernel.
+    expect(screen.queryByText(/decided by kernel/i)).not.toBeInTheDocument()
+    // Non-auction ruling => no auction grant row fabricated.
+    expect(screen.queryByText(/fire-t1-p1-grant/)).not.toBeInTheDocument()
+  })
+
+  it('shows a "dispatch rejected" row when the auction accepted but the kernel refused the grant', () => {
+    const ruling = makeRuling({ accepted: true })
+    const tick = makeTick({
+      rulings: [ruling],
+      accepted: [],
+      rejected: [
+        {
+          decision_id: 'medical-t1-p0-grant',
+          agent_id: 'medical',
+          decision_type: 'dispatch',
+          reason: "mission 'm1' is not open",
+        },
+      ],
+    })
+    render(<DecisionReceipt ruling={ruling} tick={tick} />)
+    // The auction stage still reads GRANTED...
+    expect(screen.getByText('GRANTED')).toBeInTheDocument()
+    // ...but the dispatch-rejected row prevents implying the resource landed.
+    expect(screen.getByText(/dispatch rejected/i)).toBeInTheDocument()
+    expect(screen.getByText(/mission 'm1' is not open/)).toBeInTheDocument()
+  })
+
+  it('resolves the mission via grant params when no matching proposal exists', () => {
+    const ruling = makeRuling({ accepted: true })
+    const tick = makeTick({
+      responses: [makeResponse('medical', { decisions: [] })],
+      rulings: [ruling],
+      accepted: [makeGrant()],
+    })
+    render(<DecisionReceipt ruling={ruling} tick={tick} world={makeWorld()} />)
+    // missionId falls back to grant.params.mission_id (m1) since no proposal exists.
+    expect(screen.getByText(/40 lives at risk/)).toBeInTheDocument()
+    expect(screen.getByText(/deadline T8/)).toBeInTheDocument()
+  })
 })
