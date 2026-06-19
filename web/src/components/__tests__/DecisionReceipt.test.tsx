@@ -223,7 +223,27 @@ describe('DecisionReceipt', () => {
     )
     expect(screen.getByText(/40 lives at risk/)).toBeInTheDocument()
     expect(screen.getByText(/deadline T8/)).toBeInTheDocument()
+    // The delta is honestly labeled town-wide (not attributable to this ruling),
+    // so a per-ruling causal read is impossible — B-1 honesty fix.
+    expect(screen.getByText(/town-wide this tick/i)).toBeInTheDocument()
     expect(screen.getByText(/\+3 saved/)).toBeInTheDocument()
+  })
+
+  it('hides the town-wide delta line when there was no change this tick', () => {
+    const tick = makeTick()
+    const prev = makeTick({
+      tick: 0,
+      scores: { lives_saved: 3, lives_lost: 0, panic: 0, missions_open: 1, missions_resolved: 0, missions_failed: 0 },
+    })
+    render(
+      <DecisionReceipt
+        ruling={tick.rulings[0]}
+        tick={tick}
+        prevTick={prev}
+        world={makeWorld()}
+      />,
+    )
+    expect(screen.queryByText(/town-wide this tick/i)).not.toBeInTheDocument()
   })
 
   it('renders a provenance badge when missionProvenance is provided', () => {

@@ -298,9 +298,9 @@ export function DecisionReceipt({
                 <span style={{ color: STATUS_COLORS[mission.status] }}>{mission.status}</span> ·{' '}
                 {mission.lives_at_risk} lives at risk · deadline T{mission.deadline_tick}
               </span>
-              {delta && (
-                <span>
-                  this tick:{' '}
+              {delta && (delta.saved !== 0 || delta.lost !== 0) && (
+                <span className="text-eoc-faint">
+                  town-wide this tick (not attributable to this ruling):{' '}
                   <span style={{ color: STATUS_COLORS.resolved }}>+{delta.saved} saved</span>
                   {delta.lost > 0 && (
                     <span style={{ color: STATUS_COLORS.failed }}>, {delta.lost} lost</span>
