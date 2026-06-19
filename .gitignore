@@ -41,6 +41,10 @@ scenarios/*/raw/
 # Local agent guidance (not published)
 CLAUDE.md
 
+# Internal handoff / field notes — contain deploy topology & infra details (not published)
+docs/FOLLOWUPS.md
+docs/FIELD-NOTES.md
+
 # Frontend build artifacts
 web/node_modules/
 web/dist/
