@@ -18,6 +18,7 @@ interface FeedEntry {
   tick: number
   ruling: ProposalRuling
   proposal?: Proposal
+  tickRecord: TickRecord
   type: 'ruling'
 }
 
@@ -75,6 +76,7 @@ function buildFeed(
         tick: tick.tick,
         ruling,
         proposal: proposals[ruling.proposal_id],
+        tickRecord: tick,
       })
     }
   }
@@ -95,9 +97,12 @@ interface Props {
   ticks: TickRecord[]
   cursor: number
   injectMarker?: InjectMarker | null
+  /** Called when a ruling row is clicked (used to open the Decision Receipt).
+   *  When absent, ruling rows are non-interactive (no affordance shown). */
+  onSelectRuling?: (ruling: ProposalRuling, tick: TickRecord) => void
 }
 
-export function NegotiationFeed({ ticks, cursor, injectMarker = null }: Props) {
+export function NegotiationFeed({ ticks, cursor, injectMarker = null, onSelectRuling }: Props) {
   const entries = buildFeed(ticks, cursor, injectMarker)
 
   return (
@@ -136,11 +141,30 @@ export function NegotiationFeed({ ticks, cursor, injectMarker = null }: Props) {
         const sender = p?.sender ?? ''
         const senderColor = roleColor(sender)
         const statusColor = accepted ? STATUS_COLORS.resolved : STATUS_COLORS.failed
+        const clickable = !!onSelectRuling
 
         return (
           <div
             key={i}
-            className="flex items-start gap-2 px-2 py-1 border-b border-eoc-raised text-[11px] leading-tight"
+            className={`flex items-start gap-2 px-2 py-1 border-b border-eoc-raised text-[11px] leading-tight ${
+              clickable ? 'cursor-pointer hover:bg-eoc-surface transition-colors' : ''
+            }`}
+            onClick={clickable ? () => onSelectRuling!(e.ruling, e.tickRecord) : undefined}
+            role={clickable ? 'button' : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            onKeyDown={
+              clickable
+                  ? (ev) => {
+                    if (ev.key === 'Enter' || ev.key === ' ') {
+                      ev.preventDefault()
+                      onSelectRuling!(e.ruling, e.tickRecord)
+                    }
+                  }
+                : undefined
+            }
+            aria-label={
+              clickable ? `Open decision receipt for ${e.ruling.proposal_id}` : undefined
+            }
           >
             <span className="font-mono text-[10px] text-eoc-secondary tabular-nums mt-0.5 w-5 shrink-0">
               T{e.tick}
