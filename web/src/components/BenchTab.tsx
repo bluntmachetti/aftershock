@@ -342,14 +342,18 @@ export function BenchTab() {
   // stats). For the headline benchmark view, prefer the most recent MULTI-ARM
   // result that carries a paired comparison, so the credibility card renders.
   // Falls back to `latest` when no result has paired stats.
+  // Headline the canonical published batch (the +28 result the narration + the
+  // evidence pack cite), else the most recent multi-arm result, else latest.
   const headline =
-    results.find((r) => (r.paired_stats ?? []).length > 0) ?? latest
+    results.find((r) => r.canonical) ??
+    results.find((r) => (r.paired_stats ?? []).length > 0) ??
+    latest
   const pairedStats = headline.paired_stats ?? []
   // Method note: the honest one-liner. n = paired seeds between the control
   // (scripted) and the first treatment; falls back to the control's own n.
   const methodN = pairedStats[0]?.n ?? headline.arms?.['scripted']?.n ?? 0
   const methodTreatments = pairedStats.map((c) => c.treatment).join(', ') || '—'
-  const isHeadlineStale = headline !== latest
+  const isHeadlineStale = headline !== latest && !headline.canonical
 
   return (
     <div className="p-6 overflow-y-auto h-full">
