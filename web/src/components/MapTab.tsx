@@ -38,6 +38,7 @@ import { RunPicker } from './RunPicker'
 import { AarDrawer } from './AarDrawer'
 import { DecisionReceipt } from './DecisionReceipt'
 import { Legend } from './Legend'
+import { DemoGuide } from './DemoGuide'
 import type { ProposalRuling, TickRecord, ProvenanceLabel } from '../types'
 
 // Left-rail (run picker + pools) width bounds + persistence key. The rail is
@@ -407,6 +408,8 @@ export function MapTab({
               />
               {/* Dismissible legend overlay (self-suppresses via localStorage) */}
               <Legend />
+              {/* Judge demo guide — dismissible 5-step arc overlay (Day 4) */}
+              <DemoGuide />
             </div>
           )}
           {!timeline.hasWorld && timeline.runId && !timeline.loading && (
