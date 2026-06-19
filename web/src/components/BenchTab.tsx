@@ -337,11 +337,18 @@ export function BenchTab() {
   }
 
   const latest = results[0]
-  const pairedStats = latest.paired_stats ?? []
+  // The most recent result may be a single-arm ablation (no control → no paired
+  // stats). For the headline benchmark view, prefer the most recent MULTI-ARM
+  // result that carries a paired comparison, so the credibility card renders.
+  // Falls back to `latest` when no result has paired stats.
+  const headline =
+    results.find((r) => (r.paired_stats ?? []).length > 0) ?? latest
+  const pairedStats = headline.paired_stats ?? []
   // Method note: the honest one-liner. n = paired seeds between the control
   // (scripted) and the first treatment; falls back to the control's own n.
-  const methodN = pairedStats[0]?.n ?? latest.arms?.['scripted']?.n ?? 0
+  const methodN = pairedStats[0]?.n ?? headline.arms?.['scripted']?.n ?? 0
   const methodTreatments = pairedStats.map((c) => c.treatment).join(', ') || '—'
+  const isHeadlineStale = headline !== latest
 
   return (
     <div className="p-6 overflow-y-auto h-full">
@@ -355,13 +362,20 @@ export function BenchTab() {
 
         <DeterminismBadge report={determinism} />
 
-        {latest.arms && (
+        {isHeadlineStale && (
+          <div className="text-[10px] font-mono text-eoc-secondary border border-eoc-border rounded px-2 py-1 bg-eoc-surface">
+            Showing the most recent multi-arm benchmark (the latest result is a
+            single-arm ablation with no control to compare against).
+          </div>
+        )}
+
+        {headline.arms && (
           <>
             <div className="bg-eoc-surface border border-eoc-border rounded-lg p-4">
-              <BarChart arms={latest.arms} />
+              <BarChart arms={headline.arms} />
             </div>
             <div className="bg-eoc-surface border border-eoc-border rounded-lg p-4">
-              <CostTable arms={latest.arms} />
+              <CostTable arms={headline.arms} />
             </div>
           </>
         )}
@@ -384,7 +398,7 @@ export function BenchTab() {
         )}
 
         {/* Paired table */}
-        {latest.paired && Object.keys(latest.paired).length > 0 && (
+        {headline.paired && Object.keys(headline.paired).length > 0 && (
           <div className="bg-eoc-surface border border-eoc-border rounded-lg p-4">
             <h3 className="text-[10px] font-mono uppercase tracking-widest text-eoc-secondary mb-3">
               Per-Seed Paired: Lives Saved
@@ -394,7 +408,7 @@ export function BenchTab() {
                 <thead>
                   <tr className="border-b border-eoc-border">
                     <th className="text-left py-1 px-2 text-eoc-secondary">Arm</th>
-                    {Object.keys(Object.values(latest.paired)[0] ?? {}).map((seed) => (
+                    {Object.keys(Object.values(headline.paired)[0] ?? {}).map((seed) => (
                       <th key={seed} className="text-right py-1 px-2 text-eoc-secondary">
                         s{seed}
                       </th>
@@ -402,7 +416,7 @@ export function BenchTab() {
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(latest.paired).map(([armId, seeds]) => {
+                  {Object.entries(headline.paired).map(([armId, seeds]) => {
                     const color = armColor(armId)
                     return (
                       <tr key={armId} className="border-b border-eoc-raised">
