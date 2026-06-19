@@ -36,7 +36,9 @@ import { AgentInspector } from './AgentInspector'
 import { Scrubber } from './Scrubber'
 import { RunPicker } from './RunPicker'
 import { AarDrawer } from './AarDrawer'
+import { DecisionReceipt } from './DecisionReceipt'
 import { Legend } from './Legend'
+import type { ProposalRuling, TickRecord, ProvenanceLabel } from '../types'
 
 // Left-rail (run picker + pools) width bounds + persistence key. The rail is
 // drag-resizable so a long run list / long run ids stay readable.
@@ -66,6 +68,12 @@ export function MapTab({
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
   const [aar, setAar] = useState<AarReport | null>(null)
   const [conformance, setConformance] = useState<ConformanceReport | null>(null)
+  // Decision Receipt (Day 3) — opened by clicking a ruling in the negotiation
+  // feed. Holds the ruling + the tick record it came from so the receipt can
+  // render the full evidence chain (ruling → proposal → grant decision →
+  // agent-stated rationale → cost → outcome) with no extra fetches.
+  const [receiptRuling, setReceiptRuling] = useState<ProposalRuling | null>(null)
+  const [receiptTick, setReceiptTick] = useState<TickRecord | null>(null)
 
   // Scenario reality data (task #4). `scenarioBlock` carries the manifest's
   // reference_aggregates / caveat_line / tick_minutes (for the RealityStrip
@@ -103,6 +111,21 @@ export function MapTab({
     setAar(null)
     setConformance(null)
   }, [timeline.runId])
+
+  // Decision Receipt helpers. The receipt operates purely on the tick record it
+  // was opened from (+ the adjacent tick for a lives delta and the matching
+  // world for mission outcome). All three are read from the already-loaded
+  // timeline arrays — no fetch, and never /api/counterfactual.
+  const receiptIdx = receiptTick
+    ? timeline.ticks.findIndex((t) => t.tick === receiptTick.tick)
+    : -1
+  const receiptPrevTick =
+    receiptIdx > 0 ? timeline.ticks[receiptIdx - 1] ?? null : null
+  const receiptWorld =
+    receiptIdx >= 0 && timeline.worlds ? timeline.worlds[receiptIdx] ?? null : null
+  // Mission-kind provenance badge — only meaningful on a scenario run.
+  const receiptProvenance: ProvenanceLabel | null =
+    scenarioBlock?.field_provenance?.mission_kind ?? null
 
   // Fetch the scenario reality data when the active run carries a scenario.
   // Pulls the manifest block (aggregates/caveat/tick_minutes) from the run
@@ -395,8 +418,33 @@ export function MapTab({
 
         {/* Right rail: negotiation feed + agent inspector */}
         <div className="w-64 shrink-0 flex flex-col border-l border-eoc-border bg-eoc-ground overflow-hidden">
+          {/* Decision Receipt (Day 3) — overlays the rail top when a ruling is
+              selected. Rendered above the feed so the evidence chain is visible
+              alongside the negotiation log. Click outside / ✕ dismisses. */}
+          {receiptRuling && receiptTick && (
+            <div className="border-b border-eoc-border bg-eoc-surface shadow-lg">
+              <DecisionReceipt
+                ruling={receiptRuling}
+                tick={receiptTick}
+                prevTick={receiptPrevTick}
+                world={receiptWorld}
+                missionProvenance={receiptProvenance}
+                onClose={() => {
+                  setReceiptRuling(null)
+                  setReceiptTick(null)
+                }}
+              />
+            </div>
+          )}
           <div className="flex-1 overflow-hidden border-b border-eoc-border">
-            <NegotiationFeed ticks={timeline.ticks} cursor={timeline.cursor} />
+            <NegotiationFeed
+              ticks={timeline.ticks}
+              cursor={timeline.cursor}
+              onSelectRuling={(ruling, t) => {
+                setReceiptRuling(ruling)
+                setReceiptTick(t)
+              }}
+            />
           </div>
           <div className="h-48 overflow-y-auto">
             <div className="text-[11px] font-mono uppercase tracking-widest text-eoc-secondary px-2 py-1 sticky top-0 bg-eoc-surface border-b border-eoc-border">
