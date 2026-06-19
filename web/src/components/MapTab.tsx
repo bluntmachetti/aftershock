@@ -38,6 +38,13 @@ import { RunPicker } from './RunPicker'
 import { AarDrawer } from './AarDrawer'
 import { Legend } from './Legend'
 
+// Left-rail (run picker + pools) width bounds + persistence key. The rail is
+// drag-resizable so a long run list / long run ids stay readable.
+const SIDEBAR_MIN_W = 180
+const SIDEBAR_MAX_W = 560
+const SIDEBAR_DEFAULT_W = 208 // matches the prior fixed w-52
+const SIDEBAR_KEY = 'map-sidebar-width'
+
 interface Props {
   timeline: TimelineState
   runs: RunSummary[]
@@ -263,6 +270,41 @@ export function MapTab({
 
   const activeRun = runs.find((r) => r.run_id === timeline.runId)
 
+  // Resizable left rail. During a drag we mutate the element's width directly
+  // (no React state churn → the heavy map doesn't re-render mid-drag) and commit
+  // the final width to state + localStorage on release.
+  const sidebarRef = useRef<HTMLDivElement>(null)
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const saved = Number(localStorage.getItem(SIDEBAR_KEY))
+    return Number.isFinite(saved) && saved >= SIDEBAR_MIN_W && saved <= SIDEBAR_MAX_W
+      ? saved
+      : SIDEBAR_DEFAULT_W
+  })
+  const startSidebarResize = useCallback((e: React.PointerEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = sidebarRef.current?.offsetWidth ?? SIDEBAR_DEFAULT_W
+    document.body.style.userSelect = 'none'
+    const onMove = (ev: PointerEvent) => {
+      const w = Math.max(SIDEBAR_MIN_W, Math.min(SIDEBAR_MAX_W, startW + (ev.clientX - startX)))
+      if (sidebarRef.current) sidebarRef.current.style.width = `${w}px`
+    }
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      document.body.style.userSelect = ''
+      const finalW = sidebarRef.current?.offsetWidth ?? startW
+      setSidebarWidth(finalW)
+      try {
+        localStorage.setItem(SIDEBAR_KEY, String(finalW))
+      } catch {
+        /* localStorage unavailable — width just won't persist */
+      }
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }, [])
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Mission Control command band — CONDITION + run identity + op clock +
@@ -276,8 +318,14 @@ export function MapTab({
       />
       {/* Main area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left sidebar: run picker + resource pools */}
-        <div className="w-52 shrink-0 flex flex-col gap-3 p-3 border-r border-eoc-border overflow-y-auto bg-eoc-ground">
+        {/* Left sidebar: run picker + resource pools. Width is drag-resizable
+            (handle on the right edge); the run list fills the rail's height so a
+            long list scrolls in a tall window, with the pools pinned below. */}
+        <div
+          ref={sidebarRef}
+          style={{ width: sidebarWidth }}
+          className="relative shrink-0 flex flex-col gap-3 p-3 border-r border-eoc-border bg-eoc-ground overflow-hidden"
+        >
           <RunPicker
             runs={runs}
             selectedRunId={timeline.runId}
@@ -286,13 +334,22 @@ export function MapTab({
             onSelect={handleRunDetails}
           />
           {world && (
-            <>
+            <div className="shrink-0 flex flex-col gap-3">
               <div className="border-t border-eoc-border" />
               <PanicGauge panic={world.panic} />
               <div className="border-t border-eoc-border" />
               <ResourcePoolSidebar pools={world.pools} />
-            </>
+            </div>
           )}
+          {/* Resize handle — drag to widen/narrow the rail. */}
+          <div
+            onPointerDown={startSidebarResize}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize runs panel"
+            title="Drag to resize"
+            className="absolute top-0 right-0 z-10 h-full w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-signal-amber/40"
+          />
         </div>
 
         {/* Center: map */}

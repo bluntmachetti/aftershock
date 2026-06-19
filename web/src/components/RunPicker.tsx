@@ -73,11 +73,12 @@ export function RunPicker({ runs, selectedRunId, error, loading, onSelect }: Pro
   }
 
   return (
-    <div className="flex flex-col gap-1">
-      <h3 className="text-[10px] font-mono uppercase tracking-widest text-eoc-secondary mb-1">
+    <div className="flex flex-col gap-1 flex-1 min-h-0">
+      <h3 className="shrink-0 text-[10px] font-mono uppercase tracking-widest text-eoc-secondary mb-1">
         Recorded Runs
+        <span className="ml-1 text-eoc-faint tabular-nums">({runs.length})</span>
       </h3>
-      <div className="flex flex-col gap-1 overflow-y-auto max-h-48">
+      <div className="flex flex-col gap-1 overflow-y-auto flex-1 min-h-0 pr-1">
         {runs.map((run) => {
           const color = armColor(run.arm)
           const selected = selectedRunId === run.run_id
