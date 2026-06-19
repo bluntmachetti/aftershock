@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api } from '../lib/api'
 import { COUNTERFACTUAL_ACCENT } from '../lib/palette'
+import { VoucherChip } from './VoucherChip'
 
 interface Props {
   /** The left-side run (the baseline to branch from). */
@@ -13,6 +14,11 @@ interface Props {
   baselineScenarioId?: string | null
   /** Whether a live/counterfactual run is already streaming. */
   running: boolean
+  /** True when the server has DASHSCOPE_API_KEY configured. When false, a
+   *  society/solo/swarm baseline branch 503s; the controls degrade gracefully. */
+  llmKey?: boolean
+  /** The server's LLM arm list (for the gate). Defaults to the known set. */
+  llmArms?: string[]
   /** Called after the branch starts; receives the branch run_id so the caller can
    *  select it on the right side once it completes. */
   onBranchStarted?: (runId: string) => void
@@ -29,6 +35,8 @@ const EVENTS = ['fire', 'aftershock', 'road_block'] as const
 
 const AGENTS = ['commander', 'comms', 'fire', 'infrastructure', 'medical', 'rescue'] as const
 
+const DEFAULT_LLM_ARMS = ['solo', 'swarm', 'society']
+
 export function CounterfactualControls({
   baselineRunId,
   baselineArm,
@@ -36,6 +44,8 @@ export function CounterfactualControls({
   baselineTicks,
   baselineScenarioId,
   running,
+  llmKey = true,
+  llmArms,
   onBranchStarted,
 }: Props) {
   const [kind, setKind] = useState<string>('drop_protocol')
@@ -49,10 +59,16 @@ export function CounterfactualControls({
     return null
   }
 
+  const llmArmsSet = llmArms ?? DEFAULT_LLM_ARMS
+  // A society/solo/swarm baseline re-run needs the key; without it the server
+  // 503s. Gate the Branch button and show the voucher chip rather than firing.
+  const baselineNeedsKey = llmArmsSet.includes(baselineArm)
+  const voucherBlocked = baselineNeedsKey && !llmKey
+
   const maxTick = Math.max(0, baselineTicks - 1)
 
   async function handleSubmit() {
-    if (submitting || running) return
+    if (submitting || running || voucherBlocked) return
     setSubmitting(true)
     setError(null)
     try {
@@ -69,7 +85,12 @@ export function CounterfactualControls({
       })
       onBranchStarted?.(res.run_id)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      const msg = e instanceof Error ? e.message : String(e)
+      setError(
+        msg.includes('503')
+          ? 'Qwen society live-engine offline (voucher pending) — replay a recorded society branch instead.'
+          : msg,
+      )
     } finally {
       setSubmitting(false)
     }
@@ -156,9 +177,13 @@ export function CounterfactualControls({
         // A target is required ONLY for kinds that expose a selector (kill_agent /
         // inject_event). drop_protocol (the headline) and none take no target, so
         // they must stay submittable — gating them on `target` left the Branch
-        // button permanently disabled for the default intervention.
+        // button permanently disabled for the default intervention. Also gated
+        // when the baseline is an LLM arm and no key is configured (voucher pending).
         disabled={
-          submitting || running || ((kind === 'kill_agent' || kind === 'inject_event') && !target)
+          submitting ||
+          running ||
+          voucherBlocked ||
+          ((kind === 'kill_agent' || kind === 'inject_event') && !target)
         }
         className="shrink-0 rounded px-2 py-0.5 text-[11px] font-semibold transition-colors disabled:opacity-40"
         style={{
@@ -170,6 +195,8 @@ export function CounterfactualControls({
       >
         {submitting ? 'Running…' : 'Branch'}
       </button>
+
+      <VoucherChip arm={baselineArm} llmKey={llmKey} compact />
 
       {error && (
         <span className="shrink-0 text-[10px] text-signal-red">{error}</span>

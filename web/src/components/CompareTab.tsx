@@ -4,6 +4,7 @@ import type {
   ScenarioCompact,
   ScenarioManifestBlock,
   ScenarioPack,
+  StatusInfo,
   TickRecord,
   WorldState,
 } from '../types'
@@ -164,6 +165,17 @@ export function CompareTab({
   // True while a counterfactual branch is running server-side and we're waiting
   // for it to land in the run list so we can select it on the right.
   const [branching, setBranching] = useState(false)
+  // Voucher/key detection: a society/solo/swarm counterfactual branch 503s
+  // without DASHSCOPE_API_KEY; pass llmKey down so the controls can degrade
+  // gracefully instead of throwing a raw error.
+  const [serverStatus, setServerStatus] = useState<StatusInfo | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    api.status()
+      .then((s) => { if (!cancelled) setServerStatus(s) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   const runById = useMemo(() => {
     const m = new Map<string, RunSummary>()
@@ -486,6 +498,8 @@ export function CompareTab({
         baselineTicks={leftRun?.ticks ?? null}
         baselineScenarioId={leftRun?.scenario?.id ?? null}
         running={branching}
+        llmKey={serverStatus?.llm_key ?? false}
+        llmArms={serverStatus?.llm_arms}
         onBranchStarted={handleBranchStarted}
       />
       <CompareControls

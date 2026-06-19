@@ -150,6 +150,84 @@ def test_list_runs_with_run(seeded_runs_root: tuple[Path, str]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Tests: nested episode reachability (runs/episodes/<run_id>)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def episodes_root(tmp_path: Path) -> Path:
+    """A runs_root with a direct-child run AND a nested episode run under
+    runs/episodes/. The episode's leaf run_id does NOT collide with the
+    direct-child run."""
+    root = tmp_path / "runs"
+    root.mkdir()
+    _run_scripted_8(root, seed=7)
+    episodes = root / "episodes"
+    episodes.mkdir()
+    # Run a second scripted run whose recorder writes into runs/episodes/.
+    ep_id = _run_scripted_8(episodes, seed=11)
+    assert ep_id == "scripted-seed11"
+    return root
+
+
+def test_list_runs_includes_nested_episode(episodes_root: Path) -> None:
+    app = create_app(episodes_root)
+    with TestClient(app) as client:
+        resp = client.get("/api/runs")
+    assert resp.status_code == 200
+    ids = {r["run_id"] for r in resp.json()}
+    assert "scripted-seed7" in ids  # direct child
+    assert "scripted-seed11" in ids  # nested episode
+
+
+def test_run_detail_loads_nested_episode(episodes_root: Path) -> None:
+    app = create_app(episodes_root)
+    with TestClient(app) as client:
+        resp = client.get("/api/runs/scripted-seed11")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["run_id"] == "scripted-seed11"
+    assert data["n_ticks"] == 8
+
+
+def test_run_ticks_load_nested_episode(episodes_root: Path) -> None:
+    app = create_app(episodes_root)
+    with TestClient(app) as client:
+        resp = client.get("/api/runs/scripted-seed11/ticks", params={"limit": 3})
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 8
+
+
+def test_episodes_subdir_non_run_files_are_skipped(tmp_path: Path) -> None:
+    """runs/episodes/ also holds episodes.json / episodes.md / memory.json —
+    these have no run.json and must not appear in /api/runs."""
+    root = tmp_path / "runs"
+    root.mkdir()
+    eps = root / "episodes"
+    eps.mkdir()
+    (eps / "episodes.json").write_text("[]", encoding="utf-8")
+    (eps / "episodes.md").write_text("# eps", encoding="utf-8")
+    app = create_app(root)
+    with TestClient(app) as client:
+        resp = client.get("/api/runs")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_episodes_path_traversal_still_404(runs_root: Path) -> None:
+    """A nested-episode fallback must not open a traversal path. 'episodes'
+    itself is a real subdir under runs_root, but addressing it as a run_id
+    (no run.json) must 404, and the standard traversal patterns still 404
+    even with an episodes/ subdir present."""
+    (runs_root / "episodes").mkdir()
+    app = create_app(runs_root)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        assert client.get("/api/runs/episodes").status_code == 404
+        for bad in ("../etc", "..%2fetc", "%2e%2e", "a/b"):
+            assert client.get(f"/api/runs/{bad}").status_code in (404, 422)
+
+
+# ---------------------------------------------------------------------------
 # Tests: run detail
 # ---------------------------------------------------------------------------
 
@@ -288,6 +366,60 @@ def test_bench_reads_fixture(runs_root: Path, bench_root: Path) -> None:
     assert arms_seen == {"scripted", "society"}
 
 
+@pytest.fixture()
+def paired_bench_root(tmp_path: Path) -> Path:
+    """A bench_root with ONE results.json whose `paired` table shares seeds
+    across scripted (control) + society (treatment) so paired_stats is computed."""
+    br = tmp_path / "bench_results"
+    br.mkdir()
+    results = {
+        "arms": {
+            "scripted": {"n": 5, "mean_lives_saved": 100.0, "sd_lives_saved": 5.0},
+            "society": {"n": 5, "mean_lives_saved": 110.0, "sd_lives_saved": 6.0},
+        },
+        # society beats scripted on 4/5 seeds, ties on 1 → sign test not sig at
+        # n=5; bootstrap CI may or may not exclude 0. Verdict is suggestive/noise.
+        "paired": {
+            "scripted": {42: 100.0, 7: 95.0, 13: 102.0, 23: 98.0, 57: 105.0},
+            "society": {42: 108.0, 7: 101.0, 13: 100.0, 23: 110.0, 57: 112.0},
+        },
+    }
+    (br / "results.json").write_text(json.dumps(results), encoding="utf-8")
+    return br
+
+
+def test_bench_serves_paired_stats(runs_root: Path, paired_bench_root: Path) -> None:
+    app = create_app(runs_root, bench_root=paired_bench_root)
+    with TestClient(app) as client:
+        resp = client.get("/api/bench")
+    data = resp.json()
+    assert len(data) == 1
+    ps = data[0]["paired_stats"]
+    # One comparison: society vs scripted (the control).
+    assert len(ps) == 1
+    cmp = ps[0]
+    assert cmp["control"] == "scripted"
+    assert cmp["treatment"] == "society"
+    assert cmp["n"] == 5
+    assert "ci" in cmp and "lower" in cmp["ci"] and "upper" in cmp["ci"]
+    assert "sign_test_p" in cmp
+    assert "observed_power" in cmp
+    assert cmp["verdict"] in ("noise", "suggestive", "credible")
+    # Honesty: the verdict field + ci_excludes_zero + sign_significant are all
+    # present so the UI never has to re-derive significance.
+
+
+def test_bench_paired_stats_omits_no_common_seeds(
+    runs_root: Path, bench_root: Path
+) -> None:
+    """The fixture's two results have disjoint seeds → paired_stats is []."""
+    app = create_app(runs_root, bench_root=bench_root)
+    with TestClient(app) as client:
+        resp = client.get("/api/bench")
+    for result in resp.json():
+        assert result.get("paired_stats") == []
+
+
 # ---------------------------------------------------------------------------
 # Tests: /api/live status when no run
 # ---------------------------------------------------------------------------
@@ -324,6 +456,119 @@ def test_live_llm_arm_solo_no_key_503(runs_root: Path, monkeypatch: pytest.Monke
     with TestClient(app) as client:
         resp = client.post("/api/live", json={"arm": "solo", "seed": 1, "ticks": 5})
     assert resp.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# Tests: GET /api/status — voucher/key detection for graceful UI degradation
+# ---------------------------------------------------------------------------
+
+
+def test_status_no_key(runs_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+    monkeypatch.delenv("AFTERSHOCK_DEMO_MODE", raising=False)
+    app = create_app(runs_root)
+    with TestClient(app) as client:
+        resp = client.get("/api/status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["llm_key"] is False
+    assert body["llm_arms"] == ["solo", "swarm", "society"]
+
+
+def test_status_with_key(runs_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "sk-test")
+    app = create_app(runs_root)
+    with TestClient(app) as client:
+        resp = client.get("/api/status")
+    assert resp.json()["llm_key"] is True
+
+
+# ---------------------------------------------------------------------------
+# Tests: GET /api/determinism — scripted-engine verify, scoped + cached
+# ---------------------------------------------------------------------------
+
+
+def test_determinism_passes_and_scoped_to_scripted(runs_root: Path) -> None:
+    # Reset the per-process cache so this test runs the check fresh.
+    import aftershock.web as web_mod
+
+    web_mod._determinism_cache = None
+    app = create_app(runs_root)
+    with TestClient(app) as client:
+        resp = client.get("/api/determinism")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["passed"] is True
+    assert body["arm"] == "scripted"
+    assert body["seed"] == 42
+    # Honesty: the scope + note must NOT imply LLM/society arms are reproducible.
+    assert "scripted" in body["scope"].lower()
+    assert "not" in body["note"].lower() and "reproducible" in body["note"].lower()
+
+
+def test_determinism_cached_on_second_call(runs_root: Path) -> None:
+    """The verify re-run is ~seconds; the second call must be a cache hit
+    (identical body, no second engine run)."""
+    import aftershock.web as web_mod
+
+    web_mod._determinism_cache = None
+    app = create_app(runs_root)
+    with TestClient(app) as client:
+        first = client.get("/api/determinism").json()
+        second = client.get("/api/determinism").json()
+    assert first == second
+    assert first["passed"] is True
+
+
+# ---------------------------------------------------------------------------
+# Tests: bench.paired_comparisons (pure stats adapter)
+# ---------------------------------------------------------------------------
+
+
+def test_paired_comparisons_no_common_seeds() -> None:
+    from aftershock.bench import paired_comparisons
+
+    paired = {"scripted": {1: 10.0}, "society": {2: 20.0}}
+    assert paired_comparisons(paired) == []
+
+
+def test_paired_comparisons_no_control() -> None:
+    from aftershock.bench import paired_comparisons
+
+    # No scripted control → empty (graceful, not an error).
+    assert paired_comparisons({"society": {1: 10.0}}) == []
+
+
+def test_paired_comparisons_verdict_fields() -> None:
+    from aftershock.bench import paired_comparisons
+
+    # society beats scripted on every seed → delta always positive.
+    paired = {
+        "scripted": {1: 100.0, 2: 100.0, 3: 100.0, 4: 100.0, 5: 100.0},
+        "society": {1: 120.0, 2: 118.0, 3: 122.0, 4: 119.0, 5: 121.0},
+    }
+    out = paired_comparisons(paired)
+    assert len(out) == 1
+    cmp = out[0]
+    assert cmp["n"] == 5
+    assert cmp["n_positive"] == 5
+    assert cmp["n_negative"] == 0
+    assert cmp["mean_delta"] > 0
+    assert cmp["ci"]["lower"] > 0  # excludes 0
+    assert cmp["verdict"] in ("suggestive", "credible")
+
+
+def test_paired_comparisons_noise_when_ci_includes_zero() -> None:
+    from aftershock.bench import paired_comparisons
+
+    # Mixed deltas straddling 0 → CI includes 0 → "noise".
+    paired = {
+        "scripted": {1: 100.0, 2: 100.0, 3: 100.0, 4: 100.0, 5: 100.0},
+        "society": {1: 110.0, 2: 90.0, 3: 105.0, 4: 95.0, 5: 100.0},
+    }
+    out = paired_comparisons(paired)
+    assert out[0]["verdict"] == "noise"
+    assert out[0]["ci_excludes_zero"] is False
 
 
 # ---------------------------------------------------------------------------

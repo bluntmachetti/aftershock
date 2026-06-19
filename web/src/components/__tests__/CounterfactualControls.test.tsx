@@ -57,3 +57,25 @@ describe('CounterfactualControls — submit', () => {
     )
   })
 })
+
+describe('CounterfactualControls — voucher-pending graceful degradation', () => {
+  it('disables Branch and shows the voucher chip when a society baseline has no key', () => {
+    render(<CounterfactualControls {...baseProps} baselineArm="society" llmKey={false} />)
+    expect(screen.getByRole('button', { name: 'Branch' })).toBeDisabled()
+    // The compact voucher chip surfaces the offline state.
+    expect(screen.getByText('voucher pending')).toBeInTheDocument()
+    expect(api.counterfactual).not.toHaveBeenCalled()
+  })
+
+  it('keeps Branch enabled for a scripted baseline even without a key', () => {
+    render(<CounterfactualControls {...baseProps} baselineArm="scripted" llmKey={false} />)
+    expect(screen.getByRole('button', { name: 'Branch' })).toBeEnabled()
+    expect(screen.queryByText('voucher pending')).not.toBeInTheDocument()
+  })
+
+  it('does not fire the request when voucher-blocked (button disabled)', () => {
+    render(<CounterfactualControls {...baseProps} baselineArm="society" llmKey={false} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Branch' }))
+    expect(api.counterfactual).not.toHaveBeenCalled()
+  })
+})

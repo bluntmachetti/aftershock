@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { TickRecord, WorldState, LiveStatus, LiveWsMessage, ScenarioSummary } from '../types'
+import type { TickRecord, WorldState, LiveStatus, LiveWsMessage, ScenarioSummary, StatusInfo } from '../types'
 import { api } from '../lib/api'
 import { deriveContention } from '../lib/contention'
 import { STATUS_COLORS, MISSION_KIND_COLORS, FALLBACK_COLOR, ARM_COLORS as ARM_PALETTE } from '../lib/palette'
@@ -11,6 +11,7 @@ import { ResourcePoolSidebar } from './ResourcePoolSidebar'
 import { AnalystTicker } from './live/AnalystTicker'
 import { BriefingBanner } from './live/BriefingBanner'
 import { HelpDrawer } from './live/HelpDrawer'
+import { VoucherChip } from './VoucherChip'
 import { useLiveOnboarding } from '../hooks/useLiveOnboarding'
 
 const SYNTHETIC_DEFAULT_TICKS = 60
@@ -64,11 +65,20 @@ interface Props {
 export function LiveTab({ onTickReceived }: Props) {
   const [status, setStatus] = useState<LiveStatus | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
+  // Voucher/key detection (GET /api/status). When llmKey is false, a
+  // solo/swarm/society live start would 503; we show the VoucherChip and short-
+  // circuit handleStart with a graceful message instead of a raw error.
+  const [serverStatus, setServerStatus] = useState<StatusInfo | null>(null)
   const [arm, setArm] = useState('scripted')
   const [seed, setSeed] = useState(42)
   const [ticks, setTicks] = useState(SYNTHETIC_DEFAULT_TICKS)
   const [startError, setStartError] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
+  // Derived from serverStatus (key detection). armNeedsKey gates handleStart so
+  // a voucher-pending society start degrades gracefully instead of a raw 503.
+  const llmKey = serverStatus?.llm_key ?? false
+  const LLM_ARMS = serverStatus?.llm_arms ?? ['solo', 'swarm', 'society']
+  const armNeedsKey = LLM_ARMS.includes(arm)
 
   const [scenarios, setScenarios] = useState<ScenarioSummary[]>([])
   const [scenario, setScenario] = useState<string>(SYNTHETIC_SCENARIO)
@@ -125,6 +135,9 @@ export function LiveTab({ onTickReceived }: Props) {
     let cancelled = false
     api.getScenarios()
       .then((rows) => { if (!cancelled) setScenarios(rows) })
+      .catch(() => {})
+    api.status()
+      .then((s) => { if (!cancelled) setServerStatus(s) })
       .catch(() => {})
     return () => { cancelled = true }
   }, [])
@@ -225,11 +238,27 @@ export function LiveTab({ onTickReceived }: Props) {
         'locally and scrubbed from the URL, then Start/Inject work from this browser.'
       )
     }
+    if (e.message.includes('503')) {
+      return (
+        'Qwen society live-engine offline (voucher pending). Replaying recorded ' +
+        'episodes needs no key — pick a society run from the Map/Compare tabs. ' +
+        'Scripted runs stay live.'
+      )
+    }
     return e.message
   }
 
   async function handleStart() {
     setStartError(null)
+    // Graceful degradation: don't fire a request we know will 503. The server
+    // still enforces the gate independently; this just avoids the raw error.
+    if (armNeedsKey && !llmKey) {
+      setStartError(
+        'Qwen society live-engine offline (voucher pending). Replaying recorded ' +
+        'episodes needs no key — pick a society run from the Map/Compare tabs.',
+      )
+      return
+    }
     setStarting(true)
     setLog([])
     setLiveTicks([])
@@ -408,6 +437,8 @@ export function LiveTab({ onTickReceived }: Props) {
               })}
             </div>
           </div>
+
+          <VoucherChip arm={arm} llmKey={llmKey} />
 
           <div className="flex items-center gap-2">
             <label className="text-[10px] font-mono text-eoc-secondary w-8">Seed</label>
