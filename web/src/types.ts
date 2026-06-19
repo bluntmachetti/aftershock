@@ -344,6 +344,46 @@ export interface BenchArm {
 export interface BenchResult {
   arms: Record<string, BenchArm>
   paired?: Record<string, Record<string, number>>
+  // Server-computed paired control-vs-treatment stats (Day 2). One entry per
+  // non-control arm sharing seeds with the `scripted` control; absent/empty when
+  // no common seeds. The BenchTab renders CI whiskers + sign-test p + power +
+  // verdict from this so stats are never reimplemented in TS.
+  paired_stats?: PairedComparison[]
+}
+
+/** One paired control-vs-treatment comparison (server-computed). Mirrors the
+ *  pure `bench.paired_comparisons()` adapter. `verdict` is the honest call:
+ *  "credible" (CI excludes 0 AND sign test sig), "suggestive" (CI only), or
+ *  "noise" (CI includes 0). */
+export interface PairedComparison {
+  control: string
+  treatment: string
+  n: number
+  seeds: number[]
+  mean_delta: number
+  sd_delta: number
+  n_positive: number
+  n_negative: number
+  n_tied: number
+  sign_test_p: number
+  verdict: 'noise' | 'suggestive' | 'credible'
+  ci_excludes_zero: boolean
+  sign_significant: boolean
+  ci: { lower: number; upper: number; confidence: number; n_resamples: number }
+  observed_power: number | null
+}
+
+/** GET /api/determinism — the scripted-engine verify check (re-run twice,
+ *  identical world_digest sequences). Scoped to the scripted arm ONLY; DashScope
+ *  ignores `seed` so LLM/society arms are NOT reproducible. */
+export interface DeterminismReport {
+  arm: string
+  seed: number
+  ticks: number
+  passed: boolean
+  n_digests: number
+  scope: string
+  note: string
 }
 
 export interface LiveStatus {
@@ -354,6 +394,17 @@ export interface LiveStatus {
   seed: number
   // "ambient" = the server-driven looping demo run; "manual" = an operator run.
   mode?: 'ambient' | 'manual' | null
+}
+
+/** GET /api/status — voucher/key detection for graceful UI degradation.
+ *  `llm_key` is true when the server has DASHSCOPE_API_KEY configured; when
+ *  false, solo/swarm/society live + counterfactual requests 503 and the UI
+ *  should show a "voucher pending" chip instead of a raw error. Scripted arms
+ *  are keyless and never gated. The key itself is never leaked. */
+export interface StatusInfo {
+  llm_key: boolean
+  demo_mode: boolean
+  llm_arms: string[]
 }
 
 export interface AarKeyMoment {

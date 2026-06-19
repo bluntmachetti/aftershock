@@ -4,6 +4,8 @@ import type {
   TicksResponse,
   BenchResult,
   LiveStatus,
+  StatusInfo,
+  DeterminismReport,
   AarReport,
   ConformanceReport,
   ScenarioSummary,
@@ -83,7 +85,16 @@ export const api = {
 
   bench: (): Promise<BenchResult[]> => get('/api/bench'),
 
+  // Scripted-engine determinism verify (re-run twice, identical digests).
+  // Cached server-side after the first call. Scoped to the scripted arm ONLY.
+  determinism: (): Promise<DeterminismReport> => get('/api/determinism'),
+
   liveStatus: (): Promise<LiveStatus> => get('/api/live'),
+
+  // Voucher/key detection. `llm_key` false => solo/swarm/society live + branch
+  // requests will 503; the UI degrades to a "voucher pending" chip rather than
+  // firing the request. Ungated GET.
+  status: (): Promise<StatusInfo> => get('/api/status'),
 
   // True when an operator token is configured (via ?token=… or stored). Gates the
   // mutating controls in the UI; the server still enforces the gate independently.

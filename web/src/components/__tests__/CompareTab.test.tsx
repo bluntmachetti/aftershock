@@ -13,6 +13,7 @@ vi.mock('../../lib/api', () => ({
     runDetail: vi.fn(),
     getScenario: vi.fn(),
     counterfactual: vi.fn(),
+    status: vi.fn().mockResolvedValue({ llm_key: true, demo_mode: false, llm_arms: ['solo', 'swarm', 'society'] }),
   },
 }))
 vi.mock('../TownMap', () => ({ TownMap: () => <div data-testid="townmap" /> }))

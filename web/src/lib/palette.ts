@@ -141,6 +141,21 @@ export const CONDITION_COLORS = {
 export type ConditionLevel = keyof typeof CONDITION_COLORS
 
 // ---------------------------------------------------------------------------
+// Bench verdict (Day 2) — ADDITIVE token only, above the freeze line.
+// ---------------------------------------------------------------------------
+
+/** Paired-comparison verdict accent (bench.paired_comparisons verdict).
+ *  Mapped onto EXISTING semantic signals — no new hues: credible = green
+ *  (resolved), suggestive = amber (open), noise = neutral grey (fallback).
+ *  Drives the BenchTab verdict badge + CI/p accents so a non-significant
+ *  effect never reads as a win. */
+export const VERDICT_COLORS = {
+  credible: STATUS_COLORS.resolved, // #4ade80
+  suggestive: STATUS_COLORS.open, // #f59e0b
+  noise: FALLBACK_COLOR, // #94a3b8
+} as const
+
+// ---------------------------------------------------------------------------
 // Counterfactual (intervention replay)
 // ---------------------------------------------------------------------------
 
