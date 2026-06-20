@@ -150,6 +150,22 @@ gitignored file; the real ep1 value is 0.7588.)
 > the society saved 8 and lost 82 lives (outcomes are fully simulated, §2).
 > The conformance number proves instruction-following, not rescue quality.
 
+#### Doctrine on/off — what the structure buys
+
+The strongest *causal* conformance result is a paired ablation: same world seeds,
+same tools, doctrine layer toggled on vs off. Doctrine raises team alignment
+**0.696 → 0.852 (Δ +0.156)**, positive on all 5 seeds, at no lives cost.
+
+| Metric (society, doctrine off → on) | Off | On | Δ | n | Sign-test p |
+|---|---|---|---|---|---|
+| team_alignment (deterministic) | 0.696 | 0.852 | **+0.156** | 5 | 0.0625 (5/5 seeds positive) |
+| lives saved | 100.4 | 104.2 | +3.8 | 5 | 0.375 (suggestive, not a cost) |
+
+**Source:** `bench/results/2026-06-16-doctrine-ablation/ABLATION.md` (+
+`ablation.json` and per-seed `conformance.json`). Conformance is the deterministic
+signal (5/5 seeds, p=0.0625); the +3.8 lives is suggestive only — the point is
+that doctrine buys measurable alignment **without** a lives penalty.
+
 ### Real Qwen rationales
 
 The Decision Receipt (Day 3) renders the agents' free-text reasoning on

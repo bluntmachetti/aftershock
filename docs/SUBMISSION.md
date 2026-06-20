@@ -75,7 +75,7 @@ mean lives saved from 75.6 to 103.2 and cut failed missions from 3.0 to 0.4. The
 matched the qwen3-max solo agent's outcome within noise while costing about 35% less per run.
 (Honest caveat: the ~+28-life gap is an n=5 paired mean — directionally robust, society ≥ swarm on all
 five seeds, but the magnitude is soft, n=5 with one seed dominating, paired sign-test p=0.125; we
-report it as *suggestive, not yet statistically significant*. See FIELD-NOTES §17.)
+report it as *suggestive, not yet statistically significant*. See [EVIDENCE.md §3](EVIDENCE.md#3-the-benchmark-result).)
 
 Every run is replayable. Same seed plus same decisions gives the same outcome, byte for byte. The
 web observatory lets judges scrub through ticks, inspect agent decisions, open a decision receipt for
@@ -174,8 +174,9 @@ inside a structured society saved 103.2. The difference was not model intelligen
 mechanism that turned resource contention into explicit information before agents wasted actions.
 (The ~+28-life gap is directionally robust — society ≥ swarm on every one of the 5 paired seeds — but
 its precise size is an n=5 estimate with a wide CI, p=0.125, so we report it as suggestive rather
-than proven; FIELD-NOTES §17. The most robust number we report is the deterministic
-doctrine-conformance effect: +0.156 team alignment, positive on all 5 seeds, §18.)
+than proven; [EVIDENCE.md §3](EVIDENCE.md#3-the-benchmark-result). The most robust number we report
+is the deterministic doctrine-conformance effect: +0.156 team alignment, positive on all 5 seeds
+([EVIDENCE.md §5](EVIDENCE.md#5-qwen-track-framing-verified-numbers-only)).)
 
 We also learned that a society of small models can match a flagship solo model when the task is
 decomposable. The structured society saved 103.2 lives per run versus 104.2 for qwen3-max solo, but
@@ -222,8 +223,8 @@ We didn't just bolt it on — we benchmarked it on the same paired seeds and fou
 lives saved within noise (98.2 vs 103.2) but cost ~2× more and ran ~2.5× slower, because the
 ~1k-token tool schema is re-sent on every one of ~240 agent calls per run. So the cost-optimal
 **default** is JSON contracts, with function calling available and measured as an ablation
-([bench/results/2026-06-13-tool-ablation/](../bench/results/2026-06-13-tool-ablation/RESULTS.md),
-[docs/FIELD-NOTES.md §12](FIELD-NOTES.md)). The point isn't to chase the fanciest API — it's to
+([bench/results/2026-06-13-tool-ablation/](../bench/results/2026-06-13-tool-ablation/RESULTS.md)).
+The point isn't to chase the fanciest API — it's to
 measure when it actually pays.
 
 ### Alibaba Cloud deployment
@@ -287,7 +288,7 @@ SHOW: Bench tab; the four-arm table (swarm 75.6 vs society 103.2, missions-faile
 bootstrap-CI / sign-test / post-hoc-power cards; the "✓ scripted engine — identical digests" badge.
 
 > Note (not spoken): "twenty-eight" is an n=5 paired mean — robust in direction (society ≥ swarm on
-> all five seeds) but soft in magnitude (p=0.125, §17). The Bench tab itself labels it *suggestive*,
+> all five seeds) but soft in magnitude (p=0.125, [EVIDENCE.md §3](EVIDENCE.md#3-the-benchmark-result)). The Bench tab itself labels it *suggestive*,
 > so the footage and the VO agree. If a lower-third shows the number, keep it "≈+28 (n=5)".
 
 ### 4 · Matches the flagship (1:39–1:50)
