@@ -13,8 +13,10 @@ per dollar. The robust finding is **cost-efficiency**: six cheap qwen3.5-flash
 workers plus a qwen3.5-plus commander **match the expert-heuristic baseline on
 lives** (108.4 vs 106.8) and **out-deliver the solo big model** (108.4 vs 95.6)
 at **~3.5¢ per run** — **~65% better lives per dollar than the solo big model**.
-Against the flat swarm the society holds a **directional but not significant**
-lives edge (+8.9 at n=15, wins 11/15, p=0.118, bootstrap CI includes 0). Written
+Against the flat swarm the society holds a **suggestive** lives edge (+8.9 at
+n=15, wins 11/15, bootstrap CI [+2.3, +15.4] excludes 0, but sign-test p=0.118 —
+suggestive, not significant: the CI excludes 0 but the sign test doesn't clear
+significance). Written
 **doctrine credibly raises team alignment** (+0.125, n=6, p=0.031). The scripted
 expert-heuristic baseline is byte-for-byte reproducible; the Qwen arms
 demonstrate real instruction-following (team alignment 0.76–1.00). Real-data
@@ -50,7 +52,7 @@ paired seeds {11, 23, 37, 42, 57}, 60 ticks each.
 | **solo** (one big Qwen model) | 95.6 | $0.0515 | 1,855 |
 | **swarm** (flat swarm, no protocol) | 93.8 | $0.0132 | 7,133 |
 
-**The protocol's value — society vs swarm (directional, not significant):**
+**The protocol's value — society vs swarm (suggestive, not significant):**
 
 | Stat | Value |
 |---|---|
@@ -58,16 +60,19 @@ paired seeds {11, 23, 37, 42, 57}, 60 ticks each.
 | Mean delta (society − swarm) | **+8.9 lives** |
 | Seeds where society won | 11 of 15 |
 | Sign-test p (two-sided) | 0.118 |
-| Bootstrap 95% CI | [−5.5, +21.8] (includes 0) |
-| Verdict | **directional, not significant** (CI includes 0) |
+| Bootstrap 95% CI | [+2.3, +15.4] (excludes 0) |
+| Verdict | **suggestive** — CI excludes 0 but sign-test (p=0.118) doesn't clear significance |
 
-> We surface this as **directional, not significant**. The direction is
-> consistent (society wins 11/15), but the bootstrap CI includes 0 and the
-> sign-test does not clear α=0.05 — we do not claim a proven lives win. **An
-> earlier +28-lives figure was an n=5 overestimate**: one seed dominated the
-> small sample. Firming to 15 paired seeds collapsed the magnitude to +8.9 and
-> widened the interval across 0. We report the firmed number, not the headline
-> the small sample first suggested — the harness caught our own ghost.
+> We surface this as **suggestive** — the CI excludes 0 but the sign test
+> doesn't clear significance — by the harness's own 3-tier rule (credible =
+> CI-excludes-0 AND sign-significant; suggestive = exactly one; noise =
+> neither). The direction is consistent (society wins 11/15) and the bootstrap
+> 95% CI [+2.3, +15.4] excludes 0, but the sign-test (p=0.118) does not clear
+> α=0.05 — exactly one condition holds, so we do not claim a proven lives win.
+> **An earlier +28-lives figure was an n=5 overestimate**: one seed dominated
+> the small sample. Firming to 15 paired seeds collapsed the magnitude to a
+> small, suggestive +8.9. We report the firmed number, not the headline the
+> small sample first suggested — the harness caught our own ghost.
 >
 > **Sources:** `bench/results/2026-06-22-4arm-refresh/` (seeds {11,23,37,42,57})
 > + `bench/results/2026-06-22-swarm-firm/` (seeds {60..69}).

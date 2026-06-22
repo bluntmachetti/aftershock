@@ -87,13 +87,16 @@ Findings, all causal because every arm faces byte-identical worlds:
    sign-test p=0.031, 95% CI [0.088, 0.164]) at no lives cost. See
    [docs/EVIDENCE.md §S5](docs/EVIDENCE.md).
 3. **Against the flat swarm, the society saves a small, directionally-consistent edge —
-   but it is not statistically significant.** Same five cheap models, with vs without the
-   negotiation protocol, over 15 paired seeds: society wins 11/15 for a mean +8.9 lives,
-   but sign-test p=0.118 and the bootstrap 95% CI [−5.5, +21.8] **includes 0**, so we do
-   not headline a lives magnitude. An earlier n=5 estimate read ~+28 lives; firming to
-   n=15 collapsed it (one seed had dominated the small sample). The harness catching its
-   own ghost is the point — present the protocol-vs-swarm result as *directional, not
-   significant.* The run records still show *why* the direction holds: the swarm wasted
+   suggestive, but not statistically significant.** Same five cheap models, with vs without
+   the negotiation protocol, over 15 paired seeds: society wins 11/15 for a mean +8.9 lives,
+   and the bootstrap 95% CI [+2.3, +15.4] **excludes 0**, but the sign-test (p=0.118) does
+   not clear significance — so by the harness's own 3-tier rule (credible = CI-excludes-0
+   AND sign-significant; suggestive = exactly one; noise = neither) this is **suggestive**:
+   the CI excludes 0 but the sign test doesn't clear significance, so we do not headline a
+   lives magnitude. An earlier n=5 estimate read ~+28 lives; firming to n=15 collapsed it
+   (one seed had dominated the small sample). The harness catching its own ghost is the
+   point — present the protocol-vs-swarm result as *suggestive, not significant.* The run
+   records still show *why* the direction holds: the swarm wasted
    decisions racing for empty resource pools while the society resolved contention in the
    auction before acting. (*swarm's high lives-per-$ is efficiency at a worse outcome.)
 
