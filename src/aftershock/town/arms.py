@@ -74,6 +74,7 @@ def build_arm(
     pool_sizes: dict[str, int] | None = None,
     doctrine: bool = True,
     role_models: dict[str, str] | None = None,
+    contract_trim: bool = True,
     intervention: Intervention | None = None,
 ) -> ArmSetup:
     """Build all components for one (arm, seed) benchmark cell.
@@ -108,6 +109,12 @@ def build_arm(
                   cost-optimal published mix. Enables operating modes like the §20
                   high-conformance infra bump (infrastructure=qwen3.5-plus). No effect
                   on the scripted arm.
+        contract_trim: when True (default) the JSON-mode LLM arms (society/swarm/solo)
+                  render the FIELD-NOTES §21 cost-trimmed decision contract —
+                  byte-identical to the published behaviour. When False they render the
+                  pre-§21 verbose contract (the untrimmed control for the contract
+                  on/off ablation, FIELD-NOTES §21). Δ = trimmed − untrimmed. No effect
+                  on the scripted arm (it has no prompts).
 
     Returns:
         ArmSetup with fully wired world, society, agents, registry, roles,
@@ -144,16 +151,17 @@ def build_arm(
         setup = _build_society(
             world, registry, seed, provider, lessons=lessons, use_tools=society_tools,
             engine_seed=engine_seed, doctrine=doctrine, role_models=role_models,
+            contract_trim=contract_trim,
         )
     elif arm == "swarm":
         setup = _build_swarm(
             world, registry, seed, provider, engine_seed=engine_seed, doctrine=doctrine,
-            role_models=role_models,
+            role_models=role_models, contract_trim=contract_trim,
         )
     elif arm == "solo":
         setup = _build_solo(
             world, registry, seed, provider, engine_seed=engine_seed, doctrine=doctrine,
-            role_models=role_models,
+            role_models=role_models, contract_trim=contract_trim,
         )
     else:
         raise ValueError(f"unhandled arm {arm!r}")  # unreachable
@@ -233,6 +241,7 @@ def _build_society(
     engine_seed: int | None = None,
     doctrine: bool = True,
     role_models: dict[str, str] | None = None,
+    contract_trim: bool = True,
 ) -> ArmSetup:
     roles = load_roles(_TOWN_DIR / "roles")
     _six = ("commander", "comms", "fire", "infrastructure", "medical", "rescue")
@@ -241,6 +250,7 @@ def _build_society(
     agents = build_llm_agents(
         roles, provider, lessons=lessons, arm="society", force_tools=use_tools,
         engine_seed=engine_seed, doctrine=doctrine, role_models=role_models,
+        contract_trim=contract_trim,
     )
     return ArmSetup(
         world=world,
@@ -261,6 +271,7 @@ def _build_swarm(
     engine_seed: int | None = None,
     doctrine: bool = True,
     role_models: dict[str, str] | None = None,
+    contract_trim: bool = True,
 ) -> ArmSetup:
     roles = load_roles(_TOWN_DIR / "roles_swarm")
     # Roster: agent_id == role name for the five swarm roles
@@ -283,6 +294,7 @@ def _build_swarm(
             allowed=role.allowed_decisions,
             decision_docs=DECISION_DOCS_DIRECT,
             proposal_docs={},  # swarm has no proposals — decisions-only contract
+            trim=contract_trim,
         )
         agents[agent_id] = LLMAgent(
             agent_id=agent_id,
@@ -310,6 +322,7 @@ def _build_solo(
     engine_seed: int | None = None,
     doctrine: bool = True,
     role_models: dict[str, str] | None = None,
+    contract_trim: bool = True,
 ) -> ArmSetup:
     roles = load_roles(_TOWN_DIR / "roles_solo")
     solo_role = roles["solo"]
@@ -330,6 +343,7 @@ def _build_solo(
         allowed=solo_role.allowed_decisions,
         decision_docs=DECISION_DOCS_DIRECT,
         proposal_docs={},  # solo has no proposals — decisions-only contract
+        trim=contract_trim,
     )
     agents: dict[str, Agent] = {
         "solo": LLMAgent(

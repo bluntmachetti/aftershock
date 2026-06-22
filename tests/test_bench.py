@@ -1233,3 +1233,138 @@ def test_run_ablation_doctrine_resumes_both_sides() -> None:
         run_ablation("society", "society", seeds=[42], ticks=2,
                      provider=MockProvider(script=script), out_dir=out, ablate="doctrine")
         assert calls["n"] == first, "resume must not re-execute completed cells"
+
+
+# ---------------------------------------------------------------------------
+# Contract on/off ablation (FIELD-NOTES §21) — same arm, the §21 contract trim
+# flipped. Mirrors the doctrine ablation: trimmed (treatment) vs untrimmed (control).
+# ---------------------------------------------------------------------------
+
+
+def _contract_result(cells: list[dict[str, Any]]) -> dict[str, Any]:
+    """Assemble a contract-ablation result dict the way _run_knob_ablation does."""
+    from aftershock.bench import _conformance_block
+
+    res = analyze_ablation(cells, "society-untrimmed", "society", key="label")
+    res["ablate"] = "contract"
+    res["arm"] = "society"
+    res["conformance"] = _conformance_block(cells, "society-untrimmed", "society")
+    return res
+
+
+def test_render_contract_leads_with_conformance() -> None:
+    """The contract ablation renders the deterministic conformance block (the
+    team-alignment dip check) BEFORE the demoted '## Lives (secondary signal)'."""
+    cells = [
+        _labeled_cell("society-untrimmed", 11, 103.0, 0.916, {"comms": 0.92}),
+        _labeled_cell("society-untrimmed", 23, 100.0, 0.916, {"comms": 0.92}),
+        _labeled_cell("society", 11, 108.0, 0.879, {"comms": 0.88}),
+        _labeled_cell("society", 23, 107.0, 0.879, {"comms": 0.88}),
+    ]
+    md = render_ablation_markdown(_contract_result(cells))
+    conf_pos = md.index("## Conformance")
+    lives_pos = md.index("## Lives (secondary signal)")
+    assert conf_pos < lives_pos, "conformance must lead the lives section"
+    assert "contract on/off" in md
+    assert "contract trimmed" in md and "contract untrimmed" in md
+    # The team-alignment Δ is negative (the §21 -0.037 dip), tagged as a verdict.
+    assert "Verdict (conformance Δ)" in md
+    assert "Verdict (lives Δ)" in md
+
+
+def test_render_contract_conformance_dip_is_signed() -> None:
+    """A consistent negative conformance Δ (trimmed < untrimmed) renders a regression
+    verdict — the §21 dip check the ablation exists for."""
+    cells = [
+        _labeled_cell("society-untrimmed", 11, 100.0, 0.916, {"comms": 0.92}),
+        _labeled_cell("society-untrimmed", 23, 100.0, 0.910, {"comms": 0.91}),
+        _labeled_cell("society", 11, 105.0, 0.879, {"comms": 0.88}),
+        _labeled_cell("society", 23, 105.0, 0.873, {"comms": 0.87}),
+    ]
+    block = _contract_result(cells)["conformance"]
+    assert block["mean_delta"] < 0  # trimmed lowers alignment (the dip)
+
+
+def test_run_ablation_contract_rejects_mismatched_arms() -> None:
+    with tempfile.TemporaryDirectory() as td, pytest.raises(
+        ValueError, match="control == treatment"
+    ):
+        run_ablation("society", "swarm", seeds=[42], ticks=3,
+                     provider=None, out_dir=Path(td), ablate="contract")
+
+
+def test_run_ablation_contract_rejects_scripted() -> None:
+    with tempfile.TemporaryDirectory() as td, pytest.raises(
+        ValueError, match="decision contract"
+    ):
+        run_ablation("scripted", "scripted", seeds=[42], ticks=3,
+                     provider=None, out_dir=Path(td), ablate="contract")
+
+
+def test_run_ablation_contract_end_to_end_mock() -> None:
+    """Full contract ablation through the engine with a MockProvider: distinct labeled
+    cells (trimmed vs untrimmed), conformance block present, ablate/arm markers set."""
+    from aftershock.llm.provider import MockProvider
+
+    prov = MockProvider(script=lambda m, s, u: '{"decisions": []}')
+    with tempfile.TemporaryDirectory() as td:
+        out = Path(td)
+        res = run_ablation("society", "society", seeds=[42, 57], ticks=2,
+                           provider=prov, out_dir=out, ablate="contract")
+        assert res["ablate"] == "contract"
+        assert res["arm"] == "society"
+        assert res["control"] == "society-untrimmed"  # untrimmed = control side
+        assert res["treatment"] == "society"  # trimmed = canonical (treatment) side
+        assert res["n"] == 2
+        assert "conformance" in res and res["conformance"]["n"] == 2
+        # Both sides wrote distinct cell dirs (no collision on the same arm).
+        dirs = {p.name for p in out.iterdir() if p.is_dir()}
+        assert {"society-seed42", "society-seed57",
+                "society-untrimmed-seed42", "society-untrimmed-seed57"} <= dirs
+        md = render_ablation_markdown(res)
+        assert "contract on/off" in md
+        assert "## Conformance" in md
+
+
+def test_run_ablation_contract_cells_use_right_trim_settings() -> None:
+    """The two contract-ablation cells carry the right contract: the trimmed (treatment)
+    cell renders the §21 compact skeleton; the untrimmed (control) cell renders the
+    pre-§21 verbose skeleton. Proven from the recorded run dirs' system prompts."""
+    from aftershock.llm.provider import MockProvider
+    from aftershock.town.arms import build_arm
+
+    # The ablation builds the ON cell with contract_trim=True and the OFF cell with
+    # contract_trim=False — assert via build_arm (the same call the ablation makes).
+    on = build_arm("society", 42, MockProvider(script=['{"decisions": []}']),
+                   contract_trim=True)
+    off = build_arm("society", 42, MockProvider(script=['{"decisions": []}']),
+                    contract_trim=False)
+    on_sys = on.agents["commander"]._system
+    off_sys = off.agents["commander"]._system
+    # Treatment (trimmed): compact single-line skeleton.
+    assert '{"decisions":[{"decision_type":"<type>"' in on_sys
+    # Control (untrimmed): pre-§21 multi-line skeleton + the deduped rule restored.
+    assert '  "decisions": [' in off_sys
+    assert "- Keep each rationale under 25 words." in off_sys
+    assert on_sys != off_sys
+
+
+def test_run_ablation_contract_resumes_both_sides() -> None:
+    """Re-running the contract ablation reuses both sides' completed cells ($0)."""
+    from aftershock.llm.provider import MockProvider
+
+    calls = {"n": 0}
+
+    def script(m, s, u):  # type: ignore[no-untyped-def]
+        calls["n"] += 1
+        return '{"decisions": []}'
+
+    with tempfile.TemporaryDirectory() as td:
+        out = Path(td)
+        run_ablation("society", "society", seeds=[42], ticks=2,
+                     provider=MockProvider(script=script), out_dir=out, ablate="contract")
+        first = calls["n"]
+        assert first > 0
+        run_ablation("society", "society", seeds=[42], ticks=2,
+                     provider=MockProvider(script=script), out_dir=out, ablate="contract")
+        assert calls["n"] == first, "resume must not re-execute completed cells"

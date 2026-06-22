@@ -337,6 +337,61 @@ def test_build_llm_agents_doctrine_true_is_default(roles: dict) -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# contract_trim knob (FIELD-NOTES §21) — the contract on/off ablation control,
+# mirroring the doctrine knob above.
+# ---------------------------------------------------------------------------
+
+
+def test_build_llm_agents_contract_trim_true_is_default(roles: dict) -> None:
+    """The default (no contract_trim kwarg) is byte-identical to contract_trim=True."""
+    provider = MockProvider(script=["{}"])
+    default = build_llm_agents(roles, provider, arm="society")
+    explicit = build_llm_agents(roles, provider, arm="society", contract_trim=True)
+    for agent_id in default:
+        assert (
+            default[agent_id]._system  # type: ignore[attr-defined]
+            == explicit[agent_id]._system  # type: ignore[attr-defined]
+        ), f"contract_trim=True default drifted for {agent_id}"
+
+
+def test_build_llm_agents_contract_trim_false_changes_prompt(roles: dict) -> None:
+    """contract_trim=False renders the pre-§21 verbose contract — every JSON-mode
+    role's system prompt differs from the trimmed (default) build."""
+    provider = MockProvider(script=["{}"])
+    trimmed = build_llm_agents(roles, provider, arm="society", contract_trim=True)
+    untrimmed = build_llm_agents(roles, provider, arm="society", contract_trim=False)
+    for agent_id in trimmed:
+        assert (
+            trimmed[agent_id]._system  # type: ignore[attr-defined]
+            != untrimmed[agent_id]._system  # type: ignore[attr-defined]
+        ), f"contract_trim=False did not change {agent_id} prompt"
+
+
+def test_build_llm_agents_contract_trim_false_uses_verbose_proposal_docs(roles: dict) -> None:
+    """contract_trim=False swaps in PROPOSAL_DOCS_VERBOSE (the pre-§21 descriptions)."""
+    from aftershock.town.prompts import PROPOSAL_DOCS, PROPOSAL_DOCS_VERBOSE
+
+    provider = MockProvider(script=["{}"])
+    untrimmed = build_llm_agents(roles, provider, arm="society", contract_trim=False)
+    commander = untrimmed["commander"]._system  # type: ignore[attr-defined]
+    # The verbose resource_request description appears; the trimmed one does not.
+    assert PROPOSAL_DOCS_VERBOSE["resource_request"] in commander
+    assert PROPOSAL_DOCS["resource_request"] not in commander
+
+
+def test_build_llm_agents_contract_trim_only_touches_contract(roles: dict) -> None:
+    """Flipping contract_trim leaves the doctrine region intact — both builds carry
+    the same doctrine blocks (the knob is contract-only, orthogonal to doctrine)."""
+    provider = MockProvider(script=["{}"])
+    trimmed = build_llm_agents(roles, provider, arm="society", contract_trim=True)
+    untrimmed = build_llm_agents(roles, provider, arm="society", contract_trim=False)
+    for agents in (trimmed, untrimmed):
+        system = agents["commander"]._system  # type: ignore[attr-defined]
+        assert "TEAM DOCTRINE:" in system
+        assert "YOUR ROLE DOCTRINE:" in system
+
+
 def test_build_llm_agents_scripted_arm_unaffected() -> None:
     """Scripted agents are not constructed via build_llm_agents — just verify
     that doctrine_blocks for scripted arm returns empty (scripted is not a valid arm)."""
