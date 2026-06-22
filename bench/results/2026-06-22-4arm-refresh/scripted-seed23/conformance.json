@@ -1,0 +1,74 @@
+{
+  "arm": "scripted",
+  "notes": [],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 1.0,
+    "fire": 1.0,
+    "infrastructure": 1.0,
+    "medical": 1.0,
+    "rescue": 1.0
+  },
+  "rules": {
+    "C1": {
+      "commander": {
+        "applicable": 9,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "C2": {},
+    "C3": {
+      "commander": {
+        "applicable": 4,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "F1": {},
+    "F2": {},
+    "I1": {
+      "infrastructure": {
+        "applicable": 6,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "I2": {},
+    "M1": {},
+    "M2": {},
+    "R1": {},
+    "R2": {},
+    "T1": {},
+    "T2": {
+      "fire": {
+        "applicable": 3,
+        "rate": 1.0,
+        "violations": []
+      },
+      "infrastructure": {
+        "applicable": 4,
+        "rate": 1.0,
+        "violations": []
+      },
+      "medical": {
+        "applicable": 6,
+        "rate": 1.0,
+        "violations": []
+      },
+      "rescue": {
+        "applicable": 6,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "T3": {},
+    "T4": {},
+    "T5": {},
+    "T6": {},
+    "X1": {},
+    "X2": {}
+  },
+  "seed": 23,
+  "team_alignment": 1.0
+}

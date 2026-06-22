@@ -1,0 +1,80 @@
+{
+  "arm": "society",
+  "cost": {
+    "by_agent": {
+      "commander": {
+        "completion_tokens": 1414,
+        "cost_usd": 0.018004400000000007,
+        "prompt_tokens": 36527
+      },
+      "comms": {
+        "completion_tokens": 3023,
+        "cost_usd": 0.004739100000000002,
+        "prompt_tokens": 35299
+      },
+      "fire": {
+        "completion_tokens": 3665,
+        "cost_usd": 0.0052137,
+        "prompt_tokens": 37477
+      },
+      "infrastructure": {
+        "completion_tokens": 3340,
+        "cost_usd": 0.005665000000000001,
+        "prompt_tokens": 43290
+      },
+      "medical": {
+        "completion_tokens": 3957,
+        "cost_usd": 0.005365899999999997,
+        "prompt_tokens": 37831
+      },
+      "rescue": {
+        "completion_tokens": 3299,
+        "cost_usd": 0.0050755999999999996,
+        "prompt_tokens": 37560
+      }
+    },
+    "by_model": {
+      "qwen3.5-flash": {
+        "completion_tokens": 17284,
+        "cost_usd": 0.026059299999999997,
+        "prompt_tokens": 191457
+      },
+      "qwen3.5-plus": {
+        "completion_tokens": 1414,
+        "cost_usd": 0.018004400000000007,
+        "prompt_tokens": 36527
+      }
+    },
+    "completion_tokens": 18698,
+    "cost_usd": 0.04406369999999999,
+    "prompt_tokens": 227984
+  },
+  "models": [
+    "qwen3.5-flash",
+    "qwen3.5-plus"
+  ],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 0.88,
+    "fire": 0.9047619047619048,
+    "infrastructure": 0.8064516129032258,
+    "medical": 0.86,
+    "rescue": 0.7857142857142857
+  },
+  "scores": {
+    "avg_response_ticks": 5.9,
+    "lives_lost": 48.0,
+    "lives_saved": 122.0,
+    "missions_failed": 0.0,
+    "missions_open": 0.0,
+    "missions_resolved": 10.0,
+    "panic": 0.0,
+    "resource_utilization": 0.0
+  },
+  "seed": 68,
+  "team_alignment": 0.8685714285714285,
+  "ticks_requested": 60,
+  "ticks_run": 37,
+  "wall_s": 79.35770653001964,
+  "world_digest": "f12d533889283e297536906a12936caf352ff2e6f563b72cfa92304791d8ad38"
+}

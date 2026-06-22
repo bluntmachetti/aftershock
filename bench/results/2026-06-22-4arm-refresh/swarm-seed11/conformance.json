@@ -1,0 +1,157 @@
+{
+  "arm": "swarm",
+  "notes": [
+    "T1 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "T2 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "T3 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "T4 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "T6 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "C1 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "C2 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "C3 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "M2 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "R2 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "F2 not in force for arm 'swarm' \u2014 excluded from scoring"
+  ],
+  "role_conformance": {
+    "comms": 0.5,
+    "fire": 0.0,
+    "infrastructure": 0.7142857142857143,
+    "medical": 1.0,
+    "rescue": 0.0
+  },
+  "rules": {
+    "C1": {
+      "commander": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "C2": {},
+    "C3": {},
+    "F1": {},
+    "F2": {
+      "fire": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "I1": {
+      "infrastructure": {
+        "applicable": 6,
+        "rate": 0.8333333333333334,
+        "violations": [
+          {
+            "detail": "repair_road rejected: 'no repair_crew available'",
+            "tick": 8
+          }
+        ]
+      }
+    },
+    "I2": {},
+    "M1": {},
+    "M2": {
+      "medical": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "R1": {},
+    "R2": {
+      "rescue": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "T1": {
+      "comms": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      },
+      "fire": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      },
+      "infrastructure": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      },
+      "medical": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      },
+      "rescue": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "T2": {},
+    "T3": {},
+    "T4": {},
+    "T5": {
+      "fire": {
+        "applicable": 1,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm2', 'qty': 1, 'resource': 'fire_engine'} 3 tick(s) after rejection at t=3",
+            "tick": 6
+          }
+        ]
+      },
+      "infrastructure": {
+        "applicable": 1,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm9', 'qty': 1, 'resource': 'ambulance'} 2 tick(s) after rejection at t=27",
+            "tick": 29
+          }
+        ]
+      },
+      "rescue": {
+        "applicable": 3,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm3', 'qty': 2, 'resource': 'ambulance'} 3 tick(s) after rejection at t=6",
+            "tick": 9
+          },
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm9', 'qty': 0, 'resource': 'rescue_crew'} 1 tick(s) after rejection at t=23",
+            "tick": 24
+          },
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm9', 'qty': 0, 'resource': 'rescue_crew'} 1 tick(s) after rejection at t=24",
+            "tick": 25
+          }
+        ]
+      }
+    },
+    "T6": {},
+    "X1": {},
+    "X2": {
+      "comms": {
+        "applicable": 2,
+        "rate": 0.5,
+        "violations": [
+          {
+            "detail": "broadcast at t=7 is only 2 tick(s) after previous broadcast at t=5 (minimum gap: 3)",
+            "tick": 7
+          }
+        ]
+      }
+    }
+  },
+  "seed": 11,
+  "team_alignment": 0.0
+}

@@ -1,0 +1,44 @@
+{
+  "arm": "solo",
+  "cost": {
+    "by_agent": {
+      "solo": {
+        "completion_tokens": 2817,
+        "cost_usd": 0.049701599999999985,
+        "prompt_tokens": 27333
+      }
+    },
+    "by_model": {
+      "qwen3-max": {
+        "completion_tokens": 2817,
+        "cost_usd": 0.049701599999999985,
+        "prompt_tokens": 27333
+      }
+    },
+    "completion_tokens": 2817,
+    "cost_usd": 0.049701599999999985,
+    "prompt_tokens": 27333
+  },
+  "models": [
+    "qwen3-max"
+  ],
+  "role_conformance": {
+    "solo": 0.0
+  },
+  "scores": {
+    "avg_response_ticks": 6.6,
+    "lives_lost": 81.0,
+    "lives_saved": 90.0,
+    "missions_failed": 1.0,
+    "missions_open": 0.0,
+    "missions_resolved": 10.0,
+    "panic": 0.04999999999999985,
+    "resource_utilization": 0.0
+  },
+  "seed": 37,
+  "team_alignment": 0.0,
+  "ticks_requested": 60,
+  "ticks_run": 30,
+  "wall_s": 111.68785396311432,
+  "world_digest": "f2bbf9fcae1828935a05353b63f2bd8de3e8adad4d0decde27b9bce34f1a9ab3"
+}

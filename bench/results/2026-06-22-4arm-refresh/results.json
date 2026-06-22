@@ -1,0 +1,108 @@
+{
+  "arms": {
+    "scripted": {
+      "mean_cost_usd": 0.0,
+      "mean_lives_lost": 55.4,
+      "mean_lives_saved": 106.8,
+      "mean_missions_failed": 0.2,
+      "mean_missions_resolved": 10.8,
+      "mean_team_alignment": 1.0,
+      "mean_wall_s": 0.039571994170546534,
+      "n": 5,
+      "sd_cost_usd": 0.0,
+      "sd_lives_lost": 15.80506248010428,
+      "sd_lives_saved": 18.019433953373785,
+      "sd_missions_failed": 0.447213595499958,
+      "sd_missions_resolved": 1.3038404810405297,
+      "sd_wall_s": 0.017398672656726972
+    },
+    "society": {
+      "lives_per_dollar": 3069.216494716929,
+      "mean_cost_usd": 0.03531845999999998,
+      "mean_lives_lost": 53.8,
+      "mean_lives_saved": 108.4,
+      "mean_missions_failed": 0.2,
+      "mean_missions_resolved": 10.8,
+      "mean_team_alignment": 0.9041319557474761,
+      "mean_wall_s": 69.73142620357685,
+      "n": 5,
+      "sd_cost_usd": 0.002545893403699377,
+      "sd_lives_lost": 17.123083834403193,
+      "sd_lives_saved": 17.86896751354146,
+      "sd_missions_failed": 0.447213595499958,
+      "sd_missions_resolved": 1.3038404810405297,
+      "sd_wall_s": 7.4555186765676895
+    },
+    "solo": {
+      "lives_per_dollar": 1855.0168503831892,
+      "mean_cost_usd": 0.05153591999999999,
+      "mean_lives_lost": 66.6,
+      "mean_lives_saved": 95.6,
+      "mean_missions_failed": 0.8,
+      "mean_missions_resolved": 10.2,
+      "mean_team_alignment": 0.2,
+      "mean_wall_s": 115.71939708059654,
+      "n": 5,
+      "sd_cost_usd": 0.004797120906543842,
+      "sd_lives_lost": 12.759310326189265,
+      "sd_lives_saved": 18.75633226406485,
+      "sd_missions_failed": 0.8366600265340756,
+      "sd_missions_resolved": 1.9235384061671343,
+      "sd_wall_s": 14.178869928335564
+    },
+    "swarm": {
+      "lives_per_dollar": 7132.93881641884,
+      "mean_cost_usd": 0.013150259999999997,
+      "mean_lives_lost": 69.4,
+      "mean_lives_saved": 93.8,
+      "mean_missions_failed": 1.4,
+      "mean_missions_resolved": 9.6,
+      "mean_team_alignment": 0.0,
+      "mean_wall_s": 44.749746137158944,
+      "n": 5,
+      "sd_cost_usd": 0.001082528439811166,
+      "sd_lives_lost": 20.767763480933617,
+      "sd_lives_saved": 13.386560424545209,
+      "sd_missions_failed": 1.3416407864998738,
+      "sd_missions_resolved": 2.073644135332772,
+      "sd_wall_s": 3.3504408034265256
+    }
+  },
+  "paired": {
+    "scripted": {
+      "11": 136.0,
+      "23": 92.0,
+      "37": 95.0,
+      "42": 99.0,
+      "57": 112.0
+    },
+    "society": {
+      "11": 138.0,
+      "23": 94.0,
+      "37": 95.0,
+      "42": 105.0,
+      "57": 110.0
+    },
+    "solo": {
+      "11": 125.0,
+      "23": 73.0,
+      "37": 90.0,
+      "42": 95.0,
+      "57": 95.0
+    },
+    "swarm": {
+      "11": 103.0,
+      "23": 79.0,
+      "37": 83.0,
+      "42": 93.0,
+      "57": 111.0
+    }
+  },
+  "provenance": {
+    "dirty": true,
+    "git_sha": "239f33f8a0e0fc5f9d0706e3ca73c21f2e2cc1b4",
+    "model_endpoint": "dashscope-intl",
+    "schema_version": 1,
+    "scripted_verify_digest": "d246d56f991fd681fc7201714b0728af38f681b66f4f42dee03ba1fc63f3705a"
+  }
+}

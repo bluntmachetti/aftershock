@@ -1,0 +1,80 @@
+{
+  "arm": "society",
+  "cost": {
+    "by_agent": {
+      "commander": {
+        "completion_tokens": 1671,
+        "cost_usd": 0.014794400000000003,
+        "prompt_tokens": 26960
+      },
+      "comms": {
+        "completion_tokens": 1825,
+        "cost_usd": 0.0033463,
+        "prompt_tokens": 26163
+      },
+      "fire": {
+        "completion_tokens": 2951,
+        "cost_usd": 0.0039605,
+        "prompt_tokens": 27801
+      },
+      "infrastructure": {
+        "completion_tokens": 2123,
+        "cost_usd": 0.0040382,
+        "prompt_tokens": 31890
+      },
+      "medical": {
+        "completion_tokens": 2527,
+        "cost_usd": 0.003797799999999999,
+        "prompt_tokens": 27870
+      },
+      "rescue": {
+        "completion_tokens": 2420,
+        "cost_usd": 0.0037444,
+        "prompt_tokens": 27764
+      }
+    },
+    "by_model": {
+      "qwen3.5-flash": {
+        "completion_tokens": 11846,
+        "cost_usd": 0.018887200000000017,
+        "prompt_tokens": 141488
+      },
+      "qwen3.5-plus": {
+        "completion_tokens": 1671,
+        "cost_usd": 0.014794400000000003,
+        "prompt_tokens": 26960
+      }
+    },
+    "completion_tokens": 13517,
+    "cost_usd": 0.033681599999999985,
+    "prompt_tokens": 168448
+  },
+  "models": [
+    "qwen3.5-flash",
+    "qwen3.5-plus"
+  ],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 0.9375,
+    "fire": 0.8611111111111112,
+    "infrastructure": 0.8,
+    "medical": 0.7666666666666666,
+    "rescue": 0.8148148148148149
+  },
+  "scores": {
+    "avg_response_ticks": 4.538461538461538,
+    "lives_lost": 45.0,
+    "lives_saved": 97.0,
+    "missions_failed": 0.0,
+    "missions_open": 0.0,
+    "missions_resolved": 13.0,
+    "panic": 0.06000000000000005,
+    "resource_utilization": 0.0
+  },
+  "seed": 65,
+  "team_alignment": 0.8455284552845528,
+  "ticks_requested": 60,
+  "ticks_run": 27,
+  "wall_s": 69.99321311782114,
+  "world_digest": "2c37c50910c28eb7a99de055b3385f7d9e6bec18e604873b5964de3b29cf4953"
+}

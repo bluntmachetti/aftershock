@@ -235,6 +235,30 @@
       "verdict_note": null
     },
     {
+      "ablate": null,
+      "conformance_verdict": null,
+      "cost_usd": 0.10000463999999998,
+      "dir": "2026-06-22-4arm-refresh",
+      "field_notes_section": null,
+      "git_sha": "239f33f8a0e0fc5f9d0706e3ca73c21f2e2cc1b4",
+      "kind": "results",
+      "lives_per_dollar": 3069.216494716929,
+      "lives_saved": 108.4,
+      "mean_team_alignment": 0.526032988936869,
+      "model_endpoint": "dashscope-intl",
+      "records_committed": true,
+      "schema_version": 1,
+      "seeds": [
+        11,
+        23,
+        37,
+        42,
+        57
+      ],
+      "verdict": null,
+      "verdict_note": null
+    },
+    {
       "ablate": "doctrine",
       "conformance_verdict": "credible",
       "cost_usd": null,
@@ -258,9 +282,38 @@
       ],
       "verdict": "noise",
       "verdict_note": null
+    },
+    {
+      "ablate": null,
+      "conformance_verdict": null,
+      "cost_usd": 0.05193599999999999,
+      "dir": "2026-06-22-swarm-firm",
+      "field_notes_section": null,
+      "git_sha": "239f33f8a0e0fc5f9d0706e3ca73c21f2e2cc1b4",
+      "kind": "results",
+      "lives_per_dollar": 2517.982369882599,
+      "lives_saved": 95.0,
+      "mean_team_alignment": 0.4327996077242672,
+      "model_endpoint": "dashscope-intl",
+      "records_committed": true,
+      "schema_version": 1,
+      "seeds": [
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69
+      ],
+      "verdict": null,
+      "verdict_note": null
     }
   ],
-  "generated_by_git_sha": "ea44ddcffd7e0da437d06064edd4e97f22ea83ff",
-  "n_experiments": 11,
+  "generated_by_git_sha": "239f33f8a0e0fc5f9d0706e3ca73c21f2e2cc1b4",
+  "n_experiments": 13,
   "schema_version": 1
 }

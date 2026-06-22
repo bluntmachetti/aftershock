@@ -1,0 +1,243 @@
+{
+  "arm": "society",
+  "notes": [],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 0.88,
+    "fire": 0.9047619047619048,
+    "infrastructure": 0.8064516129032258,
+    "medical": 0.86,
+    "rescue": 0.7857142857142857
+  },
+  "rules": {
+    "C1": {
+      "commander": {
+        "applicable": 10,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "C2": {},
+    "C3": {},
+    "F1": {},
+    "F2": {},
+    "I1": {
+      "infrastructure": {
+        "applicable": 12,
+        "rate": 0.5833333333333333,
+        "violations": [
+          {
+            "detail": "repair_road rejected: 'no repair_crew available'",
+            "tick": 3
+          },
+          {
+            "detail": "repair_road rejected: 'no repair_crew available'",
+            "tick": 14
+          },
+          {
+            "detail": "repair_road rejected: 'no repair_crew available'",
+            "tick": 30
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'industrial' is not blocked\"",
+            "tick": 33
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'market' is not blocked\"",
+            "tick": 35
+          }
+        ]
+      }
+    },
+    "I2": {},
+    "M1": {},
+    "M2": {},
+    "R1": {},
+    "R2": {},
+    "T1": {},
+    "T2": {
+      "comms": {
+        "applicable": 20,
+        "rate": 1.0,
+        "violations": []
+      },
+      "fire": {
+        "applicable": 33,
+        "rate": 0.9696969696969697,
+        "violations": [
+          {
+            "detail": "requested 1 'ambulance' for 'm5' but max allowed is 0 (required=1, assigned=2)",
+            "tick": 15
+          }
+        ]
+      },
+      "infrastructure": {
+        "applicable": 15,
+        "rate": 0.9333333333333333,
+        "violations": [
+          {
+            "detail": "requested 1 'ambulance' for 'm5' but max allowed is 0 (required=1, assigned=2)",
+            "tick": 15
+          }
+        ]
+      },
+      "medical": {
+        "applicable": 41,
+        "rate": 0.9512195121951219,
+        "violations": [
+          {
+            "detail": "requested 1 'fire_engine' for 'm6' but max allowed is 0 (required=1, assigned=1)",
+            "tick": 14
+          },
+          {
+            "detail": "requested 1 'ambulance' for 'm5' but max allowed is 0 (required=1, assigned=2)",
+            "tick": 15
+          }
+        ]
+      },
+      "rescue": {
+        "applicable": 32,
+        "rate": 0.75,
+        "violations": [
+          {
+            "detail": "requested 1 'rescue_crew' for 'm2' but max allowed is 0 (required=2, assigned=2)",
+            "tick": 2
+          },
+          {
+            "detail": "requested 2 'rescue_crew' for 'm1' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 7
+          },
+          {
+            "detail": "requested 1 'fire_engine' for 'm1' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 7
+          },
+          {
+            "detail": "requested 1 'fire_engine' for 'm6' but max allowed is 0 (required=1, assigned=1)",
+            "tick": 14
+          },
+          {
+            "detail": "requested 1 'rescue_crew' for 'm5' but max allowed is 0 (required=1, assigned=2)",
+            "tick": 15
+          },
+          {
+            "detail": "requested 1 'ambulance' for 'm5' but max allowed is 0 (required=1, assigned=2)",
+            "tick": 15
+          },
+          {
+            "detail": "requested 1 'rescue_crew' for 'm8' but max allowed is 0 (required=1, assigned=1)",
+            "tick": 34
+          },
+          {
+            "detail": "requested 1 'rescue_crew' for 'm8' but max allowed is 0 (required=1, assigned=1)",
+            "tick": 36
+          }
+        ]
+      }
+    },
+    "T3": {
+      "comms": {
+        "applicable": 2,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=5 > 4 for 'm1'",
+            "tick": 3
+          },
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=5 > 4 for 'm1'",
+            "tick": 3
+          }
+        ]
+      },
+      "fire": {
+        "applicable": 9,
+        "rate": 0.6666666666666667,
+        "violations": [
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=6 > 4 for 'm1'",
+            "tick": 2
+          },
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=5 > 4 for 'm1'",
+            "tick": 3
+          },
+          {
+            "detail": "urgency=9 > 8 but severity=2 < 4 and deadline_in=5 > 4 for 'm6'",
+            "tick": 15
+          }
+        ]
+      },
+      "infrastructure": {
+        "applicable": 4,
+        "rate": 1.0,
+        "violations": []
+      },
+      "medical": {
+        "applicable": 8,
+        "rate": 0.5,
+        "violations": [
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=6 > 4 for 'm1'",
+            "tick": 2
+          },
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=6 > 4 for 'm1'",
+            "tick": 2
+          },
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=9 > 4 for 'm7'",
+            "tick": 11
+          },
+          {
+            "detail": "urgency=9 > 8 but severity=2 < 4 and deadline_in=6 > 4 for 'm6'",
+            "tick": 14
+          }
+        ]
+      },
+      "rescue": {
+        "applicable": 9,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "T4": {},
+    "T5": {},
+    "T6": {
+      "medical": {
+        "applicable": 1,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "re-requested 'ambulance' for 'm8' when requirement already met in worlds[t-1] (grant at t=33)",
+            "tick": 34
+          }
+        ]
+      },
+      "rescue": {
+        "applicable": 1,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "re-requested 'rescue_crew' for 'm2' when requirement already met in worlds[t-1] (grant at t=1)",
+            "tick": 2
+          }
+        ]
+      }
+    },
+    "X1": {},
+    "X2": {
+      "comms": {
+        "applicable": 3,
+        "rate": 0.6666666666666667,
+        "violations": [
+          {
+            "detail": "broadcast at t=4 is only 2 tick(s) after previous broadcast at t=2 (minimum gap: 3)",
+            "tick": 4
+          }
+        ]
+      }
+    }
+  },
+  "seed": 68,
+  "team_alignment": 0.8685714285714285
+}

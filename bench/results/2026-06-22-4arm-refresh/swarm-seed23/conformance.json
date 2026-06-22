@@ -1,0 +1,147 @@
+{
+  "arm": "swarm",
+  "notes": [
+    "T1 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "T2 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "T3 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "T4 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "T6 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "C1 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "C2 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "C3 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "M2 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "R2 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "F2 not in force for arm 'swarm' \u2014 excluded from scoring"
+  ],
+  "role_conformance": {
+    "comms": 1.0,
+    "fire": 0.0,
+    "infrastructure": 0.7333333333333334,
+    "medical": 0.0,
+    "rescue": 1.0
+  },
+  "rules": {
+    "C1": {
+      "commander": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "C2": {},
+    "C3": {},
+    "F1": {},
+    "F2": {},
+    "I1": {
+      "infrastructure": {
+        "applicable": 11,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "I2": {},
+    "M1": {},
+    "M2": {
+      "medical": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "R1": {},
+    "R2": {},
+    "T1": {
+      "comms": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      },
+      "fire": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      },
+      "infrastructure": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      },
+      "medical": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      },
+      "rescue": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "T2": {},
+    "T3": {},
+    "T4": {},
+    "T5": {
+      "fire": {
+        "applicable": 2,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm4', 'qty': 1, 'resource': 'ambulance'} 2 tick(s) after rejection at t=4",
+            "tick": 6
+          },
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm6', 'qty': 1, 'resource': 'repair_crew'} 1 tick(s) after rejection at t=13",
+            "tick": 14
+          }
+        ]
+      },
+      "infrastructure": {
+        "applicable": 4,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor_industrial'} 1 tick(s) after rejection at t=1",
+            "tick": 2
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor industrial'} 2 tick(s) after rejection at t=3",
+            "tick": 5
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor industrial'} 2 tick(s) after rejection at t=5",
+            "tick": 7
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'harbor industrial'} 2 tick(s) after rejection at t=7",
+            "tick": 9
+          }
+        ]
+      },
+      "medical": {
+        "applicable": 2,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm3', 'qty': 1, 'resource': 'ambulance'} 1 tick(s) after rejection at t=4",
+            "tick": 5
+          },
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm3', 'qty': 1, 'resource': 'ambulance'} 2 tick(s) after rejection at t=4",
+            "tick": 6
+          }
+        ]
+      }
+    },
+    "T6": {},
+    "X1": {
+      "comms": {
+        "applicable": 1,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "X2": {}
+  },
+  "seed": 23,
+  "team_alignment": 0.0
+}

@@ -1,0 +1,208 @@
+{
+  "arm": "society",
+  "notes": [],
+  "role_conformance": {
+    "commander": 0.9,
+    "comms": 1.0,
+    "fire": 0.8723404255319149,
+    "infrastructure": 0.9019607843137255,
+    "medical": 0.9777777777777777,
+    "rescue": 0.896551724137931
+  },
+  "rules": {
+    "C1": {
+      "commander": {
+        "applicable": 10,
+        "rate": 0.9,
+        "violations": [
+          {
+            "detail": "mission 'm7' spawned at t=10 still has priority=0 at t=12",
+            "tick": 12
+          }
+        ]
+      }
+    },
+    "C2": {},
+    "C3": {},
+    "F1": {
+      "fire": {
+        "applicable": 1,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "requested for 'm3' (priority=8) but ignored 'm5' (priority=10) which has unmet requirements",
+            "tick": 9
+          }
+        ]
+      }
+    },
+    "F2": {},
+    "I1": {
+      "infrastructure": {
+        "applicable": 10,
+        "rate": 0.5,
+        "violations": [
+          {
+            "detail": "repair_road rejected: \"road in district 'harbor' is not blocked\"",
+            "tick": 6
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'market' is not blocked\"",
+            "tick": 9
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'industrial' is not blocked\"",
+            "tick": 10
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'hospital_district' is not blocked\"",
+            "tick": 27
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'residential_north' is not blocked\"",
+            "tick": 29
+          }
+        ]
+      }
+    },
+    "I2": {},
+    "M1": {},
+    "M2": {},
+    "R1": {},
+    "R2": {
+      "rescue": {
+        "applicable": 1,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "no escalation for 'm2' within [t=8, t=9] (deadline_in=3, staffing=0.00)",
+            "tick": 9
+          }
+        ]
+      }
+    },
+    "T1": {},
+    "T2": {
+      "comms": {
+        "applicable": 27,
+        "rate": 1.0,
+        "violations": []
+      },
+      "fire": {
+        "applicable": 33,
+        "rate": 0.8787878787878788,
+        "violations": [
+          {
+            "detail": "requested 2 'ambulance' for 'm5' but max allowed is 0 (required=2, assigned=2)",
+            "tick": 5
+          },
+          {
+            "detail": "requested 1 'fire_engine' for 'm6' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 12
+          },
+          {
+            "detail": "requested 1 'fire_engine' for 'm6' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 13
+          },
+          {
+            "detail": "requested 1 'fire_engine' for 'm6' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 14
+          }
+        ]
+      },
+      "infrastructure": {
+        "applicable": 34,
+        "rate": 1.0,
+        "violations": []
+      },
+      "medical": {
+        "applicable": 35,
+        "rate": 1.0,
+        "violations": []
+      },
+      "rescue": {
+        "applicable": 40,
+        "rate": 0.925,
+        "violations": [
+          {
+            "detail": "requested 2 'ambulance' for 'm5' but max allowed is 0 (required=2, assigned=2)",
+            "tick": 5
+          },
+          {
+            "detail": "requested 1 'rescue_crew' for 'm10' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 28
+          },
+          {
+            "detail": "requested 1 'rescue_crew' for 'm10' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 29
+          }
+        ]
+      }
+    },
+    "T3": {
+      "comms": {
+        "applicable": 7,
+        "rate": 1.0,
+        "violations": []
+      },
+      "fire": {
+        "applicable": 13,
+        "rate": 0.9230769230769231,
+        "violations": [
+          {
+            "detail": "urgency=9 > 8 but severity=1 < 4 and deadline_in=5 > 4 for 'm6'",
+            "tick": 13
+          }
+        ]
+      },
+      "infrastructure": {
+        "applicable": 7,
+        "rate": 1.0,
+        "violations": []
+      },
+      "medical": {
+        "applicable": 9,
+        "rate": 1.0,
+        "violations": []
+      },
+      "rescue": {
+        "applicable": 17,
+        "rate": 0.8823529411764706,
+        "violations": [
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=5 > 4 for 'm3'",
+            "tick": 5
+          },
+          {
+            "detail": "urgency=10 > 8 but severity=2 < 4 and deadline_in=5 > 4 for 'm2'",
+            "tick": 7
+          }
+        ]
+      }
+    },
+    "T4": {},
+    "T5": {},
+    "T6": {
+      "medical": {
+        "applicable": 1,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "re-requested 'supply_truck' for 'm6' when requirement already met in worlds[t-1] (grant at t=11)",
+            "tick": 12
+          }
+        ]
+      }
+    },
+    "X1": {},
+    "X2": {
+      "comms": {
+        "applicable": 1,
+        "rate": 1.0,
+        "violations": []
+      }
+    }
+  },
+  "seed": 67,
+  "team_alignment": 0.9506726457399103
+}
