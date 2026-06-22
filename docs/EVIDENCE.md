@@ -153,18 +153,25 @@ gitignored file; the real ep1 value is 0.7588.)
 #### Doctrine on/off — what the structure buys
 
 The strongest *causal* conformance result is a paired ablation: same world seeds,
-same tools, doctrine layer toggled on vs off. Doctrine raises team alignment
-**0.696 → 0.852 (Δ +0.156)**, positive on all 5 seeds, at no lives cost.
+same tools, doctrine layer toggled on vs off. Doctrine raises team alignment at no
+lives cost — and the effect **replicates** across two independent runs. The
+conformance Δ is positive on **all 11 seeds across both runs**; at n=6 the sign
+test reaches **p=0.03125 → credible** by the harness's CI-and-sign-test gate.
 
-| Metric (society, doctrine off → on) | Off | On | Δ | n | Sign-test p |
-|---|---|---|---|---|---|
-| team_alignment (deterministic) | 0.696 | 0.852 | **+0.156** | 5 | 0.0625 (5/5 seeds positive) |
-| lives saved | 100.4 | 104.2 | +3.8 | 5 | 0.375 (suggestive, not a cost) |
+| Run | Metric (society, doctrine off → on) | Off | On | Δ | n | Sign-test p | Verdict |
+|---|---|---|---|---|---|---|---|
+| original (2026-06-16) | team_alignment (deterministic) | 0.696 | 0.852 | +0.156 | 5 | 0.0625 (5/5 positive) | suggestive |
+| **re-test (2026-06-22)** | team_alignment (deterministic) | 0.763 | 0.888 | **+0.125** | **6** | **0.03125 (6/6 positive)** | **credible** |
+| original | lives saved | 100.4 | 104.2 | +3.8 | 5 | 0.375 | noise (not a cost) |
+| re-test | lives saved | 103.7 | 109.7 | +6.0 | 6 | 0.375 | noise (not a cost) |
 
-**Source:** `bench/results/2026-06-16-doctrine-ablation/ABLATION.md` (+
-`ablation.json` and per-seed `conformance.json`). Conformance is the deterministic
-signal (5/5 seeds, p=0.0625); the +3.8 lives is suggestive only — the point is
-that doctrine buys measurable alignment **without** a lives penalty.
+**Source:** `bench/results/2026-06-16-doctrine-ablation/` and
+`bench/results/2026-06-22-doctrine-6seed/` (`ablation.json` + per-seed
+`conformance.json`). Conformance is the deterministic signal; absolute levels
+differ between runs (independent LLM sampling), but the **effect** is stable
+(+0.125 to +0.156) and positive on every one of the 11 seeds — at n=6 it clears
+the n=5 sign-test floor (0.0625 → 0.03125). Lives stays noise in both runs — the
+point is that doctrine buys measurable alignment **without** a lives penalty.
 
 ### Real Qwen rationales
 
