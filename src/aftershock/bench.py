@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,127 @@ from aftershock import stats
 from aftershock.kernel.engine import Engine
 from aftershock.kernel.recorder import Recorder
 from aftershock.town.arms import build_arm
+
+# Provenance stamp schema; bump when the stamp's field set changes.
+PROVENANCE_SCHEMA_VERSION = 1
+
+
+def _git_sha() -> str:
+    """``git rev-parse HEAD`` at write time; "unknown" outside a git checkout.
+
+    Read-only metadata captured at WRITE time only — never fed into the tick loop,
+    so Invariant 1 (determinism) is preserved.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    if out.returncode != 0:
+        return "unknown"
+    return out.stdout.strip() or "unknown"
+
+
+def _git_dirty() -> bool:
+    """True when ``git status --porcelain`` is non-empty at write time.
+
+    Non-git or a git failure conservatively reports False (no dirtiness claimable).
+    Metadata only; never feeds the simulation path.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if out.returncode != 0:
+        return False
+    return bool(out.stdout.strip())
+
+
+def _scripted_verify_digest(cells: list[dict[str, Any]]) -> str | None:
+    """The scripted cell's FINAL-TICK world_digest, reused from this bench run.
+
+    Pulls the digest captured during the scripted cell's run (no second ``verify``
+    invocation). When more than one scripted cell is present (multiple seeds), the
+    lowest-seed scripted cell that carries a digest is used, for a stable choice.
+    Returns None when there is no scripted arm, or none carried a digest (e.g. the
+    pure-function call paths used in tests).
+    """
+    scripted = sorted(
+        (c for c in cells if c.get("arm") == "scripted" and c.get("world_digest")),
+        key=lambda c: (c.get("seed", 0)),
+    )
+    if not scripted:
+        return None
+    digest = scripted[0].get("world_digest")
+    return str(digest) if digest else None
+
+
+def _provenance_stamp(
+    cells: list[dict[str, Any]] | None = None,
+    *,
+    model_endpoint: str | None = None,
+) -> dict[str, Any]:
+    """One stamp dict added to every bench result JSON (the thin provenance layer).
+
+    Fields: schema_version, git_sha, dirty, model_endpoint, scripted_verify_digest.
+    git_sha/dirty are read via subprocess at WRITE time only (metadata, never fed to
+    the tick loop). ``model_endpoint`` is the caller-detected provider endpoint
+    ("dashscope-intl"/"ollama-k12"/"scripted"); when omitted it is inferred from the
+    cells (an arm with positive LLM cost -> cloud guess "dashscope-intl", else
+    "scripted"). scripted_verify_digest reuses the scripted cell's final-tick digest.
+    """
+    cells = cells or []
+    if model_endpoint is None:
+        model_endpoint = _infer_endpoint_from_cells(cells)
+    return {
+        "schema_version": PROVENANCE_SCHEMA_VERSION,
+        "git_sha": _git_sha(),
+        "dirty": _git_dirty(),
+        "model_endpoint": model_endpoint,
+        "scripted_verify_digest": _scripted_verify_digest(cells),
+    }
+
+
+def _endpoint_from_provider(provider: Any | None) -> str:
+    """Provenance endpoint label for a live provider (None -> "scripted").
+
+    Reuses ``llm.provider.endpoint_label`` against the provider's ``base_url`` so the
+    bench mirrors the provider's own DashScope-vs-local detection. A provider without
+    a ``base_url`` attribute (e.g. a MockProvider in tests) is treated as cloud-less
+    and labeled "scripted", which is honest for an offline run.
+    """
+    if provider is None:
+        return "scripted"
+    base_url = getattr(provider, "base_url", None)
+    if base_url is None:
+        return "scripted"
+    from aftershock.llm.provider import endpoint_label
+
+    return endpoint_label(base_url)
+
+
+def _infer_endpoint_from_cells(cells: list[dict[str, Any]]) -> str:
+    """Best-effort endpoint when the caller did not pass one (no provider in scope).
+
+    If any cell logged a positive LLM cost there was a live provider; default to the
+    cloud label "dashscope-intl" (the published path). With no LLM cost anywhere the
+    run was LLM-free -> "scripted". The CLI always passes an explicit endpoint, so
+    this only matters for pure-function/test call paths.
+    """
+    for c in cells:
+        cost = c.get("cost") or {}
+        if float(cost.get("cost_usd", 0.0) or 0.0) > 0.0:
+            return "dashscope-intl"
+    return "scripted"
 
 
 def _cell_dir(out_dir: Path, arm: str, seed: int) -> Path:
@@ -65,6 +187,14 @@ def _execute_cell(
     }
     recorder = Recorder(out_dir, run_id, manifest_rec)
 
+    # Capture the final-tick world_digest as it is recorded, so the provenance stamp
+    # can reuse the scripted cell's digest WITHOUT a second `verify` run. The listener
+    # only reads the record (adds no state to the sim), so determinism is preserved.
+    digest_holder: dict[str, str] = {}
+
+    def _capture_digest(record: Any, _world: dict[str, Any]) -> None:
+        digest_holder["world_digest"] = record.world_digest
+
     engine = Engine(
         world=setup.world,
         society=setup.society,
@@ -76,6 +206,7 @@ def _execute_cell(
         seed=seed,
         max_ticks=ticks,
         agent_timeout_s=setup.default_timeout_s,
+        tick_listener=_capture_digest,
     )
 
     # time.monotonic() is used ONLY for wall_s — it never feeds simulation state,
@@ -95,6 +226,9 @@ def _execute_cell(
         "cost": summary_run.cost,
         "wall_s": wall_s,
         "models": models,
+        # Final-tick world digest (last recorded tick). Reused by the provenance
+        # stamp's scripted_verify_digest — never a second verify invocation.
+        "world_digest": digest_holder.get("world_digest"),
     }
     if extra_fields:
         cell_summary.update(extra_fields)
@@ -216,7 +350,9 @@ def run_bench(
     return cells
 
 
-def aggregate(cells: list[dict[str, Any]]) -> dict[str, Any]:
+def aggregate(
+    cells: list[dict[str, Any]], *, model_endpoint: str | None = None
+) -> dict[str, Any]:
     """Compute per-arm statistics from a list of per-cell summary dicts.
 
     Per arm computes n, mean, and sample standard deviation (ddof=1) for:
@@ -227,6 +363,11 @@ def aggregate(cells: list[dict[str, Any]]) -> dict[str, Any]:
     arms whose mean_cost_usd > 0 (zero-cost arms like 'scripted' are omitted).
 
     Also produces the per-seed paired table: arm x seed -> lives_saved.
+
+    The result carries a ``provenance`` stamp (schema_version, git_sha, dirty,
+    model_endpoint, scripted_verify_digest) — the latter reused from the scripted
+    cell's final-tick digest in ``cells`` (no second verify run). ``model_endpoint``
+    is supplied by the CLI (it knows the provider); when omitted it is inferred.
     """
     # Group cells by arm — validate required keys up front
     by_arm: dict[str, list[dict[str, Any]]] = {}
@@ -314,7 +455,11 @@ def aggregate(cells: list[dict[str, Any]]) -> dict[str, Any]:
         paired.setdefault(arm, {})
         paired[arm][seed] = float(cell.get("scores", {}).get("lives_saved", 0.0))
 
-    return {"arms": arm_stats, "paired": paired}
+    return {
+        "arms": arm_stats,
+        "paired": paired,
+        "provenance": _provenance_stamp(cells, model_endpoint=model_endpoint),
+    }
 
 
 # Fixed bootstrap seed so the served CI is byte-stable across re-serves of the
@@ -327,6 +472,7 @@ def paired_comparisons(
     control: str = "scripted",
     *,
     alpha: float = 0.05,
+    provenance: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Pure paired control-vs-treatment stats from the ``paired`` table.
 
@@ -344,6 +490,11 @@ def paired_comparisons(
     CI-excludes-0 but sign test not significant = "suggestive"; otherwise
     "noise". This stops the percentile CI from over-claiming on small skewed
     samples.
+
+    ``provenance`` (when given) is attached to every emitted verdict row, so a
+    served paired-stat row carries the same stamp as its parent results.json. The
+    web layer passes the on-disk results.json's ``provenance`` block through; tests
+    that call this directly leave it None and the rows simply omit the field.
     """
     ctrl = paired.get(control, {})
     if not ctrl:
@@ -380,7 +531,7 @@ def paired_comparisons(
             verdict = "suggestive"
         else:
             verdict = "credible"
-        out.append({
+        row: dict[str, Any] = {
             "control": control,
             "treatment": arm,
             "n": n,
@@ -401,7 +552,10 @@ def paired_comparisons(
                 "n_resamples": ci.n_resamples,
             },
             "observed_power": observed_power,
-        })
+        }
+        if provenance is not None:
+            row["provenance"] = provenance
+        out.append(row)
     return out
 
 
@@ -532,6 +686,55 @@ def _lives_by_seed(
     return out
 
 
+def _verdict_fields(
+    diffs: list[float], bootstrap_seed: int, *, alpha: float = 0.05
+) -> dict[str, Any]:
+    """The 3-tier verdict + its supporting stats for a list of paired diffs.
+
+    The single source of truth for the tiering both the lives verdict
+    (analyze_ablation) and the conformance verdict (_conformance_block) use, so they
+    can never drift: "credible" iff the bootstrap CI excludes 0 AND the sign test is
+    significant; "suggestive" iff exactly one holds; "noise" iff neither
+    (FIELD-NOTES §16–17 — keying on the CI alone over-claims on small skewed samples).
+
+    Returns ``verdict``=None and absent supporting fields when ``diffs`` is empty (no
+    paired deltas to judge) — callers must not coerce/fabricate a verdict in that case.
+    The ``ci``/``sign_test_p`` keys carry the same shape analyze_ablation emits.
+    """
+    if not diffs:
+        return {
+            "verdict": None,
+            "ci_excludes_zero": None,
+            "sign_significant": None,
+            "sign_test_p": None,
+            "n_positive": 0,
+            "ci": None,
+        }
+    ci = stats.bootstrap_ci(diffs, confidence=1.0 - alpha, rng_seed=bootstrap_seed)
+    sign_p = stats.sign_test_p(diffs)
+    ci_excludes_zero = not (ci.lower <= 0.0 <= ci.upper)
+    sign_significant = sign_p < alpha
+    if not ci_excludes_zero:
+        verdict = "noise"
+    elif not sign_significant:
+        verdict = "suggestive"
+    else:
+        verdict = "credible"
+    return {
+        "verdict": verdict,
+        "ci_excludes_zero": ci_excludes_zero,
+        "sign_significant": sign_significant,
+        "sign_test_p": sign_p,
+        "n_positive": sum(1 for d in diffs if d > 0),
+        "ci": {
+            "lower": ci.lower,
+            "upper": ci.upper,
+            "confidence": ci.confidence,
+            "n_resamples": ci.n_resamples,
+        },
+    }
+
+
 def analyze_ablation(
     cells: list[dict[str, Any]],
     control: str,
@@ -541,6 +744,7 @@ def analyze_ablation(
     effect_grid: tuple[float, ...] = DEFAULT_EFFECT_GRID,
     power_target: float = 0.8,
     alpha: float = 0.05,
+    model_endpoint: str | None = None,
 ) -> dict[str, Any]:
     """Paired control-vs-treatment analysis over their common seeds (pure).
 
@@ -568,9 +772,6 @@ def analyze_ablation(
     mean_delta = stats.mean(diffs)
     sd_delta = stats.sample_sd(diffs)
 
-    ci = stats.bootstrap_ci(
-        diffs, confidence=1.0 - alpha, rng_seed=_ABLATION_BOOTSTRAP_SEED
-    )
     observed_power = (
         stats.power_for_n(mean_delta, sd_delta, n, alpha) if mean_delta != 0.0 else None
     )
@@ -589,17 +790,11 @@ def analyze_ablation(
     # Verdict — "credible" requires the bootstrap CI AND the sign test to AGREE.
     # The percentile CI excludes 0 on small, skewed samples where the conservative
     # sign test does not, so keying on the CI alone over-claims (FIELD-NOTES §16–17:
-    # it printed "credible" at n=5 twice on effects that were noise). Exposed as a
-    # structured field so callers (e.g. an autoresearch loop) can gate on it.
-    sign_p = stats.sign_test_p(diffs)
-    ci_excludes_zero = not (ci.lower <= 0.0 <= ci.upper)
-    sign_significant = sign_p < alpha
-    if not ci_excludes_zero:
-        verdict = "noise"
-    elif not sign_significant:
-        verdict = "suggestive"
-    else:
-        verdict = "credible"
+    # it printed "credible" at n=5 twice on effects that were noise). Computed by the
+    # shared _verdict_fields helper so the lives verdict and the conformance verdict
+    # use ONE tiering rule that can never drift. ``common`` is non-empty here (we raise
+    # above otherwise), so the helper returns a fully-populated verdict.
+    vf = _verdict_fields(diffs, _ABLATION_BOOTSTRAP_SEED, alpha=alpha)
 
     return {
         "control": control,
@@ -611,23 +806,19 @@ def analyze_ablation(
         "mean_treatment": stats.mean([treat[s] for s in common]),
         "mean_delta": mean_delta,
         "sd_delta": sd_delta,
-        "n_positive": sum(1 for d in diffs if d > 0),
+        "n_positive": vf["n_positive"],
         "n_negative": sum(1 for d in diffs if d < 0),
         "n_tied": sum(1 for d in diffs if d == 0),
-        "sign_test_p": sign_p,
-        "verdict": verdict,
-        "ci_excludes_zero": ci_excludes_zero,
-        "sign_significant": sign_significant,
-        "ci": {
-            "lower": ci.lower,
-            "upper": ci.upper,
-            "confidence": ci.confidence,
-            "n_resamples": ci.n_resamples,
-        },
+        "sign_test_p": vf["sign_test_p"],
+        "verdict": vf["verdict"],
+        "ci_excludes_zero": vf["ci_excludes_zero"],
+        "sign_significant": vf["sign_significant"],
+        "ci": vf["ci"],
         "observed_power": observed_power,
         "power_target": power_target,
         "alpha": alpha,
         "power_curve": power_curve,
+        "provenance": _provenance_stamp(cells, model_endpoint=model_endpoint),
     }
 
 
@@ -664,7 +855,11 @@ def _role_conf_by_seed(
 
 
 def _conformance_block(
-    cells: list[dict[str, Any]], control_label: str, treatment_label: str
+    cells: list[dict[str, Any]],
+    control_label: str,
+    treatment_label: str,
+    *,
+    alpha: float = 0.05,
 ) -> dict[str, Any]:
     """Paired conformance summary for the doctrine ablation.
 
@@ -696,7 +891,7 @@ def _conformance_block(
             tm = stats.mean(tvals)
             by_role[role] = {"control": cm, "treatment": tm, "delta": tm - cm}
 
-    return {
+    block: dict[str, Any] = {
         "n": len(common),
         "seeds": common,
         "per_seed": per_seed,
@@ -706,6 +901,26 @@ def _conformance_block(
         "sign_test_p": stats.sign_test_p(deltas) if deltas else None,
         "by_role": by_role,
     }
+    # conformance_verdict — the SAME 3-tier gate the lives verdict uses (read
+    # analyze_ablation / _verdict_fields): "credible" iff the bootstrap CI excludes 0
+    # AND the sign test is significant; "suggestive" iff exactly one; "noise" iff
+    # neither. Conformance is the doctrine ablation's PRIMARY metric, so it earns a
+    # verdict parallel to (and separate from) the secondary lives verdict
+    # (FIELD-NOTES §18). Computed only when per-seed deltas exist; otherwise the
+    # verdict + supporting fields are None so non-doctrine / conformance-failed paths
+    # are never coerced/fabricated. Keys are namespaced "verdict"/"ci"/... INSIDE the
+    # conformance block (the index reads conformance.verdict), and sign_test_p here
+    # equals the value already set above (same deltas, same helper). ``alpha`` is the
+    # caller-threaded significance level (same one analyze_ablation hands the lives
+    # verdict) so the two verdicts can never use a different alpha.
+    vf = _verdict_fields(deltas, _ABLATION_BOOTSTRAP_SEED, alpha=alpha)
+    block["verdict"] = vf["verdict"]
+    block["ci"] = vf["ci"]
+    block["ci_excludes_zero"] = vf["ci_excludes_zero"]
+    block["sign_significant"] = vf["sign_significant"]
+    block["sign_test_p"] = vf["sign_test_p"]
+    block["n_positive"] = vf["n_positive"]
+    return block
 
 
 def run_ablation(
@@ -752,6 +967,7 @@ def run_ablation(
     return analyze_ablation(
         cells, control, treatment,
         effect_grid=effect_grid, power_target=power_target, alpha=alpha,
+        model_endpoint=_endpoint_from_provider(provider),
     )
 
 
@@ -814,10 +1030,13 @@ def _run_doctrine_ablation(
     result = analyze_ablation(
         cells, control_label, treatment_label, key="label",
         effect_grid=effect_grid, power_target=power_target, alpha=alpha,
+        model_endpoint=_endpoint_from_provider(provider),
     )
     result["ablate"] = "doctrine"
     result["arm"] = arm
-    result["conformance"] = _conformance_block(cells, control_label, treatment_label)
+    result["conformance"] = _conformance_block(
+        cells, control_label, treatment_label, alpha=alpha
+    )
     return result
 
 
@@ -833,6 +1052,36 @@ def _render_conformance_section(conf: dict[str, Any]) -> list[str]:
         f"sign test p={sp_str} · n={conf['n']}"
     )
     lines.append("")
+
+    # Verdict (conformance Δ) — the SAME 3-tier gate the lives section prints, but
+    # over the conformance Δ (this ablation's PRIMARY metric). Mirrors the lives
+    # "Verdict (lives Δ): ..." line so a reader sees a verdict per signal.
+    verdict = conf.get("verdict")
+    if verdict is not None:
+        ci = conf.get("ci") or {}
+        conf_pct = int(round(float(ci.get("confidence", 0.95)) * 100))
+        p = conf.get("sign_test_p")
+        p_str = f"{p:.3f}" if p is not None else "n/a"
+        if verdict == "noise":
+            lines.append(
+                f"> Verdict (conformance Δ): **not distinguishable from noise** — the "
+                f"{conf_pct}% CI includes 0 (sign test p={p_str}). Add seeds before "
+                "claiming a conformance effect."
+            )
+        elif verdict == "suggestive":
+            lines.append(
+                f"> Verdict (conformance Δ): **suggestive but unconfirmed** — the "
+                f"{conf_pct}% CI excludes 0, but the sign test is not significant "
+                f"(p={p_str}). Add seeds until the sign test agrees."
+            )
+        else:
+            direction = "improvement" if (md is not None and md > 0) else "regression"
+            lines.append(
+                f"> Verdict (conformance Δ): **credible {direction}** — the {conf_pct}% "
+                f"CI excludes 0 *and* the sign test is significant (p={p_str})."
+            )
+        lines.append("")
+
     lines.append("| seed | off | on | Δ |")
     lines.append("|---|---|---|---|")
     for row in conf["per_seed"]:
@@ -1053,11 +1302,18 @@ def run_repeat_seeds(
     return cells
 
 
-def analyze_repeats(cells: list[dict[str, Any]]) -> dict[str, Any]:
+def analyze_repeats(
+    cells: list[dict[str, Any]], *, model_endpoint: str | None = None
+) -> dict[str, Any]:
     """Per-arm variance decomposition from repeat cells (pure).
 
     Splits total lives_saved variance into within-seed (LLM sampling) and
     between-seed (world) components via a one-way random-effects model.
+
+    The result carries a ``provenance`` stamp under the reserved ``provenance`` key
+    (no arm is ever named "provenance"), reusing the scripted cell's final-tick
+    digest from ``cells`` (no second verify run). ``model_endpoint`` is supplied by
+    the CLI; when omitted it is inferred from the cells.
     """
     by_arm: dict[str, dict[int, list[float]]] = {}
     for c in cells:
@@ -1080,6 +1336,7 @@ def analyze_repeats(cells: list[dict[str, Any]]) -> dict[str, Any]:
             "icc": vc.icc,
             "per_seed_means": {str(s): stats.mean(seedmap[s]) for s in sorted(seedmap)},
         }
+    result["provenance"] = _provenance_stamp(cells, model_endpoint=model_endpoint)
     return result
 
 
@@ -1099,6 +1356,8 @@ def render_repeats_markdown(result: dict[str, Any]) -> str:
     )
     lines.append("|---|---|---|---|---|---|---|---|")
     for arm in sorted(result):
+        if arm == "provenance":  # reserved stamp key — not an arm
+            continue
         s = result[arm]
         lines.append(
             f"| {arm} | {s['n_seeds']} | {s['repeats']} | {s['grand_mean']:.2f} "

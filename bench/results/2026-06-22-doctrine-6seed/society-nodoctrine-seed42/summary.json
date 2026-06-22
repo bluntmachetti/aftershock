@@ -1,0 +1,80 @@
+{
+  "arm": "society",
+  "cost": {
+    "by_agent": {
+      "commander": {
+        "completion_tokens": 2224,
+        "cost_usd": 0.014579600000000003,
+        "prompt_tokens": 23105
+      },
+      "comms": {
+        "completion_tokens": 2249,
+        "cost_usd": 0.0031760000000000004,
+        "prompt_tokens": 22764
+      },
+      "fire": {
+        "completion_tokens": 2761,
+        "cost_usd": 0.0034576000000000008,
+        "prompt_tokens": 23532
+      },
+      "infrastructure": {
+        "completion_tokens": 3435,
+        "cost_usd": 0.004298700000000001,
+        "prompt_tokens": 29247
+      },
+      "medical": {
+        "completion_tokens": 2764,
+        "cost_usd": 0.0034749000000000013,
+        "prompt_tokens": 23693
+      },
+      "rescue": {
+        "completion_tokens": 3216,
+        "cost_usd": 0.0036574000000000003,
+        "prompt_tokens": 23710
+      }
+    },
+    "by_model": {
+      "qwen3.5-flash": {
+        "completion_tokens": 14425,
+        "cost_usd": 0.018064600000000007,
+        "prompt_tokens": 122946
+      },
+      "qwen3.5-plus": {
+        "completion_tokens": 2224,
+        "cost_usd": 0.014579600000000003,
+        "prompt_tokens": 23105
+      }
+    },
+    "completion_tokens": 16649,
+    "cost_usd": 0.032644199999999984,
+    "prompt_tokens": 146051
+  },
+  "models": [
+    "qwen3.5-flash",
+    "qwen3.5-plus"
+  ],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 0.76,
+    "fire": 0.8387096774193549,
+    "infrastructure": 0.8648648648648649,
+    "medical": 0.6470588235294117,
+    "rescue": 0.7714285714285715
+  },
+  "scores": {
+    "avg_response_ticks": 5.090909090909091,
+    "lives_lost": 56.0,
+    "lives_saved": 96.0,
+    "missions_failed": 0.0,
+    "missions_open": 0.0,
+    "missions_resolved": 11.0,
+    "panic": 0.10000000000000003,
+    "resource_utilization": 0.125
+  },
+  "seed": 42,
+  "team_alignment": 0.785234899328859,
+  "ticks_requested": 60,
+  "ticks_run": 29,
+  "wall_s": 79.03069154080003,
+  "world_digest": "d7b401ad1a3127eac291d4af17ee26a2da1c74e33f8f826a79791f59815b1fda"
+}

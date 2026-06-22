@@ -1,0 +1,35 @@
+{
+  "arm": "scripted",
+  "cost": {
+    "by_agent": {},
+    "by_model": {},
+    "completion_tokens": 0,
+    "cost_usd": 0.0,
+    "prompt_tokens": 0
+  },
+  "models": [],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 1.0,
+    "fire": 1.0,
+    "infrastructure": 1.0,
+    "medical": 1.0,
+    "rescue": 1.0
+  },
+  "scores": {
+    "avg_response_ticks": 6.1,
+    "lives_lost": 76.0,
+    "lives_saved": 95.0,
+    "missions_failed": 1.0,
+    "missions_open": 0.0,
+    "missions_resolved": 10.0,
+    "panic": 0.04999999999999985,
+    "resource_utilization": 0.0
+  },
+  "seed": 37,
+  "team_alignment": 1.0,
+  "ticks_requested": 60,
+  "ticks_run": 30,
+  "wall_s": 0.03312425781041384,
+  "world_digest": "dea58a27adec5ac076a6cb489f4e817ca3e1360847beaa63a3b65dac90aea5ef"
+}

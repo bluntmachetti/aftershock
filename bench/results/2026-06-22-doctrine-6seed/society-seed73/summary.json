@@ -1,0 +1,80 @@
+{
+  "arm": "society",
+  "cost": {
+    "by_agent": {
+      "commander": {
+        "completion_tokens": 1828,
+        "cost_usd": 0.0145856,
+        "prompt_tokens": 25496
+      },
+      "comms": {
+        "completion_tokens": 1972,
+        "cost_usd": 0.0032495000000000002,
+        "prompt_tokens": 24607
+      },
+      "fire": {
+        "completion_tokens": 2672,
+        "cost_usd": 0.0036834,
+        "prompt_tokens": 26146
+      },
+      "infrastructure": {
+        "completion_tokens": 2436,
+        "cost_usd": 0.0039747,
+        "prompt_tokens": 30003
+      },
+      "medical": {
+        "completion_tokens": 2751,
+        "cost_usd": 0.0037449999999999996,
+        "prompt_tokens": 26446
+      },
+      "rescue": {
+        "completion_tokens": 2947,
+        "cost_usd": 0.003812,
+        "prompt_tokens": 26332
+      }
+    },
+    "by_model": {
+      "qwen3.5-flash": {
+        "completion_tokens": 12778,
+        "cost_usd": 0.01846459999999999,
+        "prompt_tokens": 133534
+      },
+      "qwen3.5-plus": {
+        "completion_tokens": 1828,
+        "cost_usd": 0.0145856,
+        "prompt_tokens": 25496
+      }
+    },
+    "completion_tokens": 14606,
+    "cost_usd": 0.033050199999999995,
+    "prompt_tokens": 159030
+  },
+  "models": [
+    "qwen3.5-flash",
+    "qwen3.5-plus"
+  ],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 1.0,
+    "fire": 0.8055555555555556,
+    "infrastructure": 0.8461538461538461,
+    "medical": 0.8378378378378378,
+    "rescue": 0.85
+  },
+  "scores": {
+    "avg_response_ticks": 4.846153846153846,
+    "lives_lost": 59.0,
+    "lives_saved": 130.0,
+    "missions_failed": 0.0,
+    "missions_open": 0.0,
+    "missions_resolved": 13.0,
+    "panic": 0.15,
+    "resource_utilization": 0.0
+  },
+  "seed": 73,
+  "team_alignment": 0.8675496688741722,
+  "ticks_requested": 60,
+  "ticks_run": 25,
+  "wall_s": 69.23800400784239,
+  "world_digest": "b073282f6911a6d95256d7105dcf9b8d8b777811c31df14bb54206fb4ea0650d"
+}

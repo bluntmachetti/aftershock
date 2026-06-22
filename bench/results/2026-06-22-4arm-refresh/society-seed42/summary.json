@@ -1,0 +1,80 @@
+{
+  "arm": "society",
+  "cost": {
+    "by_agent": {
+      "commander": {
+        "completion_tokens": 1578,
+        "cost_usd": 0.015243600000000006,
+        "prompt_tokens": 28641
+      },
+      "comms": {
+        "completion_tokens": 2156,
+        "cost_usd": 0.0036371000000000016,
+        "prompt_tokens": 27747
+      },
+      "fire": {
+        "completion_tokens": 2566,
+        "cost_usd": 0.003959399999999999,
+        "prompt_tokens": 29330
+      },
+      "infrastructure": {
+        "completion_tokens": 3026,
+        "cost_usd": 0.004607000000000001,
+        "prompt_tokens": 33966
+      },
+      "medical": {
+        "completion_tokens": 2298,
+        "cost_usd": 0.0038636,
+        "prompt_tokens": 29444
+      },
+      "rescue": {
+        "completion_tokens": 2718,
+        "cost_usd": 0.0040401,
+        "prompt_tokens": 29529
+      }
+    },
+    "by_model": {
+      "qwen3.5-flash": {
+        "completion_tokens": 12764,
+        "cost_usd": 0.020107199999999995,
+        "prompt_tokens": 150016
+      },
+      "qwen3.5-plus": {
+        "completion_tokens": 1578,
+        "cost_usd": 0.015243600000000006,
+        "prompt_tokens": 28641
+      }
+    },
+    "completion_tokens": 14342,
+    "cost_usd": 0.03535079999999998,
+    "prompt_tokens": 178657
+  },
+  "models": [
+    "qwen3.5-flash",
+    "qwen3.5-plus"
+  ],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 0.9473684210526316,
+    "fire": 0.967741935483871,
+    "infrastructure": 0.9411764705882353,
+    "medical": 0.8571428571428572,
+    "rescue": 0.8064516129032258
+  },
+  "scores": {
+    "avg_response_ticks": 4.7272727272727275,
+    "lives_lost": 47.0,
+    "lives_saved": 105.0,
+    "missions_failed": 0.0,
+    "missions_open": 0.0,
+    "missions_resolved": 11.0,
+    "panic": 0.10000000000000003,
+    "resource_utilization": 0.125
+  },
+  "seed": 42,
+  "team_alignment": 0.9153846153846154,
+  "ticks_requested": 60,
+  "ticks_run": 29,
+  "wall_s": 70.26154290605336,
+  "world_digest": "43457794be69b82328992f55e021618588e19138157457c2f17ad2dcc9bf536a"
+}

@@ -1,0 +1,80 @@
+{
+  "arm": "society",
+  "cost": {
+    "by_agent": {
+      "commander": {
+        "completion_tokens": 1395,
+        "cost_usd": 0.015552000000000003,
+        "prompt_tokens": 30510
+      },
+      "comms": {
+        "completion_tokens": 1814,
+        "cost_usd": 0.0036652000000000013,
+        "prompt_tokens": 29396
+      },
+      "fire": {
+        "completion_tokens": 2601,
+        "cost_usd": 0.004148899999999999,
+        "prompt_tokens": 31085
+      },
+      "infrastructure": {
+        "completion_tokens": 1984,
+        "cost_usd": 0.0043775,
+        "prompt_tokens": 35839
+      },
+      "medical": {
+        "completion_tokens": 2753,
+        "cost_usd": 0.004239799999999998,
+        "prompt_tokens": 31386
+      },
+      "rescue": {
+        "completion_tokens": 2254,
+        "cost_usd": 0.0040213,
+        "prompt_tokens": 31197
+      }
+    },
+    "by_model": {
+      "qwen3.5-flash": {
+        "completion_tokens": 11406,
+        "cost_usd": 0.0204527,
+        "prompt_tokens": 158903
+      },
+      "qwen3.5-plus": {
+        "completion_tokens": 1395,
+        "cost_usd": 0.015552000000000003,
+        "prompt_tokens": 30510
+      }
+    },
+    "completion_tokens": 12801,
+    "cost_usd": 0.036004699999999994,
+    "prompt_tokens": 189413
+  },
+  "models": [
+    "qwen3.5-flash",
+    "qwen3.5-plus"
+  ],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 1.0,
+    "fire": 1.0,
+    "infrastructure": 0.8823529411764706,
+    "medical": 0.7567567567567568,
+    "rescue": 1.0
+  },
+  "scores": {
+    "avg_response_ticks": 5.111111111111111,
+    "lives_lost": 30.0,
+    "lives_saved": 94.0,
+    "missions_failed": 0.0,
+    "missions_open": 0.0,
+    "missions_resolved": 9.0,
+    "panic": 0.05000000000000002,
+    "resource_utilization": 0.125
+  },
+  "seed": 23,
+  "team_alignment": 0.9285714285714286,
+  "ticks_requested": 60,
+  "ticks_run": 31,
+  "wall_s": 74.66548868408427,
+  "world_digest": "87ba9116c25efc9d7889d0160fa1b22a42c5e37f9b6043535037a9c7ccfc9a0b"
+}

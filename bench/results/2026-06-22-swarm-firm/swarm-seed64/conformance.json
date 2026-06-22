@@ -1,0 +1,143 @@
+{
+  "arm": "swarm",
+  "notes": [
+    "T1 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "T2 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "T3 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "T4 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "T6 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "C1 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "C2 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "C3 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "M2 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "R2 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "F2 not in force for arm 'swarm' \u2014 excluded from scoring"
+  ],
+  "role_conformance": {
+    "comms": 1.0,
+    "fire": 0.0,
+    "infrastructure": 0.6,
+    "medical": 0.0,
+    "rescue": 0.0
+  },
+  "rules": {
+    "C1": {
+      "commander": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "C2": {},
+    "C3": {},
+    "F1": {},
+    "F2": {},
+    "I1": {
+      "infrastructure": {
+        "applicable": 10,
+        "rate": 0.6,
+        "violations": [
+          {
+            "detail": "repair_road rejected: 'no repair_crew available'",
+            "tick": 3
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'industrial' is not blocked\"",
+            "tick": 6
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'market' is not blocked\"",
+            "tick": 21
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'market' is not blocked\"",
+            "tick": 25
+          }
+        ]
+      }
+    },
+    "I2": {},
+    "M1": {},
+    "M2": {},
+    "R1": {},
+    "R2": {},
+    "T1": {
+      "fire": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      },
+      "infrastructure": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      },
+      "medical": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      },
+      "rescue": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "T2": {},
+    "T3": {},
+    "T4": {},
+    "T5": {
+      "fire": {
+        "applicable": 2,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm1', 'qty': 1, 'resource': 'fire_engine'} 2 tick(s) after rejection at t=4",
+            "tick": 6
+          },
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm1', 'qty': 1, 'resource': 'fire_engine'} 3 tick(s) after rejection at t=4",
+            "tick": 7
+          }
+        ]
+      },
+      "medical": {
+        "applicable": 2,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm4', 'qty': 1, 'resource': 'ambulance'} 1 tick(s) after rejection at t=3",
+            "tick": 4
+          },
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm6', 'qty': 2, 'resource': 'ambulance'} 2 tick(s) after rejection at t=12",
+            "tick": 14
+          }
+        ]
+      },
+      "rescue": {
+        "applicable": 3,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm4', 'qty': 1, 'resource': 'ambulance'} 1 tick(s) after rejection at t=3",
+            "tick": 4
+          },
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm4', 'qty': 1, 'resource': 'rescue_crew'} 1 tick(s) after rejection at t=3",
+            "tick": 4
+          },
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm4', 'qty': 1, 'resource': 'ambulance'} 1 tick(s) after rejection at t=4",
+            "tick": 5
+          }
+        ]
+      }
+    },
+    "T6": {},
+    "X1": {},
+    "X2": {}
+  },
+  "seed": 64,
+  "team_alignment": 0.0
+}

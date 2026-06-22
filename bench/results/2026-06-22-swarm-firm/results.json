@@ -1,0 +1,71 @@
+{
+  "arms": {
+    "society": {
+      "lives_per_dollar": 2517.982369882599,
+      "mean_cost_usd": 0.03772861999999999,
+      "mean_lives_lost": 54.5,
+      "mean_lives_saved": 95.0,
+      "mean_missions_failed": 0.6,
+      "mean_missions_resolved": 10.1,
+      "mean_team_alignment": 0.8655992154485344,
+      "mean_wall_s": 75.45338018785696,
+      "n": 10,
+      "sd_cost_usd": 0.006308194261047381,
+      "sd_lives_lost": 17.10263137648707,
+      "sd_lives_saved": 14.93690433493872,
+      "sd_missions_failed": 0.9660917830792959,
+      "sd_missions_resolved": 1.66332999331662,
+      "sd_wall_s": 16.08443146406216
+    },
+    "swarm": {
+      "lives_per_dollar": 6264.349936441485,
+      "mean_cost_usd": 0.014207379999999997,
+      "mean_lives_lost": 64.5,
+      "mean_lives_saved": 89.0,
+      "mean_missions_failed": 1.2,
+      "mean_missions_resolved": 9.5,
+      "mean_team_alignment": 0.0,
+      "mean_wall_s": 48.71805166341365,
+      "n": 10,
+      "sd_cost_usd": 0.001964420418794758,
+      "sd_lives_lost": 21.89495121914842,
+      "sd_lives_saved": 16.0,
+      "sd_missions_failed": 1.8135294011647258,
+      "sd_missions_resolved": 1.7795130420052185,
+      "sd_wall_s": 6.282708336782409
+    }
+  },
+  "paired": {
+    "society": {
+      "60": 99.0,
+      "61": 79.0,
+      "62": 105.0,
+      "63": 110.0,
+      "64": 96.0,
+      "65": 97.0,
+      "66": 77.0,
+      "67": 78.0,
+      "68": 122.0,
+      "69": 87.0
+    },
+    "swarm": {
+      "60": 77.0,
+      "61": 69.0,
+      "62": 80.0,
+      "63": 106.0,
+      "64": 93.0,
+      "65": 103.0,
+      "66": 66.0,
+      "67": 83.0,
+      "68": 107.0,
+      "69": 106.0
+    }
+  },
+  "provenance": {
+    "dirty": true,
+    "git_sha": "239f33f8a0e0fc5f9d0706e3ca73c21f2e2cc1b4",
+    "model_endpoint": "dashscope-intl",
+    "schema_version": 1,
+    "scripted_verify_digest": null
+  }
+}

@@ -53,6 +53,23 @@ def _provider_for_arm(arm: str, timeout_s: float) -> Any | None:
     return QwenProvider(api_key=api_key, timeout_s=timeout_s)
 
 
+def _endpoint_label_for_provider(provider: Any | None) -> str:
+    """Provenance endpoint label for a (possibly None) provider.
+
+    None -> "scripted" (LLM-free run). Otherwise reuse the provider's resolved
+    base_url through llm.provider.endpoint_label, which mirrors the provider's own
+    DashScope-vs-local detection ("dashscope" in base_url -> "dashscope-intl").
+    """
+    if provider is None:
+        return "scripted"
+    base_url = getattr(provider, "base_url", None)
+    if base_url is None:
+        return "scripted"
+    from aftershock.llm.provider import endpoint_label
+
+    return endpoint_label(base_url)
+
+
 def _run_id(seed: int, arm: str) -> str:
     return f"seed{seed}-{arm}"
 
@@ -535,7 +552,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
             provider, out_dir, society_tools=society_tools, seed_sampler=seed_sampler,
             pool_sizes=pool_sizes, role_models=role_models,
         )
-        rep = analyze_repeats(cells)
+        rep = analyze_repeats(cells, model_endpoint=_endpoint_label_for_provider(provider))
         md = render_repeats_markdown(rep)
         print(md)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -558,7 +575,7 @@ def cmd_bench(args: argparse.Namespace) -> int:
         society_tools=society_tools, seed_sampler=seed_sampler, pool_sizes=pool_sizes,
         role_models=role_models,
     )
-    agg = aggregate(cells)
+    agg = aggregate(cells, model_endpoint=_endpoint_label_for_provider(provider))
     md = render_markdown(agg)
 
     # Print the markdown table to stdout

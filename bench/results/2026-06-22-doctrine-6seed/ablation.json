@@ -1,0 +1,202 @@
+{
+  "ablate": "doctrine",
+  "alpha": 0.05,
+  "arm": "society",
+  "ci": {
+    "confidence": 0.95,
+    "lower": -0.3333333333333333,
+    "n_resamples": 10000,
+    "upper": 13.666666666666666
+  },
+  "ci_excludes_zero": false,
+  "conformance": {
+    "by_role": {
+      "commander": {
+        "control": 0.9527777777777778,
+        "delta": 0.007692307692307665,
+        "treatment": 0.9604700854700855
+      },
+      "comms": {
+        "control": 0.790834158018818,
+        "delta": 0.1851083022986424,
+        "treatment": 0.9759424603174603
+      },
+      "fire": {
+        "control": 0.7863714420557916,
+        "delta": 0.08639791821356879,
+        "treatment": 0.8727693602693604
+      },
+      "infrastructure": {
+        "control": 0.7266614158053661,
+        "delta": 0.16900911347860859,
+        "treatment": 0.8956705292839747
+      },
+      "medical": {
+        "control": 0.7138089927538643,
+        "delta": 0.12385766268772724,
+        "treatment": 0.8376666554415916
+      },
+      "rescue": {
+        "control": 0.770365715527006,
+        "delta": 0.07678435662306626,
+        "treatment": 0.8471500721500722
+      }
+    },
+    "ci": {
+      "confidence": 0.95,
+      "lower": 0.08731106160840613,
+      "n_resamples": 10000,
+      "upper": 0.1644998064826266
+    },
+    "ci_excludes_zero": true,
+    "mean_control": 0.7632810143107421,
+    "mean_delta": 0.12512700277966296,
+    "mean_treatment": 0.8884080170904052,
+    "n": 6,
+    "n_positive": 6,
+    "per_seed": [
+      {
+        "control": 0.7111111111111111,
+        "delta": 0.18097521982414067,
+        "seed": 11,
+        "treatment": 0.8920863309352518
+      },
+      {
+        "control": 0.738255033557047,
+        "delta": 0.19031639501438158,
+        "seed": 23,
+        "treatment": 0.9285714285714286
+      },
+      {
+        "control": 0.7707006369426752,
+        "delta": 0.14293572669368837,
+        "seed": 37,
+        "treatment": 0.9136363636363636
+      },
+      {
+        "control": 0.785234899328859,
+        "delta": 0.07917188033215794,
+        "seed": 42,
+        "treatment": 0.864406779661017
+      },
+      {
+        "control": 0.7720588235294118,
+        "delta": 0.0921387073347858,
+        "seed": 57,
+        "treatment": 0.8641975308641976
+      },
+      {
+        "control": 0.8023255813953488,
+        "delta": 0.06522408747882336,
+        "seed": 73,
+        "treatment": 0.8675496688741722
+      }
+    ],
+    "seeds": [
+      11,
+      23,
+      37,
+      42,
+      57,
+      73
+    ],
+    "sign_significant": true,
+    "sign_test_p": 0.03125,
+    "verdict": "credible"
+  },
+  "control": "society-nodoctrine",
+  "mean_control": 103.66666666666667,
+  "mean_delta": 6.0,
+  "mean_treatment": 109.66666666666667,
+  "n": 6,
+  "n_negative": 1,
+  "n_positive": 4,
+  "n_tied": 1,
+  "observed_power": 0.325031508047078,
+  "per_seed": [
+    {
+      "control": 134.0,
+      "delta": 5.0,
+      "seed": 11,
+      "treatment": 139.0
+    },
+    {
+      "control": 83.0,
+      "delta": 11.0,
+      "seed": 23,
+      "treatment": 94.0
+    },
+    {
+      "control": 96.0,
+      "delta": -4.0,
+      "seed": 37,
+      "treatment": 92.0
+    },
+    {
+      "control": 96.0,
+      "delta": 1.0,
+      "seed": 42,
+      "treatment": 97.0
+    },
+    {
+      "control": 106.0,
+      "delta": 0.0,
+      "seed": 57,
+      "treatment": 106.0
+    },
+    {
+      "control": 107.0,
+      "delta": 23.0,
+      "seed": 73,
+      "treatment": 130.0
+    }
+  ],
+  "power_curve": [
+    {
+      "effect": 2.0,
+      "power_at_current_n": 0.07243852875553411,
+      "required_n": 187
+    },
+    {
+      "effect": 5.0,
+      "power_at_current_n": 0.240491357578898,
+      "required_n": 30
+    },
+    {
+      "effect": 10.0,
+      "power_at_current_n": 0.7090180156926931,
+      "required_n": 8
+    },
+    {
+      "effect": 15.0,
+      "power_at_current_n": 0.9645220315832223,
+      "required_n": 4
+    },
+    {
+      "effect": 20.0,
+      "power_at_current_n": 0.9988970062519292,
+      "required_n": 2
+    }
+  ],
+  "power_target": 0.8,
+  "provenance": {
+    "dirty": true,
+    "git_sha": "ea44ddcffd7e0da437d06064edd4e97f22ea83ff",
+    "model_endpoint": "dashscope-intl",
+    "schema_version": 1,
+    "scripted_verify_digest": null
+  },
+  "sd_delta": 9.757048734120374,
+  "seeds": [
+    11,
+    23,
+    37,
+    42,
+    57,
+    73
+  ],
+  "sign_significant": false,
+  "sign_test_p": 0.375,
+  "treatment": "society",
+  "verdict": "noise"
+}

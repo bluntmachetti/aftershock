@@ -1,0 +1,80 @@
+{
+  "arm": "society",
+  "cost": {
+    "by_agent": {
+      "commander": {
+        "completion_tokens": 3233,
+        "cost_usd": 0.021527200000000003,
+        "prompt_tokens": 34420
+      },
+      "comms": {
+        "completion_tokens": 4237,
+        "cost_usd": 0.005059800000000001,
+        "prompt_tokens": 33650
+      },
+      "fire": {
+        "completion_tokens": 6209,
+        "cost_usd": 0.0060782000000000015,
+        "prompt_tokens": 35946
+      },
+      "infrastructure": {
+        "completion_tokens": 6777,
+        "cost_usd": 0.0068647,
+        "prompt_tokens": 41539
+      },
+      "medical": {
+        "completion_tokens": 5341,
+        "cost_usd": 0.005722900000000001,
+        "prompt_tokens": 35865
+      },
+      "rescue": {
+        "completion_tokens": 7048,
+        "cost_usd": 0.006463200000000001,
+        "prompt_tokens": 36440
+      }
+    },
+    "by_model": {
+      "qwen3.5-flash": {
+        "completion_tokens": 29612,
+        "cost_usd": 0.030188800000000002,
+        "prompt_tokens": 183440
+      },
+      "qwen3.5-plus": {
+        "completion_tokens": 3233,
+        "cost_usd": 0.021527200000000003,
+        "prompt_tokens": 34420
+      }
+    },
+    "completion_tokens": 32845,
+    "cost_usd": 0.05171599999999999,
+    "prompt_tokens": 217860
+  },
+  "models": [
+    "qwen3.5-flash",
+    "qwen3.5-plus"
+  ],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 1.0,
+    "fire": 0.9655172413793104,
+    "infrastructure": 0.8860759493670887,
+    "medical": 0.9838709677419355,
+    "rescue": 0.8936170212765957
+  },
+  "scores": {
+    "avg_response_ticks": 6.583333333333333,
+    "lives_lost": 76.0,
+    "lives_saved": 105.0,
+    "missions_failed": 1.0,
+    "missions_open": 0.0,
+    "missions_resolved": 12.0,
+    "panic": 0.039999999999999994,
+    "resource_utilization": 0.0
+  },
+  "seed": 62,
+  "team_alignment": 0.9663865546218487,
+  "ticks_requested": 60,
+  "ticks_run": 33,
+  "wall_s": 116.42446555988863,
+  "world_digest": "ce11d6cf24e6541a78ddf7dd3544a7224752d9b462f15bfb3191cfd84a1cb034"
+}

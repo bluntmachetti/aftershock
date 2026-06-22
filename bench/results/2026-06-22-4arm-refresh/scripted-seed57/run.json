@@ -1,0 +1,1 @@
+{"arm":"scripted","cost":{"by_agent":{},"by_model":{},"completion_tokens":0,"cost_usd":0.0,"prompt_tokens":0},"final_scores":{"avg_response_ticks":5.666666666666667,"lives_lost":60.0,"lives_saved":112.0,"missions_failed":0.0,"missions_open":0.0,"missions_resolved":12.0,"panic":0.17999999999999983,"resource_utilization":0.0},"run_id":"scripted-seed57","seed":57,"ticks":60}

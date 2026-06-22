@@ -1,0 +1,80 @@
+{
+  "arm": "society",
+  "cost": {
+    "by_agent": {
+      "commander": {
+        "completion_tokens": 2386,
+        "cost_usd": 0.014230800000000007,
+        "prompt_tokens": 21261
+      },
+      "comms": {
+        "completion_tokens": 2392,
+        "cost_usd": 0.0030578000000000007,
+        "prompt_tokens": 21010
+      },
+      "fire": {
+        "completion_tokens": 3142,
+        "cost_usd": 0.003444800000000002,
+        "prompt_tokens": 21880
+      },
+      "infrastructure": {
+        "completion_tokens": 3105,
+        "cost_usd": 0.003909600000000001,
+        "prompt_tokens": 26676
+      },
+      "medical": {
+        "completion_tokens": 3096,
+        "cost_usd": 0.003438800000000001,
+        "prompt_tokens": 22004
+      },
+      "rescue": {
+        "completion_tokens": 2835,
+        "cost_usd": 0.0033203000000000004,
+        "prompt_tokens": 21863
+      }
+    },
+    "by_model": {
+      "qwen3.5-flash": {
+        "completion_tokens": 14570,
+        "cost_usd": 0.01717130000000001,
+        "prompt_tokens": 113433
+      },
+      "qwen3.5-plus": {
+        "completion_tokens": 2386,
+        "cost_usd": 0.014230800000000007,
+        "prompt_tokens": 21261
+      }
+    },
+    "completion_tokens": 16956,
+    "cost_usd": 0.03140209999999998,
+    "prompt_tokens": 134694
+  },
+  "models": [
+    "qwen3.5-flash",
+    "qwen3.5-plus"
+  ],
+  "role_conformance": {
+    "commander": 0.8,
+    "comms": 0.8064516129032258,
+    "fire": 0.7555555555555555,
+    "infrastructure": 0.8571428571428572,
+    "medical": 0.525,
+    "rescue": 0.6388888888888888
+  },
+  "scores": {
+    "avg_response_ticks": 5.5,
+    "lives_lost": 58.0,
+    "lives_saved": 134.0,
+    "missions_failed": 0.0,
+    "missions_open": 0.0,
+    "missions_resolved": 12.0,
+    "panic": 0.15000000000000005,
+    "resource_utilization": 0.0
+  },
+  "seed": 11,
+  "team_alignment": 0.7111111111111111,
+  "ticks_requested": 60,
+  "ticks_run": 26,
+  "wall_s": 82.7357991959434,
+  "world_digest": "12d1f0cd8f3f7d65cb40603230366f387c1cda9d7f07f51a84e1aee5f2156e09"
+}

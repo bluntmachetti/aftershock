@@ -1,0 +1,164 @@
+{
+  "arm": "swarm",
+  "notes": [
+    "T1 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "T2 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "T3 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "T4 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "T6 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "C1 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "C2 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "C3 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "M2 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "R2 not in force for arm 'swarm' \u2014 excluded from scoring",
+    "F2 not in force for arm 'swarm' \u2014 excluded from scoring"
+  ],
+  "role_conformance": {
+    "comms": 1.0,
+    "fire": 0.0,
+    "infrastructure": 0.5294117647058824,
+    "medical": 1.0,
+    "rescue": 0.0
+  },
+  "rules": {
+    "C1": {
+      "commander": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "C2": {},
+    "C3": {},
+    "F1": {},
+    "F2": {
+      "fire": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "I1": {
+      "infrastructure": {
+        "applicable": 15,
+        "rate": 0.6,
+        "violations": [
+          {
+            "detail": "repair_road rejected: 'no repair_crew available'",
+            "tick": 4
+          },
+          {
+            "detail": "repair_road rejected: 'no repair_crew available'",
+            "tick": 4
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'residential_north' is not blocked\"",
+            "tick": 7
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'industrial' is not blocked\"",
+            "tick": 15
+          },
+          {
+            "detail": "repair_road rejected: 'no repair_crew available'",
+            "tick": 28
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'industrial' is not blocked\"",
+            "tick": 29
+          }
+        ]
+      }
+    },
+    "I2": {},
+    "M1": {},
+    "M2": {
+      "medical": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "R1": {},
+    "R2": {},
+    "T1": {
+      "comms": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      },
+      "fire": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      },
+      "infrastructure": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      },
+      "medical": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      },
+      "rescue": {
+        "applicable": 0,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "T2": {},
+    "T3": {},
+    "T4": {},
+    "T5": {
+      "fire": {
+        "applicable": 2,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm8', 'qty': 2, 'resource': 'repair_crew'} 2 tick(s) after rejection at t=15",
+            "tick": 17
+          },
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm8', 'qty': 1, 'resource': 'repair_crew'} 2 tick(s) after rejection at t=16",
+            "tick": 18
+          }
+        ]
+      },
+      "infrastructure": {
+        "applicable": 2,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "resubmitted repair_road {'district_id': 'residential_north'} 2 tick(s) after rejection at t=4",
+            "tick": 6
+          },
+          {
+            "detail": "resubmitted repair_road {'district_id': 'residential_north'} 3 tick(s) after rejection at t=4",
+            "tick": 7
+          }
+        ]
+      },
+      "rescue": {
+        "applicable": 2,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm8', 'qty': 1, 'resource': 'repair_crew'} 1 tick(s) after rejection at t=16",
+            "tick": 17
+          },
+          {
+            "detail": "resubmitted dispatch {'mission_id': 'm8', 'qty': 1, 'resource': 'repair_crew'} 2 tick(s) after rejection at t=16",
+            "tick": 18
+          }
+        ]
+      }
+    },
+    "T6": {},
+    "X1": {},
+    "X2": {}
+  },
+  "seed": 42,
+  "team_alignment": 0.0
+}
