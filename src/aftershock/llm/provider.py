@@ -40,6 +40,19 @@ def _compute_cost(model: str, prompt_tokens: int, completion_tokens: int) -> flo
     return (prompt_tokens * input_price + completion_tokens * output_price) / 1_000_000
 
 
+def endpoint_label(base_url: str | None) -> str:
+    """Map a provider base_url to a provenance endpoint label.
+
+    Mirrors QwenProvider's own endpoint detection (``"dashscope" in base_url``):
+    a DashScope-International cloud URL -> "dashscope-intl"; any other (local /
+    self-hosted Ollama OpenAI-compatible) URL -> "ollama-k12". ``None`` means no
+    provider was wired at all (an LLM-free scripted-only run) -> "scripted".
+    """
+    if base_url is None:
+        return "scripted"
+    return "dashscope-intl" if "dashscope" in base_url else "ollama-k12"
+
+
 @dataclass(frozen=True)
 class ChatResult:
     text: str
@@ -97,6 +110,11 @@ class QwenProvider:
         self._timeout_s = timeout_s
         self._max_retries = max_retries
         self._transport = transport
+
+    @property
+    def base_url(self) -> str:
+        """The resolved endpoint base URL (read-only; for provenance labeling)."""
+        return self._base_url
 
     def _make_client(self) -> httpx.AsyncClient:
         kwargs: dict[str, Any] = {

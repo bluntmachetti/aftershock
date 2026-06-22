@@ -1031,7 +1031,11 @@ def create_app(
                 data["batch"] = dirname
                 data["canonical"] = dirname == _CANONICAL_BENCH_DIR
                 if isinstance(data.get("paired"), dict):
-                    data["paired_stats"] = paired_comparisons(data["paired"])
+                    prov = data.get("provenance")
+                    data["paired_stats"] = paired_comparisons(
+                        data["paired"],
+                        provenance=prov if isinstance(prov, dict) else None,
+                    )
             served.append(data)
         return JSONResponse(served)
 
