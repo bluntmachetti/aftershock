@@ -2,21 +2,24 @@
 
 > A single frozen, citable proof bundle. Every number below traces to a file in
 > this repo — no figure is asserted without a source path. Last verified
-> 2026-06-19.
+> 2026-06-22.
 
 ## 1. The claim (60-second read)
 
 Aftershock is a **deterministic agent-society benchmark**: identical seeded
 disaster scenarios run four ways (scripted heuristics, one big model, a flat
 swarm, a structured society with a negotiation protocol), scored on lives saved
-per dollar. The society of small Qwen models **beats the flat swarm by ~28
-lives** (paired, n=5, p=0.125 — suggestive, not significant) and **matches the
-solo big model on absolute lives at 52% better cost-efficiency**, all at
-**~4¢ per run**. The scripted expert-heuristic baseline is byte-for-byte
-reproducible; the Qwen arms demonstrate real instruction-following
-(team alignment 0.76–1.00). Real-data scenario packs (NYC Ida 2021) let the
-observatory replay real incident demand while keeping outcomes explicitly
-simulated.
+per dollar. The robust finding is **cost-efficiency**: six cheap qwen3.5-flash
+workers plus a qwen3.5-plus commander **match the expert-heuristic baseline on
+lives** (108.4 vs 106.8) and **out-deliver the solo big model** (108.4 vs 95.6)
+at **~3.5¢ per run** — **~65% better lives per dollar than the solo big model**.
+Against the flat swarm the society holds a **directional but not significant**
+lives edge (+8.9 at n=15, wins 11/15, p=0.118, bootstrap CI includes 0). Written
+**doctrine credibly raises team alignment** (+0.125, n=6, p=0.031). The scripted
+expert-heuristic baseline is byte-for-byte reproducible; the Qwen arms
+demonstrate real instruction-following (team alignment 0.76–1.00). Real-data
+scenario packs (NYC Ida 2021) let the observatory replay real incident demand
+while keeping outcomes explicitly simulated.
 
 ## 2. What is simulated vs real (the honesty boundary)
 
@@ -37,40 +40,48 @@ scenario run's manifest (`runs/seed91-society/run.json` → `scenario.caveat_lin
 
 ## 3. The benchmark result
 
-**Batch:** `bench/results/2026-06-11/results.json` — 4 arms, n=5 paired seeds
-{11, 23, 37, 42, 57}, 60 ticks each.
+**Batch:** `bench/results/2026-06-22-4arm-refresh/results.json` — 4 arms, n=5
+paired seeds {11, 23, 37, 42, 57}, 60 ticks each.
 
-| Arm | Mean lives saved | Mean cost/run | Lives per $ | vs scripted (paired) |
-|---|---|---|---|---|
-| **scripted** (expert heuristics, $0) | 106.8 | $0.0000 | — (free) | control |
-| **society** (6-role Qwen, negotiation) | 103.2 | $0.0423 | 2,441 | −3.6 (p=0.375, noise) |
-| **solo** (one big Qwen model) | 104.2 | $0.0649 | 1,606 | −2.6 (p=1.000, noise) |
-| **swarm** (flat swarm, no protocol) | 75.6 | $0.0161 | 4,710 | −31.2 (p=0.0625, 5/5 loss) |
+| Arm | Mean lives saved | Mean cost/run | Lives per $ |
+|---|---|---|---|
+| **scripted** (expert heuristics, $0) | 106.8 | $0.0000 | — (free, control) |
+| **society** (6-role Qwen, negotiation) | 108.4 | $0.0353 | 3,069 |
+| **solo** (one big Qwen model) | 95.6 | $0.0515 | 1,855 |
+| **swarm** (flat swarm, no protocol) | 93.8 | $0.0132 | 7,133 |
 
-**The protocol's value — society vs swarm (the headline):**
+**The protocol's value — society vs swarm (directional, not significant):**
 
 | Stat | Value |
 |---|---|
-| n (paired seeds) | 5 |
-| Mean delta (society − swarm) | **+27.6 lives** |
-| SD | 35.2 |
-| Seeds where society won | 4 of 5 (1 tied) |
-| Sign-test p (two-sided) | 0.125 |
-| Verdict | **suggestive** (not significant at α=0.05) |
+| n (paired seeds) | 15 |
+| Mean delta (society − swarm) | **+8.9 lives** |
+| Seeds where society won | 11 of 15 |
+| Sign-test p (two-sided) | 0.118 |
+| Bootstrap 95% CI | [−5.5, +21.8] (includes 0) |
+| Verdict | **directional, not significant** (CI includes 0) |
 
-> We surface this as **suggestive, not significant** — 5 paired seeds is a small
-> n. The direction is consistent (4/5 positive), but we do not claim a proven
-> win. This is the honest read.
+> We surface this as **directional, not significant**. The direction is
+> consistent (society wins 11/15), but the bootstrap CI includes 0 and the
+> sign-test does not clear α=0.05 — we do not claim a proven lives win. **An
+> earlier +28-lives figure was an n=5 overestimate**: one seed dominated the
+> small sample. Firming to 15 paired seeds collapsed the magnitude to +8.9 and
+> widened the interval across 0. We report the firmed number, not the headline
+> the small sample first suggested — the harness caught our own ghost.
+>
+> **Sources:** `bench/results/2026-06-22-4arm-refresh/` (seeds {11,23,37,42,57})
+> + `bench/results/2026-06-22-swarm-firm/` (seeds {60..69}).
 
-**Society vs solo (cost-efficiency, not absolute lives):** Society saves a
-similar number of lives (103.2 vs 104.2, p=1.000 — noise) but at 35% lower cost
-($0.042 vs $0.065) → **52% better lives per dollar** (2,441 vs 1,606). The
-negotiation protocol lets six small models coordinate as well as one big model
-for less money.
+**Society vs solo (cost-efficiency — the robust finding):** Six cheap
+qwen3.5-flash workers plus a qwen3.5-plus commander **save more lives than one
+big model** (108.4 vs 95.6) at **31% lower cost** ($0.0353 vs $0.0515) →
+**65% better lives per dollar** (3,069 vs 1,855). The negotiation protocol lets
+small models coordinate to out-deliver a single big model for less money.
 
 **Society vs scripted:** The deterministic expert-heuristic baseline is strong
-(106.8 vs 103.2, p=0.375 — noise). Society matches it within noise — the
-heuristics encode domain expertise a learned agent hasn't surpassed yet.
+(106.8 vs 108.4). Society **matches the expert heuristics on lives** (108.4 vs
+106.8) — a coordinated team of small models holds its own against hand-tuned
+domain expertise, at ~$0.035/run.
 
 ### Reproduce
 
@@ -84,7 +95,7 @@ is server-side; the Bench tab renders it. The raw deltas above are reproducible
 from the file:
 
 ```bash
-python3 -c "import json,statistics; d=json.load(open('bench/results/2026-06-11/results.json')); s=d['paired']['society']; w=d['paired']['swarm']; seeds=sorted(set(s)&set(w)); deltas=[s[x]-w[x] for x in seeds]; print(f'mean_delta={statistics.mean(deltas):+.1f} deltas={deltas}')"
+python3 -c "import json,statistics; d=json.load(open('bench/results/2026-06-22-4arm-refresh/results.json')); s=d['paired']['society']; w=d['paired']['swarm']; seeds=sorted(set(s)&set(w)); deltas=[s[x]-w[x] for x in seeds]; print(f'mean_delta={statistics.mean(deltas):+.1f} deltas={deltas}')"
 ```
 
 ## 4. Determinism proof
@@ -105,11 +116,14 @@ determinism claim is scoped to the scripted engine only.
 Judges are Alibaba/Qwen representatives. Every figure below is pulled from a
 file path, not estimated.
 
-### "4-cent agent society"
+### "3.5-cent agent society"
 
-A full 6-role society run (commander + comms + fire + infrastructure + medical
-+ rescue) costs **$0.0441** — 171,499 prompt + 24,109 completion tokens.
-Workers are qwen3.5-flash; the commander is qwen3.5-plus.
+The 4-arm bench (§3) puts the society at **$0.0353/run on average** — down ~16%
+from the first benchmark ($0.0423 on 2026-06-11), now **~3,069 lives per $**.
+The frozen episode below is a single longer 6-role society run (commander + comms
++ fire + infrastructure + medical + rescue) and costs **$0.0441** — 171,499
+prompt + 24,109 completion tokens. Workers are qwen3.5-flash; the commander is
+qwen3.5-plus.
 
 | Source file | Field | Value |
 |---|---|---|

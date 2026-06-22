@@ -186,7 +186,7 @@ Add the counterfactual manifest block (`{at_tick, kind, target, branch_of}`) to
 ## Judging-criteria payoff
 - **Technical Depth (30%)** — live, manipulable proof of the determinism invariant.
 - **Innovation (30%)** — counterfactual replay is the legible way to *prove* the protocol
-  causes the +28 lives, not just correlate with it.
+  causes its effect on outcomes, not just correlate with it.
 - **Problem Value (25%)** — generalizes Aftershock toward the "architecture leaderboard"
   in Future Work.
 - **Presentation (15%)** — one decision, two diverging timelines: the video's best 30s.

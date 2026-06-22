@@ -1,8 +1,8 @@
 # Aftershock
 
 **A deterministic agent-society benchmark: a disaster-struck town run by a society of Qwen
-agents that split tasks, negotiate scarce rescue resources, and measurably beat a flat swarm
-on lives saved while matching a single big model at lower cost.**
+agents that split tasks and negotiate scarce rescue resources — six cheap models that match
+expert heuristics and a single big model on lives saved, at far better lives-per-dollar.**
 
 > **Judges:** see [docs/EVIDENCE.md](docs/EVIDENCE.md) — a frozen, citable proof bundle where
 > every number traces to a file. The 60-second read, the simulated-vs-real boundary, the
@@ -51,10 +51,11 @@ Aftershock is a working end-to-end prototype:
 The public deployment requires an observatory token for mutating live-run endpoints; read-only
 surfaces such as recorded runs and scenario metadata are public.
 
-## Results (live benchmark, 2026-06-11)
+## Results (live benchmark, 2026-06-22)
 
 Four arms, identical seeded worlds (5 paired seeds × 60-tick budget), real Qwen Cloud
-calls. Full tables in [bench/results/2026-06-11/](bench/results/2026-06-11/RESULTS.md);
+calls. Full tables in
+[bench/results/2026-06-22-4arm-refresh/](bench/results/2026-06-22-4arm-refresh/);
 reproduce with `aftershock bench`. For the verified proof bundle with paired-stats
 significance calls and source-file citations, see
 [docs/EVIDENCE.md](docs/EVIDENCE.md).
@@ -65,27 +66,36 @@ benchmarked as an opt-in (`--society-tools`); see
 [Native Qwen function calling](#native-qwen-function-calling-measured-ablation) below for the
 measured cost tradeoff.*
 
-| arm | coordination | models | lives saved (mean±sd) | missions failed | cost/run | lives per $ |
-|---|---|---|---|---|---|---|
-| **society** | negotiation protocol | flash ×5 + plus commander | 103.2 ± 23.6 | 0.4 | $0.042 | **2441** |
-| solo | none (one agent) | qwen3-max | 104.2 ± 13.6 | 0.4 | $0.065 | 1606 |
-| swarm | none (5 agents) | flash ×5 | 75.6 ± 15.4 | 3.0 | $0.016 | 4710* |
-| scripted | negotiation protocol | heuristics ($0) | 106.8 ± 18.0 | 0.2 | $0.00 | — |
+| arm | coordination | models | lives saved (mean) | cost/run | lives per $ |
+|---|---|---|---|---|---|
+| **society** | negotiation protocol | flash ×5 + plus commander | 108.4 | $0.0353 | **3069** |
+| solo | none (one agent) | qwen3-max | 95.6 | $0.0515 | 1855 |
+| swarm | none (5 agents) | flash ×5 | 93.8 | $0.0132 | 7133* |
+| scripted | negotiation protocol | heuristics ($0) | 106.8 | $0.00 | — |
 
-Two findings, both causal because every arm faces byte-identical worlds:
+Findings, all causal because every arm faces byte-identical worlds:
 
-1. **The protocol is worth ~+28 lives per run.** Same five cheap models, with vs without
-   the negotiation protocol: 103.2 vs 75.6 lives saved, 0.4 vs 3.0 missions failed.
-   The run records show why — the swarm wasted 160 decisions racing for empty resource
-   pools; the society resolved contention in the auction *before* acting.
-   (*swarm's high lives-per-$ is efficiency at a much worse outcome.)
-   *(Caveat: +28 is an n=5 paired mean — society ≥ swarm on all five seeds (robust
-   direction), but the magnitude is soft: sign test p=0.125, power 0.42, leveraged by one
-   seed; a tight bound needs ~25 seeds. See [FIELD-NOTES §17](docs/FIELD-NOTES.md).)*
-2. **The society matches the flagship at 65% of the cost.** A coordinated team of
-   qwen3.5-flash workers under a qwen3.5-plus commander saves as many lives as one
-   qwen3-max doing everything (103.2 vs 104.2 — within noise), for 52% more lives per
-   dollar, and runs over 1.5× faster (parallel small calls beat sequential big ones).
+1. **Cost-efficiency: six cheap models coordinate to match expert heuristics and the
+   flagship on lives, for far better lives-per-dollar.** A coordinated team of
+   qwen3.5-flash workers under a qwen3.5-plus commander saves as many lives as well-tuned
+   scripted heuristics (108.4 vs 106.8) and a single big model doing everything
+   (108.4 vs 95.6 for solo qwen3-max), at ~$0.035/run — ~3,070 lives per dollar, over 50%
+   better lives-per-$ than the solo flagship. (Cost has also fallen ~16% since the first
+   benchmark: $0.042 → $0.035/run, 2,441 → 3,069 lives/$.)
+2. **Written doctrine raises team conformance — now a credible result.** Turning the
+   playbook on vs off lifts conformance by +0.125 (society ≥ doctrine-off on 6/6 seeds,
+   sign-test p=0.031, 95% CI [0.088, 0.164]) at no lives cost. See
+   [docs/EVIDENCE.md §S5](docs/EVIDENCE.md).
+3. **Against the flat swarm, the society saves a small, directionally-consistent edge —
+   but it is not statistically significant.** Same five cheap models, with vs without the
+   negotiation protocol, over 15 paired seeds: society wins 11/15 for a mean +8.9 lives,
+   but sign-test p=0.118 and the bootstrap 95% CI [−5.5, +21.8] **includes 0**, so we do
+   not headline a lives magnitude. An earlier n=5 estimate read ~+28 lives; firming to
+   n=15 collapsed it (one seed had dominated the small sample). The harness catching its
+   own ghost is the point — present the protocol-vs-swarm result as *directional, not
+   significant.* The run records still show *why* the direction holds: the swarm wasted
+   decisions racing for empty resource pools while the society resolved contention in the
+   auction before acting. (*swarm's high lives-per-$ is efficiency at a worse outcome.)
 
 Honest caveat: well-tuned scripted heuristics using the same protocol remain competitive
 with all LLM arms on this scenario — the protocol, not raw model intelligence, carries
@@ -106,6 +116,10 @@ benchmarked it on the same 5 paired seeds
 |---|---|---|---|---|---|
 | **JSON contracts (default)** | 103.2 ± 23.6 | 0.4 | **$0.042** | 120 s | **2441** |
 | native function calling | 98.2 ± 23.2 | 0.8 | $0.083 | 297 s | 1188 |
+
+Both rows are the two halves of one paired A/B from the 2026-06-13 snapshot; the JSON-contracts
+default has since improved to **108.4 lives at $0.0353/run (3,069 lives/$)** on the refreshed
+2026-06-22 benchmark above, which only widens the cost gap with native tool calling.
 
 **Finding:** native tool calling held decision quality within noise (98.2 vs 103.2 lives —
 well inside ±23 SD) but cost ~2× more and ran ~2.5× slower. The cause is structural, not

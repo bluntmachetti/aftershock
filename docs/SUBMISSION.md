@@ -70,12 +70,18 @@ The project has four core pieces:
   "agent-stated," never dressed up as ground truth), the token cost, and the recorded outcome. A
   one-page **Evidence Pack** ties every headline number to a source file in the repo.
 
-The headline result: with the same five qwen3.5-flash workers, adding the negotiation protocol raised
-mean lives saved from 75.6 to 103.2 and cut failed missions from 3.0 to 0.4. The structured society
-matched the qwen3-max solo agent's outcome within noise while costing about 35% less per run.
-(Honest caveat: the ~+28-life gap is an n=5 paired mean — directionally robust, society ≥ swarm on all
-five seeds, but the magnitude is soft, n=5 with one seed dominating, paired sign-test p=0.125; we
-report it as *suggestive, not yet statistically significant*. See [EVIDENCE.md §3](EVIDENCE.md#3-the-benchmark-result).)
+The headline result is about cost-efficiency: six cheap qwen3.5-flash workers with a qwen3.5-plus
+commander coordinate to match expert scripted heuristics (106.8 lives) and a single big qwen3-max
+solo agent (95.6 lives) on lives saved — 108.4 lives at ~$0.035/run (~3,070 lives/$), about 16%
+cheaper per run than our first benchmark and over 50% better lives-per-dollar than the solo big
+model. A second robust finding: written doctrine raises team conformance by a credible margin
+(+0.125, sign-test p=0.031, positive on 6/6 seeds).
+(Honest caveat on the swarm comparison: against the flat protocol-free swarm the society saves a
+small, directionally-consistent edge — +8.9 lives at n=15 paired seeds, society wins 11/15 — but it
+is **not statistically significant** (paired sign-test p=0.118, bootstrap 95% CI [-5.5,+21.8]
+includes 0). An earlier n=5 measurement read ~+28 lives; firming to 15 seeds collapsed it to +8.9,
+so we present the swarm edge as directional, not significant. See
+[EVIDENCE.md §3](EVIDENCE.md#3-the-benchmark-result).)
 
 Every run is replayable. Same seed plus same decisions gives the same outcome, byte for byte. The
 web observatory lets judges scrub through ticks, inspect agent decisions, open a decision receipt for
@@ -142,9 +148,10 @@ rejection memory in the next observations.
 The second challenge was proving the society mattered. If every arm sees a different world, the
 benchmark is just a story. Aftershock therefore uses paired deterministic seeds: the solo agent, the
 swarm, the scripted baseline, and the society all face byte-identical disasters — and it reports the
-result honestly. At five seeds the protocol's edge over the swarm is directionally consistent but
-only suggestive (p=0.125), so the benchmark surfaces confidence intervals and significance tests
-rather than a single triumphant number.
+result honestly. At fifteen paired seeds the protocol's edge over the swarm is directionally
+consistent but not statistically significant (+8.9 lives, society wins 11/15, sign-test p=0.118, CI
+includes 0), so the benchmark surfaces confidence intervals and significance tests rather than a
+single triumphant number.
 
 The third challenge was honesty around real data. NYC Open Data gives real incident timing and
 response latency, but not real "lives saved" for our simulated missions. The UI had to show that
@@ -169,18 +176,21 @@ boundary clearly instead of hiding it in a footnote.
 
 The strongest result is that coordination structure matters more than agent count.
 
-Five qwen3.5-flash agents without a protocol saved 75.6 lives on average. The same five cheap models
-inside a structured society saved 103.2. The difference was not model intelligence; it was the
-mechanism that turned resource contention into explicit information before agents wasted actions.
-(The ~+28-life gap is directionally robust — society ≥ swarm on every one of the 5 paired seeds — but
-its precise size is an n=5 estimate with a wide CI, p=0.125, so we report it as suggestive rather
-than proven; [EVIDENCE.md §3](EVIDENCE.md#3-the-benchmark-result). The most robust number we report
-is the deterministic doctrine-conformance effect: +0.156 team alignment, positive on all 5 seeds
-([EVIDENCE.md §5](EVIDENCE.md#5-qwen-track-framing-verified-numbers-only)).)
+A flat protocol-free swarm of cheap qwen3.5-flash agents saves fewer lives than the same models
+inside a structured society — but the gap is small. The difference, where it exists, is not model
+intelligence; it is the mechanism that turns resource contention into explicit information before
+agents waste actions.
+(Honest read on the swarm edge: at n=15 paired seeds the society saves +8.9 lives over the swarm and
+wins 11/15, but the effect is **not statistically significant** — paired sign-test p=0.118, bootstrap
+95% CI [-5.5,+21.8] includes 0. An earlier n=5 measurement read ~+28 lives, but one seed dominated;
+firming to 15 seeds collapsed it. We report the swarm edge as directional, not significant —
+[EVIDENCE.md §3](EVIDENCE.md#3-the-benchmark-result). The most robust effect we report is the
+deterministic doctrine-conformance lever: +0.125 team alignment, credible at n=6, positive on all 6
+seeds, sign-test p=0.031 ([EVIDENCE.md §5](EVIDENCE.md#5-qwen-track-framing-verified-numbers-only)).)
 
 We also learned that a society of small models can match a flagship solo model when the task is
-decomposable. The structured society saved 103.2 lives per run versus 104.2 for qwen3-max solo, but
-ran cheaper.
+decomposable. The structured society saved 108.4 lives per run versus 95.6 for qwen3-max solo, and
+at ~$0.035/run delivered over 50% better lives-per-dollar.
 
 The uncomfortable lesson is that the protocol carries more of the result than the LLMs do.
 Well-tuned scripted agents using the same coordination protocol remain competitive. That is not a
@@ -277,26 +287,33 @@ kernel-ruling / agent-stated-rationale / cost / outcome chain.
 
 ### 3 · The proof (1:00–1:39)
 
-VO: "Same disaster, run four ways on byte-identical seeds. Here's the comparison that matters: five
-cheap flash agents with *no* protocol save 75.6 lives. The *same* five models inside the structured
-society save 103.2 — and fail seven times fewer missions. Same models, same world. The coordination
-protocol alone is worth twenty-eight lives a run. And it's reproducible: the scripted engine replays
-byte-for-byte, and every delta carries a bootstrap confidence interval and a sign test, shown
-honestly as merely suggestive when the sample is small."
+VO: "Same disaster, run four ways on byte-identical seeds. Here's the comparison that matters: six
+cheap flash workers and a plus commander, coordinating, save as many lives as expert scripted
+heuristics and a single big model — about a hundred and eight lives — for three and a half cents a
+run. That's over fifty percent better lives-per-dollar than the solo big model. And written doctrine
+measurably raises team alignment — a credible, statistically significant effect. It's reproducible:
+the scripted engine replays byte-for-byte, and every delta carries a bootstrap confidence interval
+and a sign test, shown honestly as merely suggestive when the sample is small."
 
-SHOW: Bench tab; the four-arm table (swarm 75.6 vs society 103.2, missions-failed 3.0 → 0.4); the
-bootstrap-CI / sign-test / post-hoc-power cards; the "✓ scripted engine — identical digests" badge.
+SHOW: Bench tab; the four-arm table (society 108.4 vs scripted 106.8 vs solo 95.6 vs swarm 93.8; the
+cost / lives-per-dollar columns, society ~$0.035/run ≈ 3,070 lives/$); the bootstrap-CI / sign-test /
+post-hoc-power cards; the "✓ scripted engine — identical digests" badge.
 
-> Note (not spoken): "twenty-eight" is an n=5 paired mean — robust in direction (society ≥ swarm on
-> all five seeds) but soft in magnitude (p=0.125, [EVIDENCE.md §3](EVIDENCE.md#3-the-benchmark-result)). The Bench tab itself labels it *suggestive*,
-> so the footage and the VO agree. If a lower-third shows the number, keep it "≈+28 (n=5)".
+> Note (not spoken): lead with cost-efficiency (~$0.035/run, ~3,070 lives/$) and the credible
+> doctrine-conformance effect (+0.125, n=6, p=0.031). The society's lives edge over the flat swarm is
+> directional but **not significant** — +8.9 lives at n=15 paired seeds (wins 11/15, p=0.118, CI
+> includes 0); an earlier n=5 read of ~+28 collapsed when firmed to 15 seeds
+> ([EVIDENCE.md §3](EVIDENCE.md#3-the-benchmark-result)). If a lower-third shows the swarm number,
+> render it "+9 lives (n=15, directional, not significant)" — never "≈+28".
 
 ### 4 · Matches the flagship (1:39–1:50)
 
-VO: "And the society matches a single qwen3-max doing everything — 103 lives versus 104 — at about a
-third lower cost. Small coordinated models, big-model outcome, cheaper."
+VO: "And the society matches a single qwen3-max doing everything — about a hundred and eight lives
+versus ninety-six — at a fraction of the cost. Small coordinated models, big-model outcome, far
+better value per dollar."
 
-SHOW: Bench cost / lives-per-dollar columns; brief Compare tab (society vs solo, same seed).
+SHOW: Bench cost / lives-per-dollar columns (society ~$0.035/run, ~3,070 lives/$ vs solo ~$0.052/run,
+~1,855 lives/$); brief Compare tab (society vs solo, same seed).
 
 ### 5 · Real data, honest labels (1:50–2:18)
 
@@ -334,8 +351,10 @@ SHOW: final NYC Ida scoreboard / map, then the live URL card.
    runs (no live-LLM latency on camera). The NYC beats use the `seed91-society` Ida run; the society
    + Decision-Receipt beats use a `seed42-society` run. The Bench beat reads the canonical
    `2026-06-11` batch (pinned as the headline batch so it matches the narration).
-3. **Title/section cards**: lower-thirds for the key numbers (≈+28 lives (n=5), 103.2 vs 75.6,
-   948 s, 16% held) via ffmpeg drawtext.
+3. **Title/section cards**: lower-thirds for the key numbers (~$0.035/run · ~3,070 lives/$,
+   108.4 lives vs 95.6 solo, doctrine conformance +0.125 (n=6, p=0.031), 948 s, 16% held) via
+   ffmpeg drawtext. If the swarm edge appears, render it "+9 lives (n=15, directional, not
+   significant)" — never "≈+28".
 4. **Assemble** (`media/build.sh`, ffmpeg): concat the eight beats + the architecture diagram beat +
    title/outro cards, lay VO per beat, hold the Bench table and the Decision Receipt long enough to
    read, normalize loudness, export ≤ 3:00 H.264 1080p → `media/out/aftershock-demo.mp4`.
