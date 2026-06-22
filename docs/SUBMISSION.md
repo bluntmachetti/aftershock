@@ -77,10 +77,10 @@ cheaper per run than our first benchmark and over 50% better lives-per-dollar th
 model. A second robust finding: written doctrine raises team conformance by a credible margin
 (+0.125, sign-test p=0.031, positive on 6/6 seeds).
 (Honest caveat on the swarm comparison: against the flat protocol-free swarm the society saves a
-small, directionally-consistent edge — +8.9 lives at n=15 paired seeds, society wins 11/15 — but it
-is **not statistically significant** (paired sign-test p=0.118, bootstrap 95% CI [-5.5,+21.8]
-includes 0). An earlier n=5 measurement read ~+28 lives; firming to 15 seeds collapsed it to +8.9,
-so we present the swarm edge as directional, not significant. See
+small, directionally-consistent edge — +8.9 lives at n=15 paired seeds, society wins 11/15 — that is
+**suggestive, not significant** (bootstrap 95% CI [+2.3,+15.4] excludes 0, but paired sign-test
+p=0.118 does not clear significance). An earlier n=5 measurement read ~+28 lives; firming to 15 seeds
+collapsed it to +8.9, so we present the swarm edge as suggestive, not significant. See
 [EVIDENCE.md §3](EVIDENCE.md#3-the-benchmark-result).)
 
 Every run is replayable. Same seed plus same decisions gives the same outcome, byte for byte. The
@@ -148,10 +148,10 @@ rejection memory in the next observations.
 The second challenge was proving the society mattered. If every arm sees a different world, the
 benchmark is just a story. Aftershock therefore uses paired deterministic seeds: the solo agent, the
 swarm, the scripted baseline, and the society all face byte-identical disasters — and it reports the
-result honestly. At fifteen paired seeds the protocol's edge over the swarm is directionally
-consistent but not statistically significant (+8.9 lives, society wins 11/15, sign-test p=0.118, CI
-includes 0), so the benchmark surfaces confidence intervals and significance tests rather than a
-single triumphant number.
+result honestly. At fifteen paired seeds the protocol's edge over the swarm is suggestive, not
+statistically significant (+8.9 lives, society wins 11/15, bootstrap 95% CI [+2.3,+15.4] excludes 0,
+but sign-test p=0.118 does not clear significance), so the benchmark surfaces confidence intervals
+and significance tests rather than a single triumphant number.
 
 The third challenge was honesty around real data. NYC Open Data gives real incident timing and
 response latency, but not real "lives saved" for our simulated missions. The UI had to show that
@@ -181,9 +181,10 @@ inside a structured society — but the gap is small. The difference, where it e
 intelligence; it is the mechanism that turns resource contention into explicit information before
 agents waste actions.
 (Honest read on the swarm edge: at n=15 paired seeds the society saves +8.9 lives over the swarm and
-wins 11/15, but the effect is **not statistically significant** — paired sign-test p=0.118, bootstrap
-95% CI [-5.5,+21.8] includes 0. An earlier n=5 measurement read ~+28 lives, but one seed dominated;
-firming to 15 seeds collapsed it. We report the swarm edge as directional, not significant —
+wins 11/15, an effect that is **suggestive, not significant** — bootstrap 95% CI [+2.3,+15.4] excludes
+0, but paired sign-test p=0.118 does not clear significance. An earlier n=5 measurement read ~+28
+lives, but one seed dominated; firming to 15 seeds collapsed it. We report the swarm edge as
+suggestive, not significant —
 [EVIDENCE.md §3](EVIDENCE.md#3-the-benchmark-result). The most robust effect we report is the
 deterministic doctrine-conformance lever: +0.125 team alignment, credible at n=6, positive on all 6
 seeds, sign-test p=0.031 ([EVIDENCE.md §5](EVIDENCE.md#5-qwen-track-framing-verified-numbers-only)).)
@@ -301,10 +302,11 @@ post-hoc-power cards; the "✓ scripted engine — identical digests" badge.
 
 > Note (not spoken): lead with cost-efficiency (~$0.035/run, ~3,070 lives/$) and the credible
 > doctrine-conformance effect (+0.125, n=6, p=0.031). The society's lives edge over the flat swarm is
-> directional but **not significant** — +8.9 lives at n=15 paired seeds (wins 11/15, p=0.118, CI
-> includes 0); an earlier n=5 read of ~+28 collapsed when firmed to 15 seeds
-> ([EVIDENCE.md §3](EVIDENCE.md#3-the-benchmark-result)). If a lower-third shows the swarm number,
-> render it "+9 lives (n=15, directional, not significant)" — never "≈+28".
+> **suggestive, not significant** — +8.9 lives at n=15 paired seeds (wins 11/15, bootstrap 95% CI
+> [+2.3,+15.4] excludes 0, but sign-test p=0.118 does not clear significance); an earlier n=5 read of
+> ~+28 collapsed when firmed to 15 seeds ([EVIDENCE.md §3](EVIDENCE.md#3-the-benchmark-result)). If a
+> lower-third shows the swarm number, render it "+9 lives (n=15, suggestive, not significant)" — never
+> "≈+28".
 
 ### 4 · Matches the flagship (1:39–1:50)
 
