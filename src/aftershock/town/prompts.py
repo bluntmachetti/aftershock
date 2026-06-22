@@ -116,6 +116,32 @@ PROPOSAL_DOCS: dict[str, str] = {
     ),
 }
 
+# Pre-§21 verbose proposal-doc descriptions, recovered byte-for-byte from 33fe876^.
+# Used as the untrimmed control for the contract on/off ablation: build_llm_agents
+# selects this map when contract_trim=False so Δ = trimmed − untrimmed isolates the
+# §21 cost trim (FIELD-NOTES §21). The trimmed PROPOSAL_DOCS above stays the default.
+PROPOSAL_DOCS_VERBOSE: dict[str, str] = {
+    "resource_request": (
+        "resource_request body {mission_id, resource, qty, urgency 1-10}: bid in the "
+        "contested-resource auction; the auction ranks bids by mission priority, severity, "
+        "deadline, and urgency — if outbid the ruling names what won, so adjust urgency or "
+        "reassess before re-bidding"
+    ),
+    "task_handoff": (
+        "task_handoff: transfer responsibility for a task to a specific recipient agent; "
+        "set recipient to the target agent_id"
+    ),
+    "escalation": (
+        "escalation body {mission_id, why}: alert the commander that a mission needs "
+        "command-level attention — use when deadline pressure is high and staffing is "
+        "critically below requirements"
+    ),
+    "info_share": (
+        "info_share: broadcast situational information to all other agents; no recipient "
+        "needed, automatically accepted by the kernel — never grants resources"
+    ),
+}
+
 
 # ---------------------------------------------------------------------------
 # LLM agent factory
@@ -135,6 +161,7 @@ def build_llm_agents(
     engine_seed: int | None = None,
     doctrine: bool = True,
     role_models: dict[str, str] | None = None,
+    contract_trim: bool = True,
 ) -> dict[str, Agent]:
     """Build one LLMAgent per town role, sharing the same provider instance.
 
@@ -175,6 +202,14 @@ def build_llm_agents(
                   high-conformance infra bump (FIELD-NOTES §20:
                   infrastructure=qwen3.5-plus). Keys not matching a town role are
                   ignored (so one override map can be reused across arms).
+        contract_trim: when True (default) the JSON-mode decision contract is rendered
+                  in the FIELD-NOTES §21 cost-trimmed form (compact JSON skeleton,
+                  deduped Hard Rules) using the trimmed PROPOSAL_DOCS — byte-identical
+                  to the published behaviour. When False the pre-§21 verbose contract is
+                  rendered (multi-line skeleton + un-deduped Hard Rules) using
+                  PROPOSAL_DOCS_VERBOSE — the untrimmed control for the contract on/off
+                  ablation (FIELD-NOTES §21). No effect on tool-mode roles (the JSON
+                  contract is the trimmed surface). Δ = trimmed − untrimmed.
 
     Returns:
         dict mapping agent_id -> LLMAgent for all six town agents.
@@ -199,6 +234,11 @@ def build_llm_agents(
         "broadcast": BroadcastParams.model_json_schema(),
     }
     proposal_param_schemas: dict[str, dict] = {}
+
+    # contract_trim selects the §21 trimmed proposal-doc descriptions (default) or the
+    # pre-§21 verbose ones (the untrimmed ablation control). Only the JSON-mode
+    # decision_contract path consumes this; tool-mode roles keep the trimmed PROPOSAL_DOCS.
+    proposal_docs = PROPOSAL_DOCS if contract_trim else PROPOSAL_DOCS_VERBOSE
 
     agents: dict[str, Agent] = {}
     for agent_id in _TOWN_AGENT_IDS:
@@ -255,7 +295,8 @@ def build_llm_agents(
             contract = decision_contract(
                 allowed=role.allowed_decisions,
                 decision_docs=DECISION_DOCS,
-                proposal_docs=PROPOSAL_DOCS,
+                proposal_docs=proposal_docs,
+                trim=contract_trim,
             )
             agents[agent_id] = LLMAgent(
                 agent_id=agent_id,

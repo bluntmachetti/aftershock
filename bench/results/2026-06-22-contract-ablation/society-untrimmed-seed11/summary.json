@@ -1,0 +1,80 @@
+{
+  "arm": "society",
+  "cost": {
+    "by_agent": {
+      "commander": {
+        "completion_tokens": 1819,
+        "cost_usd": 0.016090399999999994,
+        "prompt_tokens": 29312
+      },
+      "comms": {
+        "completion_tokens": 1946,
+        "cost_usd": 0.003609200000000001,
+        "prompt_tokens": 28308
+      },
+      "fire": {
+        "completion_tokens": 3148,
+        "cost_usd": 0.004254699999999998,
+        "prompt_tokens": 29955
+      },
+      "infrastructure": {
+        "completion_tokens": 2627,
+        "cost_usd": 0.004456699999999999,
+        "prompt_tokens": 34059
+      },
+      "medical": {
+        "completion_tokens": 2081,
+        "cost_usd": 0.003824100000000001,
+        "prompt_tokens": 29917
+      },
+      "rescue": {
+        "completion_tokens": 2301,
+        "cost_usd": 0.003907700000000001,
+        "prompt_tokens": 29873
+      }
+    },
+    "by_model": {
+      "qwen3.5-flash": {
+        "completion_tokens": 12103,
+        "cost_usd": 0.02005240000000001,
+        "prompt_tokens": 152112
+      },
+      "qwen3.5-plus": {
+        "completion_tokens": 1819,
+        "cost_usd": 0.016090399999999994,
+        "prompt_tokens": 29312
+      }
+    },
+    "completion_tokens": 13922,
+    "cost_usd": 0.03614280000000001,
+    "prompt_tokens": 181424
+  },
+  "models": [
+    "qwen3.5-flash",
+    "qwen3.5-plus"
+  ],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 1.0,
+    "fire": 0.8378378378378378,
+    "infrastructure": 0.8928571428571429,
+    "medical": 0.8571428571428572,
+    "rescue": 0.84
+  },
+  "scores": {
+    "avg_response_ticks": 5.083333333333333,
+    "lives_lost": 53.0,
+    "lives_saved": 139.0,
+    "missions_failed": 0.0,
+    "missions_open": 0.0,
+    "missions_resolved": 12.0,
+    "panic": 0.15000000000000005,
+    "resource_utilization": 0.0
+  },
+  "seed": 11,
+  "team_alignment": 0.8869565217391304,
+  "ticks_requested": 60,
+  "ticks_run": 26,
+  "wall_s": 76.7786318261642,
+  "world_digest": "d3ba2855a846eb864cd7e176984f4503474c0071b4c13952ab542400c6645afe"
+}

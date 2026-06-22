@@ -390,6 +390,42 @@ def test_ablation_help_shows_ablate() -> None:
 
 
 # ---------------------------------------------------------------------------
+# ablation --ablate contract (FIELD-NOTES §21): same validation shape as doctrine
+# ---------------------------------------------------------------------------
+
+
+def test_ablation_ablate_contract_mismatched_arms_exits_1() -> None:
+    """--ablate contract requires --control == --treatment; a mismatch exits 1
+    with a friendly error (before the API-key check, so no key needed)."""
+    result = _run_aftershock(
+        "ablation", "--ablate", "contract",
+        "--control", "society", "--treatment", "swarm", "--seeds", "42",
+        env=_env_without_key(),
+    )
+    _assert_rc(result, 1)
+    combined = result.stdout + result.stderr
+    assert "== --treatment" in combined
+    assert "Traceback" not in combined
+
+
+def test_ablation_ablate_contract_scripted_exits_1() -> None:
+    """--ablate contract on the scripted arm exits 1 (scripted has no contract)."""
+    result = _run_aftershock(
+        "ablation", "--ablate", "contract",
+        "--control", "scripted", "--treatment", "scripted", "--seeds", "42",
+        env=_env_without_key(),
+    )
+    _assert_rc(result, 1)
+    assert "decision contract" in (result.stdout + result.stderr)
+
+
+def test_ablation_ablate_contract_is_a_valid_choice() -> None:
+    """argparse accepts --ablate contract (it is a registered choice)."""
+    result = _run_aftershock("ablation", "--help")
+    assert "contract" in result.stdout + result.stderr
+
+
+# ---------------------------------------------------------------------------
 # serve / mcp subcommands appear in --help
 # ---------------------------------------------------------------------------
 

@@ -1,0 +1,80 @@
+{
+  "arm": "society",
+  "cost": {
+    "by_agent": {
+      "commander": {
+        "completion_tokens": 2950,
+        "cost_usd": 0.0202832,
+        "prompt_tokens": 33008
+      },
+      "comms": {
+        "completion_tokens": 2786,
+        "cost_usd": 0.004336400000000002,
+        "prompt_tokens": 32220
+      },
+      "fire": {
+        "completion_tokens": 3568,
+        "cost_usd": 0.004806999999999999,
+        "prompt_tokens": 33798
+      },
+      "infrastructure": {
+        "completion_tokens": 3358,
+        "cost_usd": 0.0052322,
+        "prompt_tokens": 38890
+      },
+      "medical": {
+        "completion_tokens": 3697,
+        "cost_usd": 0.0048936,
+        "prompt_tokens": 34148
+      },
+      "rescue": {
+        "completion_tokens": 3227,
+        "cost_usd": 0.004678100000000001,
+        "prompt_tokens": 33873
+      }
+    },
+    "by_model": {
+      "qwen3.5-flash": {
+        "completion_tokens": 16636,
+        "cost_usd": 0.023947299999999998,
+        "prompt_tokens": 172929
+      },
+      "qwen3.5-plus": {
+        "completion_tokens": 2950,
+        "cost_usd": 0.0202832,
+        "prompt_tokens": 33008
+      }
+    },
+    "completion_tokens": 19586,
+    "cost_usd": 0.04423050000000001,
+    "prompt_tokens": 205937
+  },
+  "models": [
+    "qwen3.5-flash",
+    "qwen3.5-plus"
+  ],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 1.0,
+    "fire": 0.8333333333333334,
+    "infrastructure": 0.7291666666666667,
+    "medical": 0.9074074074074074,
+    "rescue": 0.7954545454545454
+  },
+  "scores": {
+    "avg_response_ticks": 5.0,
+    "lives_lost": 68.0,
+    "lives_saved": 53.0,
+    "missions_failed": 2.0,
+    "missions_open": 0.0,
+    "missions_resolved": 7.0,
+    "panic": 0.09999999999999998,
+    "resource_utilization": 0.0
+  },
+  "seed": 61,
+  "team_alignment": 0.8767772511848342,
+  "ticks_requested": 60,
+  "ticks_run": 30,
+  "wall_s": 95.73894602712244,
+  "world_digest": "f33125f52e315d762f4c0db01025f7e8a7e4f365a276abca38417c689e4dd395"
+}

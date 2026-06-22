@@ -1,0 +1,80 @@
+{
+  "arm": "society",
+  "cost": {
+    "by_agent": {
+      "commander": {
+        "completion_tokens": 1789,
+        "cost_usd": 0.015780000000000002,
+        "prompt_tokens": 28716
+      },
+      "comms": {
+        "completion_tokens": 2299,
+        "cost_usd": 0.0037133000000000005,
+        "prompt_tokens": 27937
+      },
+      "fire": {
+        "completion_tokens": 2680,
+        "cost_usd": 0.004017799999999999,
+        "prompt_tokens": 29458
+      },
+      "infrastructure": {
+        "completion_tokens": 2651,
+        "cost_usd": 0.004461899999999999,
+        "prompt_tokens": 34015
+      },
+      "medical": {
+        "completion_tokens": 2374,
+        "cost_usd": 0.003905,
+        "prompt_tokens": 29554
+      },
+      "rescue": {
+        "completion_tokens": 3326,
+        "cost_usd": 0.0043088,
+        "prompt_tokens": 29784
+      }
+    },
+    "by_model": {
+      "qwen3.5-flash": {
+        "completion_tokens": 13330,
+        "cost_usd": 0.0204068,
+        "prompt_tokens": 150748
+      },
+      "qwen3.5-plus": {
+        "completion_tokens": 1789,
+        "cost_usd": 0.015780000000000002,
+        "prompt_tokens": 28716
+      }
+    },
+    "completion_tokens": 15119,
+    "cost_usd": 0.0361868,
+    "prompt_tokens": 179464
+  },
+  "models": [
+    "qwen3.5-flash",
+    "qwen3.5-plus"
+  ],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 1.0,
+    "fire": 0.9655172413793104,
+    "infrastructure": 0.9,
+    "medical": 0.96,
+    "rescue": 0.7435897435897436
+  },
+  "scores": {
+    "avg_response_ticks": 4.909090909090909,
+    "lives_lost": 54.0,
+    "lives_saved": 98.0,
+    "missions_failed": 0.0,
+    "missions_open": 0.0,
+    "missions_resolved": 11.0,
+    "panic": 0.10000000000000003,
+    "resource_utilization": 0.125
+  },
+  "seed": 42,
+  "team_alignment": 0.9007633587786259,
+  "ticks_requested": 60,
+  "ticks_run": 29,
+  "wall_s": 71.42436106107198,
+  "world_digest": "5addc817ad19fe927fb3788203132a3c247cbe11510c88ab52188a0e482170a4"
+}

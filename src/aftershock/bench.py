@@ -163,6 +163,7 @@ def _execute_cell(
     pool_sizes: dict[str, int] | None = None,
     doctrine: bool = True,
     role_models: dict[str, str] | None = None,
+    contract_trim: bool = True,
     extra_fields: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build + run one (arm, seed) cell and write its summary.json.
@@ -174,10 +175,13 @@ def _execute_cell(
     ``doctrine`` (default True) is forwarded to build_arm; the doctrine on/off
     ablation passes False to build the doctrine-naive control (FIELD-NOTES §11).
     ``role_models`` (default None) forwards the --role-model operating-mode override.
+    ``contract_trim`` (default True) is forwarded to build_arm; the contract on/off
+    ablation passes False to build the untrimmed (pre-§21) control (FIELD-NOTES §21).
     """
     setup = build_arm(
         arm, seed, provider, society_tools=society_tools, seed_sampler=seed_sampler,
         pool_sizes=pool_sizes, doctrine=doctrine, role_models=role_models,
+        contract_trim=contract_trim,
     )
     manifest_rec: dict[str, Any] = {
         "arm": arm,
@@ -270,6 +274,7 @@ def _run_or_resume_cell(
     pool_sizes: dict[str, int] | None = None,
     doctrine: bool = True,
     role_models: dict[str, str] | None = None,
+    contract_trim: bool = True,
 ) -> dict[str, Any]:
     """Resume a completed cell from disk, or execute it. ``run_id`` is the cell dir.
 
@@ -302,6 +307,7 @@ def _run_or_resume_cell(
         out_dir, arm, seed, ticks, provider, run_id=run_id,
         society_tools=society_tools, seed_sampler=seed_sampler,
         pool_sizes=pool_sizes, doctrine=doctrine, role_models=role_models,
+        contract_trim=contract_trim,
     )
 
 
@@ -824,6 +830,9 @@ def analyze_ablation(
 
 # Cell-dir / label suffix for the doctrine-naive (doctrine=False) control side.
 _NODOCTRINE_SUFFIX = "-nodoctrine"
+# Cell-dir / label suffix for the untrimmed (contract_trim=False) control side —
+# the pre-§21 verbose contract (FIELD-NOTES §21 contract on/off ablation).
+_UNTRIMMED_SUFFIX = "-untrimmed"
 
 
 def _alignment_by_seed(
@@ -944,15 +953,15 @@ def run_ablation(
     Reuses the shared cell kernel, so completed cells are skipped — re-running the
     analysis on existing cells costs $0. Returns the analyze_ablation result dict.
 
-    ``ablate`` selects a *same-arm knob* ablation instead of arm-vs-arm. The only
-    supported knob is "doctrine": control and treatment must be the same LLM arm,
-    and the harness runs it twice per seed — doctrine OFF (control) vs ON (treatment)
-    — pairing on a synthetic ``label`` so both society cells stay distinct. The result
+    ``ablate`` selects a *same-arm knob* ablation instead of arm-vs-arm. Supported
+    knobs are "doctrine" and "contract": control and treatment must be the same LLM
+    arm, and the harness runs it twice per seed — knob OFF (control) vs ON (treatment)
+    — pairing on a synthetic ``label`` so both arm cells stay distinct. The result
     additionally carries a ``conformance`` block (the primary, low-variance signal —
-    FIELD-NOTES §11) and ``ablate``/``arm`` markers.
+    FIELD-NOTES §11 / §21) and ``ablate``/``arm`` markers.
     """
     if ablate is not None:
-        return _run_doctrine_ablation(
+        return _run_knob_ablation(
             ablate, control, treatment, seeds, ticks, provider, out_dir,
             society_tools=society_tools, seed_sampler=seed_sampler, pool_sizes=pool_sizes,
             effect_grid=effect_grid, power_target=power_target, alpha=alpha,
@@ -971,7 +980,7 @@ def run_ablation(
     )
 
 
-def _run_doctrine_ablation(
+def _run_knob_ablation(
     ablate: str,
     control: str,
     treatment: str,
@@ -987,43 +996,69 @@ def _run_doctrine_ablation(
     power_target: float = 0.8,
     alpha: float = 0.05,
 ) -> dict[str, Any]:
-    """Doctrine ON/OFF paired ablation for a single LLM arm (FIELD-NOTES §11).
+    """Same-arm ON/OFF paired ablation for a single LLM arm.
 
-    Holds everything constant (world seed, tools, pools) and flips only the doctrine
-    layer. Both sides are the same arm, so they are tagged with a ``label``
-    ("{arm}" = ON, "{arm}-nodoctrine" = OFF) and analyzed key="label". Δ = ON − OFF,
-    so a positive Δ means doctrine *adds* lives.
+    Holds everything constant (world seed, tools, pools) and flips only the named
+    knob. Both sides are the same arm, so they are tagged with a ``label``
+    ("{arm}" = ON, "{arm}-{suffix}" = OFF) and analyzed key="label". Δ = ON − OFF,
+    so a positive Δ means the knob *adds* the metric.
+
+    Supported knobs:
+      - "doctrine": ON = doctrine blocks present, OFF = doctrine layer dropped
+        (FIELD-NOTES §11). control label "{arm}-nodoctrine".
+      - "contract": ON = §21 trimmed contract (the published default), OFF = pre-§21
+        verbose contract (FIELD-NOTES §21). control label "{arm}-untrimmed". Δ thus
+        reads trimmed − untrimmed, matching §21's reported direction.
+
+    Both knobs carry a deterministic ``conformance`` block (the primary, low-variance
+    signal — the doctrine ablation's PRIMARY metric and the contract ablation's
+    team-alignment dip check) and ``ablate``/``arm`` markers.
     """
-    if ablate != "doctrine":
-        raise ValueError(f"unknown ablate knob {ablate!r}; supported: 'doctrine'")
+    if ablate == "doctrine":
+        suffix = _NODOCTRINE_SUFFIX
+        no_layer_noun = "doctrine prompts"
+    elif ablate == "contract":
+        suffix = _UNTRIMMED_SUFFIX
+        no_layer_noun = "decision contract"
+    else:
+        raise ValueError(
+            f"unknown ablate knob {ablate!r}; supported: 'doctrine', 'contract'"
+        )
     if control != treatment:
         raise ValueError(
-            "doctrine ablation requires control == treatment (the arm to ablate); "
+            f"{ablate} ablation requires control == treatment (the arm to ablate); "
             f"got control={control!r}, treatment={treatment!r}"
         )
     arm = control
     if arm == "scripted":
         raise ValueError(
-            "the scripted arm carries no doctrine prompts — ablate an LLM arm "
+            f"the scripted arm carries no {no_layer_noun} — ablate an LLM arm "
             "(society/swarm/solo)"
         )
 
-    treatment_label = arm  # doctrine ON (canonical cell dir)
-    control_label = f"{arm}{_NODOCTRINE_SUFFIX}"  # doctrine OFF
+    treatment_label = arm  # knob ON (canonical cell dir)
+    control_label = f"{arm}{suffix}"  # knob OFF
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Map the knob name onto the corresponding _run_or_resume_cell flag. The OFF side
+    # flips exactly one flag; everything else is held constant so Δ isolates the knob.
+    def _flags(*, on: bool) -> dict[str, bool]:
+        if ablate == "doctrine":
+            return {"doctrine": on, "contract_trim": True}
+        return {"doctrine": True, "contract_trim": on}
 
     cells: list[dict[str, Any]] = []
     for seed in seeds:
         on = _run_or_resume_cell(
             out_dir, arm, seed, ticks, provider, run_id=f"{arm}-seed{seed}",
             society_tools=society_tools, seed_sampler=seed_sampler,
-            pool_sizes=pool_sizes, doctrine=True,
+            pool_sizes=pool_sizes, **_flags(on=True),
         )
         cells.append({**on, "label": treatment_label})
         off = _run_or_resume_cell(
             out_dir, arm, seed, ticks, provider, run_id=f"{control_label}-seed{seed}",
             society_tools=society_tools, seed_sampler=seed_sampler,
-            pool_sizes=pool_sizes, doctrine=False,
+            pool_sizes=pool_sizes, **_flags(on=False),
         )
         cells.append({**off, "label": control_label})
 
@@ -1032,7 +1067,7 @@ def _run_doctrine_ablation(
         effect_grid=effect_grid, power_target=power_target, alpha=alpha,
         model_endpoint=_endpoint_from_provider(provider),
     )
-    result["ablate"] = "doctrine"
+    result["ablate"] = ablate
     result["arm"] = arm
     result["conformance"] = _conformance_block(
         cells, control_label, treatment_label, alpha=alpha
@@ -1119,32 +1154,43 @@ def render_ablation_markdown(result: dict[str, Any]) -> str:
     lines: list[str] = []
     ctrl = result["control"]
     treat = result["treatment"]
-    is_doctrine = result.get("ablate") == "doctrine"
+    ablate = result.get("ablate")
+    is_doctrine = ablate == "doctrine"
+    is_contract = ablate == "contract"
+    is_knob = is_doctrine or is_contract
+    # The knob's human noun for the header / verdict wording. For doctrine, every
+    # string below is byte-identical to the pre-contract behaviour.
+    knob_noun = "doctrine" if is_doctrine else "contract"
+    on_phrase = "doctrine on" if is_doctrine else "contract trimmed"
+    off_phrase = "doctrine off" if is_doctrine else "contract untrimmed"
+    adds_phrase = "doctrine adds" if is_doctrine else "trimming adds"
     conf = result.get("conformance")
     lives_n = result["n"]
     conf_n = conf.get("n", 0) if conf else 0
 
-    if is_doctrine:
+    if is_knob:
         arm = result.get("arm", treat)
-        lines.append(f"# Ablation — doctrine on/off ({arm}, paired)")
+        lines.append(f"# Ablation — {knob_noun} on/off ({arm}, paired)")
         lines.append("")
         lines.append(
-            f"Δ = **{treat} (doctrine on)** − **{ctrl} (doctrine off)**, everything else held "
-            "constant (world seed, tools, pools). A positive Δ means doctrine adds the metric."
+            f"Δ = **{treat} ({on_phrase})** − **{ctrl} ({off_phrase})**, everything else held "
+            f"constant (world seed, tools, pools). A positive Δ means {adds_phrase} the metric."
         )
     else:
         lines.append(f"# Ablation — {treat} vs {ctrl} (paired)")
     lines.append("")
 
-    # Doctrine ablation: lead with conformance (primary, deterministic). Warn loudly
-    # when it is missing/partial so the secondary lives verdict can't be over-read.
-    if is_doctrine:
+    # Knob ablation: lead with conformance (deterministic, low-variance — the doctrine
+    # ablation's PRIMARY metric and the contract ablation's team-alignment dip check).
+    # Warn loudly when it is missing/partial so the secondary lives verdict can't be
+    # over-read.
+    if is_knob:
         if conf_n == 0:
             lines.append(
                 f"> ⚠️ **Primary signal missing.** The conformance check produced no usable "
                 f"paired seeds (0 of {lives_n}); conformance — not lives — is this ablation's "
-                "headline (FIELD-NOTES §11). Treat the lives result below as **secondary and "
-                "unconfirmed**: on its own it neither confirms nor denies a doctrine effect."
+                f"headline (FIELD-NOTES §11/§21). Treat the lives result below as **secondary and "
+                f"unconfirmed**: on its own it neither confirms nor denies a {knob_noun} effect."
             )
             lines.append("")
         else:
@@ -1184,14 +1230,14 @@ def render_ablation_markdown(result: dict[str, Any]) -> str:
 
     # Verdict line — the bootstrap CI and the sign test must AGREE before an effect
     # is called "credible" (FIELD-NOTES §16–17: a CI-only verdict over-claimed at n=5).
-    # For a doctrine ablation this verdict is about LIVES only (the secondary signal).
+    # For a knob ablation this verdict is about LIVES only (the secondary signal).
     p = result["sign_test_p"]
     alpha = result["alpha"]
     power_str = f"{op:.2f}" if op is not None else "n/a"
-    # Non-doctrine output stays byte-identical ("Verdict:"); doctrine tags the verdict
-    # as the LIVES (secondary) signal so it can't be mistaken for the headline.
-    label = "Verdict (lives Δ)" if is_doctrine else "Verdict"
-    metric = "lives " if is_doctrine else ""
+    # Non-knob output stays byte-identical ("Verdict:"); a knob ablation tags the
+    # verdict as the LIVES (secondary) signal so it can't be mistaken for the headline.
+    label = "Verdict (lives Δ)" if is_knob else "Verdict"
+    metric = "lives " if is_knob else ""
     lines.append("")
     if result["verdict"] == "noise":
         lines.append(

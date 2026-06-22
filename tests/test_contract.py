@@ -247,3 +247,66 @@ def test_contract_is_string():
 def test_contract_non_empty():
     result = decision_contract((), {}, {})
     assert len(result) > 0
+
+
+# ---------------------------------------------------------------------------
+# trim knob (FIELD-NOTES §21) — the contract on/off ablation toggle.
+# trim=True (default) renders the §21 cost-trimmed contract; trim=False renders
+# the pre-§21 verbose contract (the untrimmed ablation control).
+# ---------------------------------------------------------------------------
+
+
+def test_trim_default_is_true():
+    """The default rendering is byte-identical to trim=True (no behaviour drift)."""
+    default = decision_contract(ALLOWED_ALL, DECISION_DOCS, PROPOSAL_DOCS)
+    explicit = decision_contract(ALLOWED_ALL, DECISION_DOCS, PROPOSAL_DOCS, trim=True)
+    assert default == explicit
+
+
+def test_trim_false_changes_rendered_contract():
+    """trim=False must render a different contract than trim=True (full schema)."""
+    trimmed = decision_contract(ALLOWED_ALL, DECISION_DOCS, PROPOSAL_DOCS, trim=True)
+    untrimmed = decision_contract(ALLOWED_ALL, DECISION_DOCS, PROPOSAL_DOCS, trim=False)
+    assert trimmed != untrimmed
+
+
+def test_trim_false_changes_rendered_contract_decisions_only():
+    """trim=False also differs for the decisions-only (no-proposals) schema."""
+    trimmed = decision_contract(ALLOWED_ALL, DECISION_DOCS, {}, trim=True)
+    untrimmed = decision_contract(ALLOWED_ALL, DECISION_DOCS, {}, trim=False)
+    assert trimmed != untrimmed
+
+
+def test_trim_true_uses_compact_single_line_skeleton():
+    """The trimmed schema is a single-line JSON object (the §21 compaction)."""
+    trimmed = decision_contract(ALLOWED_ALL, DECISION_DOCS, PROPOSAL_DOCS, trim=True)
+    # Compact form keeps the field vocabulary without the multi-line indentation.
+    assert '{"decisions":[{"decision_type":"<type>"' in trimmed
+    # The verbose multi-line skeleton marker must be absent.
+    assert '  "decisions": [' not in trimmed
+
+
+def test_trim_false_uses_verbose_multiline_skeleton():
+    """The untrimmed schema is the pre-§21 multi-line indented JSON skeleton."""
+    untrimmed = decision_contract(ALLOWED_ALL, DECISION_DOCS, PROPOSAL_DOCS, trim=False)
+    assert '  "decisions": [' in untrimmed
+    assert '      "decision_type": "<type>",' in untrimmed
+    # The compact single-line form must be absent.
+    assert '{"decisions":[{"decision_type":"<type>"' not in untrimmed
+
+
+def test_trim_false_restores_deduped_hard_rules():
+    """The pre-§21 Hard Rules carried two lines the §21 dedup removed."""
+    untrimmed = decision_contract(ALLOWED_ALL, DECISION_DOCS, PROPOSAL_DOCS, trim=False)
+    trimmed = decision_contract(ALLOWED_ALL, DECISION_DOCS, PROPOSAL_DOCS, trim=True)
+    # Both lines exist untrimmed and are gone from the trimmed form.
+    assert "- Output ONLY a JSON object; no markdown fences, no explanation." in untrimmed
+    assert "- Keep each rationale under 25 words." in untrimmed
+    assert "- Output ONLY a JSON object; no markdown fences, no explanation." not in trimmed
+    assert "- Keep each rationale under 25 words." not in trimmed
+
+
+def test_trim_both_forms_contain_json_word():
+    """Both forms keep the word 'JSON' (DashScope json_mode requirement)."""
+    assert "JSON" in decision_contract(ALLOWED_ALL, DECISION_DOCS, PROPOSAL_DOCS, trim=True)
+    assert "JSON" in decision_contract(ALLOWED_ALL, DECISION_DOCS, PROPOSAL_DOCS, trim=False)

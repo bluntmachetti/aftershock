@@ -583,6 +583,59 @@ def test_doctrine_off_keeps_contract_and_roster() -> None:
 
 
 # ---------------------------------------------------------------------------
+# contract_trim on/off toggle (FIELD-NOTES §21 — the contract ablation control),
+# mirroring the doctrine toggle above.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("arm", ["society", "swarm", "solo"])
+def test_contract_trim_default_equals_explicit_true(arm: str) -> None:
+    """The default build is byte-identical to contract_trim=True (no behaviour drift)."""
+    default = build_arm(arm, _SEED, _mock())
+    explicit = build_arm(arm, _SEED, _mock(), contract_trim=True)
+    assert set(default.agents) == set(explicit.agents)
+    for aid in default.agents:
+        assert default.agents[aid]._system == explicit.agents[aid]._system
+
+
+@pytest.mark.parametrize("arm", ["society", "swarm", "solo"])
+def test_contract_trim_false_changes_prompts(arm: str) -> None:
+    """build_arm(contract_trim=False) renders the pre-§21 verbose contract — every
+    LLM agent's system prompt differs from the trimmed (default) build."""
+    from aftershock.llm.agent import LLMAgent
+
+    trimmed = build_arm(arm, _SEED, _mock(), contract_trim=True)
+    untrimmed = build_arm(arm, _SEED, _mock(), contract_trim=False)
+    for aid, a in trimmed.agents.items():
+        assert isinstance(a, LLMAgent)
+        assert a._system != untrimmed.agents[aid]._system, (
+            f"arm {arm!r} contract_trim=False did not change {aid} prompt"
+        )
+
+
+@pytest.mark.parametrize("arm", ["society", "swarm", "solo"])
+def test_contract_trim_toggle_preserves_world(arm: str) -> None:
+    """Flipping contract_trim never touches the seeded world (a prompt-only knob)."""
+    on = build_arm(arm, _SEED, _mock(), contract_trim=True).world.to_dict()
+    off = build_arm(arm, _SEED, _mock(), contract_trim=False).world.to_dict()
+    scripted = build_arm("scripted", _SEED, None).world.to_dict()
+    assert on == off == scripted
+
+
+def test_contract_trim_off_keeps_doctrine_and_roster() -> None:
+    """contract_trim=False changes only the contract: roster, resolver, agent count
+    and the doctrine blocks are otherwise identical to the trimmed build."""
+    on = build_arm("society", _SEED, _mock(), contract_trim=True)
+    off = build_arm("society", _SEED, _mock(), contract_trim=False)
+    assert set(on.agents) == set(off.agents)
+    assert type(on.resolver) is type(off.resolver)
+    on_sys = on.agents["commander"]._system
+    off_sys = off.agents["commander"]._system
+    # Doctrine region (the §21 trim leaves it untouched) is present on both sides.
+    assert "TEAM DOCTRINE:" in on_sys and "TEAM DOCTRINE:" in off_sys
+
+
+# ---------------------------------------------------------------------------
 # --role-model operating-mode override (FIELD-NOTES §20: infra=plus)
 # ---------------------------------------------------------------------------
 

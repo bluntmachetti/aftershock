@@ -259,6 +259,35 @@
       "verdict_note": null
     },
     {
+      "ablate": "contract",
+      "conformance_verdict": "suggestive",
+      "cost_usd": null,
+      "dir": "2026-06-22-contract-ablation",
+      "field_notes_section": null,
+      "git_sha": "ba626ed314b1ec52db9d0f9909d8b550e51b6187",
+      "kind": "ablation",
+      "lives_per_dollar": null,
+      "lives_saved": 96.4,
+      "mean_team_alignment": 0.8795141399934223,
+      "model_endpoint": "dashscope-intl",
+      "records_committed": true,
+      "schema_version": 1,
+      "seeds": [
+        11,
+        23,
+        37,
+        42,
+        57,
+        60,
+        61,
+        62,
+        63,
+        64
+      ],
+      "verdict": "noise",
+      "verdict_note": null
+    },
+    {
       "ablate": "doctrine",
       "conformance_verdict": "credible",
       "cost_usd": null,
@@ -313,7 +342,7 @@
       "verdict_note": null
     }
   ],
-  "generated_by_git_sha": "239f33f8a0e0fc5f9d0706e3ca73c21f2e2cc1b4",
-  "n_experiments": 13,
+  "generated_by_git_sha": "ba626ed314b1ec52db9d0f9909d8b550e51b6187",
+  "n_experiments": 14,
   "schema_version": 1
 }
