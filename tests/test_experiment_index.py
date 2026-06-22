@@ -191,6 +191,46 @@ def test_conformance_and_lives_are_separate_fields() -> None:
             assert not (ta == lives and ta > 1.0), "conformance and lives look collapsed"
 
 
+def test_conformance_verdict_surfaced_and_separate_from_lives() -> None:
+    """Each row exposes conformance_verdict (literal enum or null), kept SEPARATE from
+    the lives ``verdict``. The 2026-06-22-doctrine-6seed row reads conformance_verdict
+    'credible' (its primary metric) while its lives verdict stays 'noise'."""
+    rows = {r["dir"]: r for r in _index_rows()}
+    # Every row carries the field (defensive read; null when the file lacks it).
+    for row in rows.values():
+        assert "conformance_verdict" in row
+        assert row["conformance_verdict"] in _VALID_VERDICTS
+
+    six = rows.get("2026-06-22-doctrine-6seed")
+    assert six is not None, "expected the 2026-06-22-doctrine-6seed row in the index"
+    # PRIMARY metric (conformance) is credible; SECONDARY metric (lives) is noise.
+    assert six["conformance_verdict"] == "credible"
+    assert six["verdict"] == "noise"
+    # The two signals are distinct keys, never collapsed into one number.
+    assert six["conformance_verdict"] != six["verdict"]
+
+
+def test_pre_fix_doctrine_ablation_has_null_conformance_verdict() -> None:
+    """The pre-fix 2026-06-16-doctrine-ablation file lacks the conformance verdict, so
+    the reindex READS it as null (it must NOT retro-compute stats for old files)."""
+    rows = {r["dir"]: r for r in _index_rows()}
+    row = rows.get("2026-06-16-doctrine-ablation")
+    assert row is not None
+    assert row["conformance_verdict"] is None
+    # Its lives verdict is unaffected by this change.
+    assert row["verdict"] == "suggestive"
+
+
+def test_doctrine_rows_link_field_notes_section_18() -> None:
+    """Both doctrine ablation dirs link to FIELD-NOTES §18 (curated explicit map)."""
+    rows = {r["dir"]: r for r in _index_rows()}
+    for name in ("2026-06-16-doctrine-ablation", "2026-06-22-doctrine-6seed"):
+        assert name in rows, f"expected {name!r} in the index"
+        assert rows[name]["field_notes_section"] == 18, (
+            f"{name!r} must link FIELD-NOTES §18, got {rows[name]['field_notes_section']!r}"
+        )
+
+
 def test_records_committed_is_bool_and_flags_uncommitted() -> None:
     """records_committed is a bool; pre-stamp summary-only dirs read False."""
     rows = {r["dir"]: r for r in _index_rows()}
@@ -236,6 +276,42 @@ def test_reindex_handles_missing_keys_without_crashing(tmp_path: Path) -> None:
     assert row["schema_version"] is None
     # No LLM cost -> scripted endpoint inferred (never crashes, never guesses cloud).
     assert row["model_endpoint"] == "scripted"
+
+
+def test_reindex_reads_conformance_verdict_without_recomputing(tmp_path: Path) -> None:
+    """The reindex READS conformance.verdict from ablation.json; it never recomputes
+    stats. A doctrine ablation carrying the field surfaces it; one lacking it -> null."""
+    mod = _load_reindex_module()
+
+    # File WITH a conformance verdict -> surfaced verbatim.
+    with_v = tmp_path / "2099-02-02-doctrine"
+    with_v.mkdir()
+    (with_v / "ablation.json").write_text(
+        json.dumps({
+            "ablate": "doctrine", "mean_delta": 1.0, "per_seed": [{"delta": 1.0}],
+            "verdict": "noise",
+            "conformance": {"mean_treatment": 0.9, "verdict": "credible"},
+        }),
+        encoding="utf-8",
+    )
+    row = mod.build_row(with_v)
+    assert row["conformance_verdict"] == "credible"
+    assert row["verdict"] == "noise"  # lives verdict stays separate
+
+    # File WITHOUT a conformance verdict (pre-fix) -> read as null, never fabricated.
+    without_v = tmp_path / "2099-03-03-old-doctrine"
+    without_v.mkdir()
+    (without_v / "ablation.json").write_text(
+        json.dumps({
+            "ablate": "doctrine", "mean_delta": 1.0, "per_seed": [{"delta": 1.0}],
+            "verdict": "suggestive",
+            "conformance": {"mean_treatment": 0.9},  # no verdict key
+        }),
+        encoding="utf-8",
+    )
+    row2 = mod.build_row(without_v)
+    assert row2["conformance_verdict"] is None
+    assert row2["verdict"] == "suggestive"
 
 
 def test_reindex_tolerates_uncommitted_local_dir(tmp_path: Path) -> None:

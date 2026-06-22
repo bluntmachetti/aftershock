@@ -57,6 +57,9 @@ _DIR_TO_SECTION: dict[str, int] = {
     "2026-06-16-s1-infra-fix": 19,
     "2026-06-16-s1-infra-model": 20,
     "2026-06-16-cost-contract-trim": 21,
+    # Doctrine ablations link to §18 (doctrine buys conformance, not lives). Kept a
+    # small explicit map — never guessed for other dirs (they stay null).
+    "2026-06-22-doctrine-6seed": 18,
 }
 
 # Dirs that predate the provenance stamp / verdict hardening — their verdict (if any)
@@ -199,6 +202,26 @@ def _verdict(data: Any) -> tuple[str | None, str | None]:
     return None, _PRE_STAMP_NOTE
 
 
+def _conformance_verdict(data: Any) -> str | None:
+    """The conformance-Δ verdict, READ from the doctrine ablation's conformance block.
+
+    Pure read: returns ``data["conformance"]["verdict"]`` when the file carries it
+    (a doctrine ablation written after this field was added), else None — a pre-fix
+    ablation (e.g. 2026-06-16-doctrine-ablation) or a non-doctrine result simply lacks
+    it. The reindex NEVER recomputes stats; an old file without the field stays null.
+    The literal enum is preserved (or null); never coerced. Kept SEPARATE from the
+    lives ``verdict`` field, so the two signals are never collapsed.
+    """
+    if not isinstance(data, dict):
+        return None
+    conf = data.get("conformance")
+    if isinstance(conf, dict):
+        v = conf.get("verdict")
+        if isinstance(v, str) and v:
+            return v
+    return None
+
+
 def _seeds(data: Any) -> list[int] | None:
     """Seed list if discoverable across the three result shapes (defensive)."""
     if not isinstance(data, dict):
@@ -327,6 +350,9 @@ def build_row(exp_dir: Path) -> dict[str, Any]:
         "ablate": _ablate(data),
         "verdict": verdict,
         "verdict_note": verdict_note,
+        # conformance_verdict: READ from ablation.json's conformance block (null when
+        # the file predates the field). Kept SEPARATE from the lives ``verdict``.
+        "conformance_verdict": _conformance_verdict(data),
         "seeds": _seeds(data),
         "cost_usd": _cost_usd(data),
         # conformance kept SEPARATE from lives (never collapsed):

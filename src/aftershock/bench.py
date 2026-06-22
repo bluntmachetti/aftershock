@@ -686,6 +686,55 @@ def _lives_by_seed(
     return out
 
 
+def _verdict_fields(
+    diffs: list[float], bootstrap_seed: int, *, alpha: float = 0.05
+) -> dict[str, Any]:
+    """The 3-tier verdict + its supporting stats for a list of paired diffs.
+
+    The single source of truth for the tiering both the lives verdict
+    (analyze_ablation) and the conformance verdict (_conformance_block) use, so they
+    can never drift: "credible" iff the bootstrap CI excludes 0 AND the sign test is
+    significant; "suggestive" iff exactly one holds; "noise" iff neither
+    (FIELD-NOTES §16–17 — keying on the CI alone over-claims on small skewed samples).
+
+    Returns ``verdict``=None and absent supporting fields when ``diffs`` is empty (no
+    paired deltas to judge) — callers must not coerce/fabricate a verdict in that case.
+    The ``ci``/``sign_test_p`` keys carry the same shape analyze_ablation emits.
+    """
+    if not diffs:
+        return {
+            "verdict": None,
+            "ci_excludes_zero": None,
+            "sign_significant": None,
+            "sign_test_p": None,
+            "n_positive": 0,
+            "ci": None,
+        }
+    ci = stats.bootstrap_ci(diffs, confidence=1.0 - alpha, rng_seed=bootstrap_seed)
+    sign_p = stats.sign_test_p(diffs)
+    ci_excludes_zero = not (ci.lower <= 0.0 <= ci.upper)
+    sign_significant = sign_p < alpha
+    if not ci_excludes_zero:
+        verdict = "noise"
+    elif not sign_significant:
+        verdict = "suggestive"
+    else:
+        verdict = "credible"
+    return {
+        "verdict": verdict,
+        "ci_excludes_zero": ci_excludes_zero,
+        "sign_significant": sign_significant,
+        "sign_test_p": sign_p,
+        "n_positive": sum(1 for d in diffs if d > 0),
+        "ci": {
+            "lower": ci.lower,
+            "upper": ci.upper,
+            "confidence": ci.confidence,
+            "n_resamples": ci.n_resamples,
+        },
+    }
+
+
 def analyze_ablation(
     cells: list[dict[str, Any]],
     control: str,
@@ -723,9 +772,6 @@ def analyze_ablation(
     mean_delta = stats.mean(diffs)
     sd_delta = stats.sample_sd(diffs)
 
-    ci = stats.bootstrap_ci(
-        diffs, confidence=1.0 - alpha, rng_seed=_ABLATION_BOOTSTRAP_SEED
-    )
     observed_power = (
         stats.power_for_n(mean_delta, sd_delta, n, alpha) if mean_delta != 0.0 else None
     )
@@ -744,17 +790,11 @@ def analyze_ablation(
     # Verdict — "credible" requires the bootstrap CI AND the sign test to AGREE.
     # The percentile CI excludes 0 on small, skewed samples where the conservative
     # sign test does not, so keying on the CI alone over-claims (FIELD-NOTES §16–17:
-    # it printed "credible" at n=5 twice on effects that were noise). Exposed as a
-    # structured field so callers (e.g. an autoresearch loop) can gate on it.
-    sign_p = stats.sign_test_p(diffs)
-    ci_excludes_zero = not (ci.lower <= 0.0 <= ci.upper)
-    sign_significant = sign_p < alpha
-    if not ci_excludes_zero:
-        verdict = "noise"
-    elif not sign_significant:
-        verdict = "suggestive"
-    else:
-        verdict = "credible"
+    # it printed "credible" at n=5 twice on effects that were noise). Computed by the
+    # shared _verdict_fields helper so the lives verdict and the conformance verdict
+    # use ONE tiering rule that can never drift. ``common`` is non-empty here (we raise
+    # above otherwise), so the helper returns a fully-populated verdict.
+    vf = _verdict_fields(diffs, _ABLATION_BOOTSTRAP_SEED, alpha=alpha)
 
     return {
         "control": control,
@@ -766,19 +806,14 @@ def analyze_ablation(
         "mean_treatment": stats.mean([treat[s] for s in common]),
         "mean_delta": mean_delta,
         "sd_delta": sd_delta,
-        "n_positive": sum(1 for d in diffs if d > 0),
+        "n_positive": vf["n_positive"],
         "n_negative": sum(1 for d in diffs if d < 0),
         "n_tied": sum(1 for d in diffs if d == 0),
-        "sign_test_p": sign_p,
-        "verdict": verdict,
-        "ci_excludes_zero": ci_excludes_zero,
-        "sign_significant": sign_significant,
-        "ci": {
-            "lower": ci.lower,
-            "upper": ci.upper,
-            "confidence": ci.confidence,
-            "n_resamples": ci.n_resamples,
-        },
+        "sign_test_p": vf["sign_test_p"],
+        "verdict": vf["verdict"],
+        "ci_excludes_zero": vf["ci_excludes_zero"],
+        "sign_significant": vf["sign_significant"],
+        "ci": vf["ci"],
         "observed_power": observed_power,
         "power_target": power_target,
         "alpha": alpha,
@@ -820,7 +855,11 @@ def _role_conf_by_seed(
 
 
 def _conformance_block(
-    cells: list[dict[str, Any]], control_label: str, treatment_label: str
+    cells: list[dict[str, Any]],
+    control_label: str,
+    treatment_label: str,
+    *,
+    alpha: float = 0.05,
 ) -> dict[str, Any]:
     """Paired conformance summary for the doctrine ablation.
 
@@ -852,7 +891,7 @@ def _conformance_block(
             tm = stats.mean(tvals)
             by_role[role] = {"control": cm, "treatment": tm, "delta": tm - cm}
 
-    return {
+    block: dict[str, Any] = {
         "n": len(common),
         "seeds": common,
         "per_seed": per_seed,
@@ -862,6 +901,26 @@ def _conformance_block(
         "sign_test_p": stats.sign_test_p(deltas) if deltas else None,
         "by_role": by_role,
     }
+    # conformance_verdict — the SAME 3-tier gate the lives verdict uses (read
+    # analyze_ablation / _verdict_fields): "credible" iff the bootstrap CI excludes 0
+    # AND the sign test is significant; "suggestive" iff exactly one; "noise" iff
+    # neither. Conformance is the doctrine ablation's PRIMARY metric, so it earns a
+    # verdict parallel to (and separate from) the secondary lives verdict
+    # (FIELD-NOTES §18). Computed only when per-seed deltas exist; otherwise the
+    # verdict + supporting fields are None so non-doctrine / conformance-failed paths
+    # are never coerced/fabricated. Keys are namespaced "verdict"/"ci"/... INSIDE the
+    # conformance block (the index reads conformance.verdict), and sign_test_p here
+    # equals the value already set above (same deltas, same helper). ``alpha`` is the
+    # caller-threaded significance level (same one analyze_ablation hands the lives
+    # verdict) so the two verdicts can never use a different alpha.
+    vf = _verdict_fields(deltas, _ABLATION_BOOTSTRAP_SEED, alpha=alpha)
+    block["verdict"] = vf["verdict"]
+    block["ci"] = vf["ci"]
+    block["ci_excludes_zero"] = vf["ci_excludes_zero"]
+    block["sign_significant"] = vf["sign_significant"]
+    block["sign_test_p"] = vf["sign_test_p"]
+    block["n_positive"] = vf["n_positive"]
+    return block
 
 
 def run_ablation(
@@ -975,7 +1034,9 @@ def _run_doctrine_ablation(
     )
     result["ablate"] = "doctrine"
     result["arm"] = arm
-    result["conformance"] = _conformance_block(cells, control_label, treatment_label)
+    result["conformance"] = _conformance_block(
+        cells, control_label, treatment_label, alpha=alpha
+    )
     return result
 
 
@@ -991,6 +1052,36 @@ def _render_conformance_section(conf: dict[str, Any]) -> list[str]:
         f"sign test p={sp_str} · n={conf['n']}"
     )
     lines.append("")
+
+    # Verdict (conformance Δ) — the SAME 3-tier gate the lives section prints, but
+    # over the conformance Δ (this ablation's PRIMARY metric). Mirrors the lives
+    # "Verdict (lives Δ): ..." line so a reader sees a verdict per signal.
+    verdict = conf.get("verdict")
+    if verdict is not None:
+        ci = conf.get("ci") or {}
+        conf_pct = int(round(float(ci.get("confidence", 0.95)) * 100))
+        p = conf.get("sign_test_p")
+        p_str = f"{p:.3f}" if p is not None else "n/a"
+        if verdict == "noise":
+            lines.append(
+                f"> Verdict (conformance Δ): **not distinguishable from noise** — the "
+                f"{conf_pct}% CI includes 0 (sign test p={p_str}). Add seeds before "
+                "claiming a conformance effect."
+            )
+        elif verdict == "suggestive":
+            lines.append(
+                f"> Verdict (conformance Δ): **suggestive but unconfirmed** — the "
+                f"{conf_pct}% CI excludes 0, but the sign test is not significant "
+                f"(p={p_str}). Add seeds until the sign test agrees."
+            )
+        else:
+            direction = "improvement" if (md is not None and md > 0) else "regression"
+            lines.append(
+                f"> Verdict (conformance Δ): **credible {direction}** — the {conf_pct}% "
+                f"CI excludes 0 *and* the sign test is significant (p={p_str})."
+            )
+        lines.append("")
+
     lines.append("| seed | off | on | Δ |")
     lines.append("|---|---|---|---|")
     for row in conf["per_seed"]:

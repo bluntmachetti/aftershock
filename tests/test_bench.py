@@ -1004,6 +1004,102 @@ def test_conformance_block_skips_none_alignment() -> None:
     assert block["mean_delta"] is None
 
 
+def test_conformance_verdict_credible_when_all_positive_and_signed() -> None:
+    """A doctrine ablation whose 6 conformance deltas are all positive (sign p=0.03125)
+    and whose bootstrap CI excludes 0 yields conformance_verdict=='credible' — the
+    PRIMARY-metric verdict, computed independently of the lives verdict. This mirrors
+    the 2026-06-22-doctrine-6seed ground truth (FIELD-NOTES §18 n=6 re-test)."""
+    from aftershock.bench import _conformance_block
+
+    # Conformance ground truth: alignment off->on with these per-seed deltas (all +):
+    deltas = [0.181, 0.190, 0.143, 0.079, 0.092, 0.065]
+    seeds = [11, 23, 37, 42, 57, 73]
+    off = 0.70
+    # Lives, by contrast, are noisy: a 4+/1-/1= split (sign p=0.375), CI includes 0.
+    lives_off = {11: 134.0, 23: 83.0, 37: 96.0, 42: 96.0, 57: 106.0, 73: 107.0}
+    lives_on = {11: 139.0, 23: 94.0, 37: 92.0, 42: 97.0, 57: 106.0, 73: 130.0}
+    cells: list[dict[str, Any]] = []
+    for s, d in zip(seeds, deltas, strict=True):
+        cells.append(_labeled_cell("society-nodoctrine", s, lives_off[s], off,
+                                   {"comms": off}))
+        cells.append(_labeled_cell("society", s, lives_on[s], off + d,
+                                   {"comms": off + d}))
+
+    block = _conformance_block(cells, "society-nodoctrine", "society")
+    # PRIMARY metric: conformance verdict is credible (CI excludes 0 AND sign sig).
+    assert math.isclose(block["sign_test_p"], 0.03125, rel_tol=1e-9)
+    assert block["ci_excludes_zero"] is True
+    assert block["sign_significant"] is True
+    assert block["n_positive"] == 6
+    assert block["verdict"] == "credible"
+    assert block["ci"]["lower"] > 0.0  # CI excludes 0 from below
+
+    # The SECONDARY lives verdict is computed INDEPENDENTLY and stays "noise".
+    res = analyze_ablation(cells, "society-nodoctrine", "society", key="label")
+    assert res["verdict"] == "noise"
+    assert math.isclose(res["sign_test_p"], 0.375, rel_tol=1e-9)
+    # The two verdicts are distinct signals, never collapsed.
+    assert res["verdict"] != block["verdict"]
+
+
+def test_conformance_verdict_uses_same_tiering_as_lives() -> None:
+    """The conformance verdict reuses the EXACT lives tiering (shared _verdict_fields):
+    same diffs -> same verdict/ci/sign fields, whether judged as lives or conformance."""
+    from aftershock.bench import _ABLATION_BOOTSTRAP_SEED, _conformance_block, _verdict_fields
+
+    deltas = [0.181, 0.190, 0.143, 0.079, 0.092, 0.065]
+    seeds = [11, 23, 37, 42, 57, 73]
+    off = 0.70
+    cells: list[dict[str, Any]] = []
+    for s, d in zip(seeds, deltas, strict=True):
+        cells.append(_labeled_cell("society-nodoctrine", s, 100.0, off))
+        cells.append(_labeled_cell("society", s, 100.0, off + d))
+    block = _conformance_block(cells, "society-nodoctrine", "society")
+    block_deltas = [r["delta"] for r in block["per_seed"]]
+    vf = _verdict_fields(block_deltas, _ABLATION_BOOTSTRAP_SEED)
+    assert block["verdict"] == vf["verdict"] == "credible"
+    assert block["ci_excludes_zero"] == vf["ci_excludes_zero"]
+    assert block["sign_significant"] == vf["sign_significant"]
+    assert math.isclose(block["sign_test_p"], vf["sign_test_p"], rel_tol=1e-12)
+    assert block["n_positive"] == vf["n_positive"]
+
+
+def test_conformance_verdict_absent_when_no_paired_deltas() -> None:
+    """No usable conformance pair (all team_alignment None) -> verdict None, not coerced.
+    The supporting fields are None too — nothing is fabricated."""
+    from aftershock.bench import _conformance_block
+
+    cells = [
+        _labeled_cell("society-nodoctrine", 11, 113.0, 0.759),
+        _labeled_cell("society", 11, 96.0, 0.904),
+    ]
+    cells[0]["team_alignment"] = None  # the only pair has no usable control side
+    block = _conformance_block(cells, "society-nodoctrine", "society")
+    assert block["n"] == 0
+    assert block["verdict"] is None
+    assert block["ci"] is None
+    assert block["ci_excludes_zero"] is None
+    assert block["sign_significant"] is None
+    assert block["sign_test_p"] is None
+
+
+def test_render_doctrine_shows_conformance_verdict_line() -> None:
+    """The Conformance section prints a 'Verdict (conformance Δ): ...' line, mirroring
+    the Lives section's 'Verdict (lives Δ): ...' line."""
+    deltas = [0.181, 0.190, 0.143, 0.079, 0.092, 0.065]
+    seeds = [11, 23, 37, 42, 57, 73]
+    off = 0.70
+    cells: list[dict[str, Any]] = []
+    for s, d in zip(seeds, deltas, strict=True):
+        cells.append(_labeled_cell("society-nodoctrine", s, 100.0, off, {"comms": off}))
+        cells.append(_labeled_cell("society", s, 105.0, off + d, {"comms": off + d}))
+    md = render_ablation_markdown(_doctrine_result(cells))
+    assert "Verdict (conformance Δ): **credible improvement**" in md
+    assert "Verdict (lives Δ)" in md  # the secondary lives verdict line is still present
+    # conformance verdict line is INSIDE the conformance section, before the lives one.
+    assert md.index("Verdict (conformance Δ)") < md.index("Verdict (lives Δ)")
+
+
 def _doctrine_result(cells: list[dict[str, Any]]) -> dict[str, Any]:
     """Assemble a doctrine-ablation result dict the way _run_doctrine_ablation does."""
     from aftershock.bench import _conformance_block
