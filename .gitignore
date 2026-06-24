@@ -41,9 +41,10 @@ scenarios/*/raw/
 # Local agent guidance (not published)
 CLAUDE.md
 
-# Internal handoff / field notes — contain deploy topology & infra details (not published)
+# Internal handoff doc — contains deploy topology & infra details (host IPs, SSH user,
+# deploy paths), so it stays local. FIELD-NOTES.md is published: the README and source
+# cite it by section, and it carries no infra detail (host nicknames genericized).
 docs/FOLLOWUPS.md
-docs/FIELD-NOTES.md
 
 # Frontend build artifacts
 web/node_modules/

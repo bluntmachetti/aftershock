@@ -43,13 +43,29 @@ function authHeaders(): Record<string, string> {
 // so the secret never lingers in the address bar (or in a screen recording).
 resolveToken()
 
-async function get<T>(url: string): Promise<T> {
-  const res = await fetch(url)
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`${res.status} ${res.statusText}: ${text}`)
+// Read requests get a hard timeout so a slow/stalled endpoint surfaces an error the UI
+// can render (and retry from) instead of hanging on "Loading…" forever — the failure
+// mode a judge hit when an unbounded /api/runs scan stopped responding.
+const GET_TIMEOUT_MS = 15000
+
+async function get<T>(url: string, timeoutMs: number = GET_TIMEOUT_MS): Promise<T> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetch(url, { signal: controller.signal })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`${res.status} ${res.statusText}: ${text}`)
+    }
+    return (await res.json()) as T
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new Error(`Request to ${url} timed out after ${timeoutMs / 1000}s`)
+    }
+    throw e
+  } finally {
+    clearTimeout(timer)
   }
-  return res.json() as Promise<T>
 }
 
 async function post<T>(url: string, body: unknown): Promise<T> {

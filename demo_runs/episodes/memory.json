@@ -1,0 +1,52 @@
+[
+  {
+    "lessons": [
+      "Pre-position critical resources based on early mission severity to avoid pool exhaustion.",
+      "Establish priority protocols for resource grants to reduce rejection of essential requests.",
+      "Monitor loss-to-save ratios per mission type to reallocate crews dynamically.",
+      "Improve road repair coordination\u2014delays cascade into rescue and medical response times.",
+      "Maintain reserve ambulance capacity during surge events to prevent preventable fatalities."
+    ],
+    "run_id": "ep1-seed100-society"
+  },
+  {
+    "lessons": [
+      "Pre-position critical resources based on early incident severity to avoid mid-crisis shortages.",
+      "Prioritize road repair approvals to maintain access for ambulances and fire crews.",
+      "Balance rapid initial response with sustainable resource reserves for secondary disaster waves.",
+      "Track and act on rejection patterns to adjust coordination protocols in real time.",
+      "Improve dispatch logic to reduce average response time below 4.44 ticks for higher survival rates."
+    ],
+    "run_id": "ep2-seed101-society"
+  },
+  {
+    "lessons": [
+      "Pre-position repair crews in critical zones like harbors before disaster onset.",
+      "Prioritize road repair approvals to maintain access for emergency services.",
+      "Balance mission load early to avoid cascading infrastructure failures.",
+      "Track and forecast resource exhaustion to prevent operational collapse.",
+      "Improve coordination between medical and infrastructure teams to reduce preventable losses."
+    ],
+    "run_id": "ep3-seed102-society"
+  },
+  {
+    "lessons": [
+      "Pre-position critical resources before secondary disaster waves strike.",
+      "Improve internal resource allocation to avoid 0% utilization and over-reliance on grants.",
+      "Prioritize ambulance availability for high-casualty collapse rescues.",
+      "Monitor rejection patterns to adjust request strategies in real time.",
+      "Balance mission load across asset types to prevent pool exhaustion."
+    ],
+    "run_id": "ep4-seed103-society"
+  },
+  {
+    "lessons": [
+      "Pre-position repair crews before cascading infrastructure failures occur.",
+      "Balance early medical/fire response with sustained infrastructure support.",
+      "Track and report actual resource usage to avoid misleading utilization metrics.",
+      "Prioritize road repair access to enable timely response across all sectors.",
+      "Avoid overcommitting resources in initial wave\u2014reserve capacity for later surges."
+    ],
+    "run_id": "ep5-seed104-society"
+  }
+]

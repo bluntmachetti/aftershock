@@ -2,7 +2,7 @@
 layout: post
 title: "When does a society of small Qwen models beat one big model? Building Aftershock."
 date: 2026-06-12 09:00:00 -0700
-description: "The build journey of Aftershock — cost-tiered cognition on Qwen Cloud, a +28-lives coordination result, the honest negative results, and a real NYC Hurricane Ida scenario."
+description: "The build journey of Aftershock — cost-tiered cognition on Qwen Cloud: six small models out-delivering one big one at ~65% better lives-per-dollar, doctrine conformance credible at p=0.031, the honest negative results, and a real NYC Hurricane Ida scenario. (The early +28-lives coordination figure was later firmed to a suggestive +8.9 — see Log 007 and Log 008.)"
 log: "001"
 read: "9 min"
 summary: "The founding question and the architecture behind it — splitting a disaster response across six specialized agents that negotiate scarce resources, and the seeded-world harness that decides whether the society actually pays for itself."

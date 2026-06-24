@@ -18,6 +18,10 @@ COPY bench/ bench/
 # engine never fetches; packs are validated + digested at load. create_app resolves
 # scenarios/ relative to the WORKDIR (/app), so this COPY is the production source.
 COPY scenarios/ scenarios/
+# Curated demo runs (DEMO.md arc). `aftershock serve` seeds these into the /data/runs
+# volume at startup (idempotent), so a fresh volume shows real recorded data immediately
+# instead of "No runs found". A deployment's own runs always win (seeding never overwrites).
+COPY demo_runs/ demo_runs/
 COPY --from=web /build/dist web/dist
 RUN mkdir -p /data/runs
 

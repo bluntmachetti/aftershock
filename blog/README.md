@@ -3,6 +3,13 @@
 The build journey of [**Aftershock**](https://github.com/bluntmachetti/aftershock), a
 disaster-response society of Qwen agents, for the Qwen Cloud Global AI Hackathon.
 
+**Headline findings (the claims that survive scrutiny):** written doctrine lifts protocol
+conformance — **credible at p=0.031** (n=6, positive on all 11 seeds, no lives cost), and **95%**
+on the NYC-Ida demo run — and six cheap Qwen models out-deliver one big model at **~65% better
+lives-per-dollar**. The society-vs-swarm lives edge is **suggestive only** (+8.9 at n=15, p=0.118):
+an early +28 figure firmed down, and we report the honest number. Full evidence:
+[docs/EVIDENCE.md](../docs/EVIDENCE.md).
+
 **📖 Read the rendered blog → <https://bluntmachetti.github.io/aftershock/>**
 
 This folder is the Jekyll source for that site (built to GitHub Pages by
@@ -14,6 +21,7 @@ This folder is the Jekyll source for that site (built to GitHub Pages by
 
 ## Posts
 
+- **2026-06-25 · Log 008 — [We firmed our headline until it broke. Here's the one that didn't.](_posts/2026-06-25-the-headline-that-survives.md)**
 - **2026-06-22 · Log 007 — [The protocol was 'worth 28 lives.' At fifteen seeds it's worth a caveat.](_posts/2026-06-22-the-protocol-was-worth-28-lives-now-its-worth-a-caveat.md)**
 - **2026-06-19 · Log 006 — [We built a proof pack so judges could check our numbers. Auditing it ourselves found a wrong p-value, a fabricated source, and a cherry-picked run.](_posts/2026-06-19-we-proof-checked-our-proof-pack.md)**
 - **2026-06-16 · Log 005 — [The fix that would have only fooled the scoreboard — and the one tuning that actually paid.](_posts/2026-06-16-the-fix-that-would-have-only-fooled-the-scoreboard.md)**

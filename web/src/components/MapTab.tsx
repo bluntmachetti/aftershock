@@ -52,8 +52,10 @@ interface Props {
   timeline: TimelineState
   runs: RunSummary[]
   runsError: string | null
+  runsLoading: boolean
   onSelectRun: (runId: string, hasWorld: boolean, total: number) => void
   onLoadMore: () => void
+  onLoadDemo: () => void
   dispatch: React.Dispatch<TimelineAction>
 }
 
@@ -61,8 +63,10 @@ export function MapTab({
   timeline,
   runs,
   runsError,
+  runsLoading,
   onSelectRun,
   onLoadMore,
+  onLoadDemo,
   dispatch,
 }: Props) {
   const [selectedMission, setSelectedMission] = useState<string | null>(null)
@@ -355,7 +359,9 @@ export function MapTab({
             selectedRunId={timeline.runId}
             error={runsError}
             loading={timeline.loading}
+            runsLoading={runsLoading}
             onSelect={handleRunDetails}
+            onLoadDemo={onLoadDemo}
           />
           {world && (
             <div className="shrink-0 flex flex-col gap-3">
