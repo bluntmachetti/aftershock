@@ -706,11 +706,19 @@ def cmd_serve(args: argparse.Namespace) -> int:
         )
         return 1
 
-    from aftershock.web import create_app
+    from aftershock.web import DEMO_RUNS_DIRNAME, create_app, seed_demo_runs
 
     runs_dir = Path(args.runs_dir)
     host: str = args.host
     port: int = args.port
+
+    # Seed the curated demo arc (DEMO.md) into the runs-dir so a fresh clone / fresh Docker
+    # volume shows real recorded data immediately instead of "No runs found". Idempotent:
+    # never overwrites an existing run, so a live deployment's own runs always win.
+    if getattr(args, "seed_demo", True):
+        seeded = seed_demo_runs(runs_dir, Path(DEMO_RUNS_DIRNAME))
+        if seeded:
+            print(f"seeded {seeded} demo run(s) into {runs_dir}/ from {DEMO_RUNS_DIRNAME}/")
 
     app = create_app(runs_root=runs_dir, host=host)
     uvicorn.run(app, host=host, port=port)
@@ -1329,6 +1337,13 @@ def main() -> None:
         type=int,
         default=8788,
         help="Port to listen on (default: 8788)",
+    )
+    p_serve.add_argument(
+        "--no-seed-demo",
+        dest="seed_demo",
+        action="store_false",
+        default=True,
+        help="Do not seed the curated demo runs (demo_runs/) into the runs-dir at startup",
     )
 
     # mcp

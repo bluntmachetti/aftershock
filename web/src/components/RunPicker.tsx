@@ -52,22 +52,63 @@ interface Props {
   selectedRunId: string | null
   error: string | null
   loading: boolean
+  // True while the run LIST is still being fetched (distinct from `loading`, which is
+  // the per-run tick load). Without it the picker shows "No runs found" mid-fetch.
+  runsLoading?: boolean
   onSelect: (run: RunSummary) => void
+  // Re-fetch the run list and load the flagship demo run. Powers the empty/error-state
+  // CTA so a judge always has a one-click path to recorded data.
+  onLoadDemo?: () => void
 }
 
-export function RunPicker({ runs, selectedRunId, error, loading, onSelect }: Props) {
+// Shared CTA so the empty + error states both offer a one-click path to the demo.
+function LoadDemoButton({ onLoadDemo, label }: { onLoadDemo?: () => void; label: string }) {
+  if (!onLoadDemo) return null
+  return (
+    <button
+      onClick={onLoadDemo}
+      className="mt-2 px-2.5 py-1 rounded text-[11px] font-mono uppercase tracking-wider font-semibold text-eoc-ground bg-signal-amber hover:opacity-90 transition-opacity"
+    >
+      {label}
+    </button>
+  )
+}
+
+export function RunPicker({
+  runs,
+  selectedRunId,
+  error,
+  loading,
+  runsLoading,
+  onSelect,
+  onLoadDemo,
+}: Props) {
   if (error) {
     return (
-      <div className="p-3 text-[11px] font-mono text-signal-red border border-signal-red/30 rounded-lg bg-signal-red/10">
-        Error loading runs: {error}
+      <div className="p-3 flex flex-col items-start text-[11px] font-mono text-signal-red border border-signal-red/30 rounded-lg bg-signal-red/10">
+        <span>Error loading runs: {error}</span>
+        <LoadDemoButton onLoadDemo={onLoadDemo} label="Retry" />
+      </div>
+    )
+  }
+
+  // List still loading (first fetch) — show a quiet pulse, not the empty state.
+  if (runsLoading && runs.length === 0) {
+    return (
+      <div className="p-3 text-[11px] font-mono text-eoc-secondary animate-pulse">
+        Loading runs…
       </div>
     )
   }
 
   if (runs.length === 0) {
     return (
-      <div className="p-3 text-[11px] font-mono text-eoc-secondary">
-        No runs found. Run <code className="text-signal-amber">aftershock run --seed 42</code> to create one.
+      <div className="p-3 flex flex-col items-start text-[11px] font-mono text-eoc-secondary">
+        <span>
+          No runs found. Run <code className="text-signal-amber">aftershock run --seed 42</code> to create one,
+        </span>
+        <span>or load a recorded demo run:</span>
+        <LoadDemoButton onLoadDemo={onLoadDemo} label="Load demo" />
       </div>
     )
   }

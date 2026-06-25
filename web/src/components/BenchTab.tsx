@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { BenchResult, BenchArm, PairedComparison, DeterminismReport } from '../types'
 import { api } from '../lib/api'
 import { ARM_COLORS, STATUS_COLORS, FALLBACK_COLOR, VERDICT_COLORS } from '../lib/palette'
@@ -300,7 +300,9 @@ export function BenchTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true)
+    setError(null)
     api
       .bench()
       .then((r) => { setResults(r); setLoading(false) })
@@ -309,6 +311,8 @@ export function BenchTab() {
     // it in parallel; a failure never blocks the bench view.
     api.determinism().then(setDeterminism).catch(() => {})
   }, [])
+
+  useEffect(() => { load() }, [load])
 
   if (loading) {
     return (
@@ -320,8 +324,14 @@ export function BenchTab() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-full text-signal-red font-mono text-sm">
-        Error: {error}
+      <div className="flex flex-col items-center justify-center h-full gap-3 text-signal-red font-mono text-sm">
+        <span>Error: {error}</span>
+        <button
+          onClick={load}
+          className="px-2.5 py-1 rounded text-[11px] uppercase tracking-wider font-semibold text-eoc-ground bg-signal-amber hover:opacity-90 transition-opacity"
+        >
+          Retry
+        </button>
       </div>
     )
   }

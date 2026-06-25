@@ -1,8 +1,10 @@
 title: "Aftershock — Field Log"
 description: >-
   The build journey of Aftershock — a disaster-response society of Qwen agents for the Qwen Cloud
-  Global AI Hackathon. Progress, architecture decisions, and what the numbers (including the
-  negative results) said.
+  Global AI Hackathon. The claims that survived scrutiny: written doctrine lifts protocol
+  conformance (credible at p=0.031; 95% on the NYC-Ida demo run) and six small models out-deliver
+  one big one at ~65% better lives-per-dollar — plus the negative results, and the lives headline
+  we firmed and walked back, that got us to the honest numbers.
 # Publish posts even if their timestamp is ahead of the build clock (timezone-safe).
 future: true
 url: "https://bluntmachetti.github.io"

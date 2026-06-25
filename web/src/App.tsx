@@ -23,6 +23,19 @@ const TABS: TabId[] = ['map', 'bench', 'live', 'compare']
 // Page size for deep-link paging — match the single-run loader's 50.
 const PAGE = 50
 
+// The run a judge lands on with zero clicks when there's no deep link: prefer the
+// NYC-Ida society flagship, then any real-scenario society run, then any society run,
+// then whatever the list leads with. Keeps first contact on real evidence, not an
+// empty "select a run" panel.
+function pickDefaultRun(list: RunSummary[]): RunSummary | undefined {
+  return (
+    list.find((r) => r.run_id === 'seed91-society') ??
+    list.find((r) => r.arm === 'society' && r.scenario) ??
+    list.find((r) => r.arm === 'society') ??
+    list[0]
+  )
+}
+
 interface CompareInit {
   left: string
   right: string
@@ -34,6 +47,9 @@ export default function App() {
   const [timeline, dispatch] = useReducer(timelineReducer, initialTimelineState)
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [runsError, setRunsError] = useState<string | null>(null)
+  // True until the first /api/runs fetch resolves; lets RunPicker show "Loading runs…"
+  // instead of a misleading "No runs found" during the fetch.
+  const [runsLoading, setRunsLoading] = useState(true)
 
   // Deep-link seed for COMPARE (resolved once after api.runs()); the live
   // controller state flows back up via onStateChange for URL reflection.
@@ -98,6 +114,23 @@ export default function App() {
     return list
   }, [])
 
+  // Empty/error-state CTA: re-fetch the run list and load the flagship demo run. Gives a
+  // judge a one-click recovery path if the first auto-load ever fails (slow/empty deploy).
+  const loadDemoRun = useCallback(async () => {
+    setRunsError(null)
+    setRunsLoading(true)
+    try {
+      const list = await api.runs()
+      setRuns(list)
+      const def = pickDefaultRun(list)
+      if (def) handleSelectRun(def.run_id, def.has_world ?? false, def.ticks ?? 0)
+    } catch (e) {
+      setRunsError((e as Error).message)
+    } finally {
+      setRunsLoading(false)
+    }
+  }, [handleSelectRun])
+
   // Load run list on mount, then apply any deep link AFTER runs resolve.
   useEffect(() => {
     let cancelled = false
@@ -105,11 +138,36 @@ export default function App() {
       .then(async (list) => {
         if (cancelled) return
         setRuns(list)
+        setRunsLoading(false)
         if (deepLinkAppliedRef.current) return
         deepLinkAppliedRef.current = true
 
         const link = parseDeepLink(window.location.search, list)
-        if (!link) return
+        if (!link) {
+          // No deep link → auto-load a sensible default so the map renders real data on
+          // first contact (zero-click demo) instead of an empty "select a run" panel.
+          const def = pickDefaultRun(list)
+          if (!def) return
+          dispatch({
+            type: 'LOAD_RUN',
+            runId: def.run_id,
+            hasWorld: def.has_world ?? false,
+            total: def.ticks ?? 0,
+          })
+          try {
+            const data = await api.ticks(def.run_id, 0, PAGE)
+            if (cancelled) return
+            dispatch({
+              type: 'APPEND_TICKS',
+              ticks: data.ticks,
+              worlds: data.worlds,
+              total: data.total,
+            })
+          } catch (e) {
+            if (!cancelled) dispatch({ type: 'SET_ERROR', error: (e as Error).message })
+          }
+          return
+        }
 
         if (link.kind === 'compare') {
           setCompareInit({ left: link.leftRunId, right: link.rightRunId, tick: link.tick })
@@ -148,7 +206,10 @@ export default function App() {
         }
       })
       .catch((e: Error) => {
-        if (!cancelled) setRunsError(e.message)
+        if (!cancelled) {
+          setRunsError(e.message)
+          setRunsLoading(false)
+        }
       })
     return () => {
       cancelled = true
@@ -245,8 +306,10 @@ export default function App() {
             timeline={timeline}
             runs={runs}
             runsError={runsError}
+            runsLoading={runsLoading}
             onSelectRun={handleSelectRun}
             onLoadMore={handleLoadMore}
+            onLoadDemo={loadDemoRun}
             dispatch={dispatch}
           />
         )}

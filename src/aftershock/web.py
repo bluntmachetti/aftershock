@@ -30,12 +30,14 @@ import logging
 import os
 import re
 import secrets
+import shutil
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -81,6 +83,15 @@ _AMBIENT_TICKS = 30
 _AMBIENT_SEEDS = (42, 7, 13, 23, 57)
 _AMBIENT_RESTART_DELAY_S = 4.0  # pause on the final scoreboard between ambient runs
 _AMBIENT_POLL_S = 2.0  # re-check cadence while a manual run holds the floor
+# The ambient loop writes one throwaway ``live-*`` run dir per pass. On a long-lived
+# public demo box (AFTERSHOCK_DEMO_MODE) that is thousands per day, so the loop prunes
+# itself down to the newest _AMBIENT_KEEP after every run, and /api/runs only ever
+# surfaces the newest _MAX_LIVE_RUNS_LISTED of them. Curated runs (any id NOT prefixed
+# ``live-``) are never capped or pruned. Without this, _scan_runs ends up reading tens
+# of thousands of ticks.ndjson files on every call and times the endpoint out — the
+# regression that left the public observatory showing "No runs found" + a hung Bench tab.
+_MAX_LIVE_RUNS_LISTED = 40
+_AMBIENT_KEEP = 60  # >= _MAX_LIVE_RUNS_LISTED so rotation never starves the listed set
 # Scenario tick budget (default + under-budget floor) comes from the shared
 # town.scenario.scenario_tick_budget helper so the CLI and the live API agree.
 _VALID_INJECT_KINDS = frozenset({"fire", "aftershock", "road_block"})
@@ -341,67 +352,215 @@ def _scenario_compact_from_manifest(manifest: dict[str, Any]) -> dict[str, Any] 
 # ---------------------------------------------------------------------------
 
 
+def _count_ndjson_lines(path: Path) -> int:
+    """Count records in an NDJSON file via a buffered binary newline count.
+
+    Recorder writes one ``json + "\\n"`` per record, so the newline count is the record
+    count for a complete file. This is far cheaper than ``read_text().splitlines()`` (no
+    decode, no whole-file list allocation) — and _scan_runs calls it once per listed run,
+    so on a busy demo box the difference is the endpoint responding vs. timing out.
+    """
+    total = 0
+    try:
+        with path.open("rb") as fh:
+            while chunk := fh.read(1 << 16):
+                total += chunk.count(b"\n")
+    except OSError:
+        return 0
+    return total
+
+
 def _scan_runs(runs_root: Path) -> list[dict[str, Any]]:
     """Scan runs_root for valid run directories, newest first.
 
-    Also descends one level into ``runs_root/<_EPISODES_SUBDIR>/`` so the
-    curated society episodes are listed alongside regular runs (their leaf
-    run_ids are unique and regex-safe). A run_id collision (same leaf name in
-    both roots) keeps the direct-child entry; episode entries are skipped then.
+    Also descends one level into ``runs_root/<_EPISODES_SUBDIR>/`` so the curated society
+    episodes are listed alongside regular runs (their leaf run_ids are unique and
+    regex-safe). A run_id collision (same leaf name in both roots) keeps the direct-child
+    entry; episode entries are skipped then.
+
+    The throwaway ambient ``live-*`` runs are capped to the newest ``_MAX_LIVE_RUNS_LISTED``
+    by mtime; every CURATED run (any id not prefixed ``live-``) is always listed. So the
+    work is bounded by ``#curated + _MAX_LIVE_RUNS_LISTED`` no matter how many ambient runs
+    the demo loop has produced, and the demo arc (seed*/ep*/cf-*) can never be crowded out.
+    Blocking (filesystem) work — keep callers on a threadpool so /api/runs can't stall the
+    event loop and starve sibling endpoints (e.g. /api/bench) the way the unbounded scan did.
     """
     if not runs_root.exists():
         return []
-    results: list[tuple[float, dict[str, Any]]] = []
+
+    # --- Phase 1: cheap directory walk (one stat per dir) to collect candidates by mtime.
+    curated: list[tuple[Path, str, float]] = []
+    live: list[tuple[Path, str, float]] = []
     seen_ids: set[str] = set()
 
-    scan_dirs: list[Path] = [runs_root]
+    def _collect(scan_root: Path, *, is_episode: bool) -> None:
+        try:
+            scanner = os.scandir(scan_root)
+        except OSError:
+            return
+        with scanner:
+            for entry in scanner:
+                run_id = entry.name
+                # An episode whose run_id collides with a direct-child run is skipped
+                # (the direct child wins; episodes are additive only).
+                if is_episode and run_id in seen_ids:
+                    continue
+                try:
+                    if not entry.is_dir():
+                        continue
+                    mtime = entry.stat().st_mtime
+                except OSError:
+                    continue
+                seen_ids.add(run_id)
+                record = (Path(entry.path), run_id, mtime)
+                (live if run_id.startswith("live-") else curated).append(record)
+
+    _collect(runs_root, is_episode=False)
     episodes_root = runs_root / _EPISODES_SUBDIR
     if episodes_root.is_dir():
-        scan_dirs.append(episodes_root)
+        _collect(episodes_root, is_episode=True)
 
-    for scan_root in scan_dirs:
-        for entry in scan_root.iterdir():
-            if not entry.is_dir():
-                continue
-            run_json = entry / "run.json"
-            if not run_json.exists():
-                continue
-            run_id = entry.name
-            # Skip an episode whose run_id collides with a direct-child run
-            # (the direct child wins; episodes are additive only).
-            if scan_root is episodes_root and run_id in seen_ids:
-                continue
-            try:
-                manifest = json.loads(run_json.read_text(encoding="utf-8"))
-                ticks_path = entry / "ticks.ndjson"
-                ticks_count = 0
-                if ticks_path.exists():
-                    ticks_count = sum(
-                        1
-                        for ln in ticks_path.read_text(encoding="utf-8").splitlines()
-                        if ln.strip()
-                    )
-                has_world = (entry / "world.ndjson").exists()
-                result: dict[str, Any] = {
-                    "run_id": run_id,
-                    "seed": manifest.get("seed"),
-                    "arm": manifest.get("arm"),
-                    "ticks": ticks_count,
-                    "final_scores": manifest.get("final_scores", {}),
-                    "cost": manifest.get("cost", {}),
-                    "has_world": has_world,
-                    "scenario": _scenario_compact_from_manifest(manifest),
-                    # Branch metadata (only on counterfactual runs); the Compare tab
-                    # reads divergeTick from this list row to draw the DIVERGES marker.
-                    "counterfactual": manifest.get("counterfactual"),
-                }
-                mtime = entry.stat().st_mtime
-                results.append((mtime, result))
-                seen_ids.add(run_id)
-            except Exception:  # noqa: BLE001
-                continue
+    # Cap the ambient firehose to the newest N; keep ALL curated runs.
+    live.sort(key=lambda r: r[2], reverse=True)
+    selected = curated + live[:_MAX_LIVE_RUNS_LISTED]
+
+    # --- Phase 2: build summaries only for the selected runs (reads run.json + counts
+    # ticks). Bounded by (#curated + _MAX_LIVE_RUNS_LISTED), never the whole directory.
+    results: list[tuple[float, dict[str, Any]]] = []
+    for entry_path, run_id, mtime in selected:
+        run_json = entry_path / "run.json"
+        try:
+            manifest = json.loads(run_json.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 — a dir without a readable run.json is not a run
+            continue
+        ticks_path = entry_path / "ticks.ndjson"
+        ticks_count = _count_ndjson_lines(ticks_path) if ticks_path.exists() else 0
+        has_world = (entry_path / "world.ndjson").exists()
+        result: dict[str, Any] = {
+            "run_id": run_id,
+            "seed": manifest.get("seed"),
+            "arm": manifest.get("arm"),
+            "ticks": ticks_count,
+            "final_scores": manifest.get("final_scores", {}),
+            "cost": manifest.get("cost", {}),
+            "has_world": has_world,
+            "scenario": _scenario_compact_from_manifest(manifest),
+            # Branch metadata (only on counterfactual runs); the Compare tab reads
+            # divergeTick from this list row to draw the DIVERGES marker.
+            "counterfactual": manifest.get("counterfactual"),
+        }
+        results.append((mtime, result))
+
     results.sort(key=lambda x: x[0], reverse=True)
     return [r for _, r in results]
+
+
+def _prune_ambient_runs(runs_root: Path, keep: int) -> int:
+    """Delete old ``live-*`` ambient run dirs, keeping the newest ``keep`` by mtime.
+
+    Best-effort: a dir that vanishes mid-prune (a concurrent writer) or that can't be
+    removed is skipped, never raised — the ambient demo loop must not die on cleanup.
+    Only ``live-*`` dirs are considered; curated runs (seed*/ep*/cf-*) are never touched.
+    Returns the number of dirs removed.
+    """
+    try:
+        scanner = os.scandir(runs_root)
+    except OSError:
+        return 0
+    live: list[tuple[float, str]] = []
+    with scanner:
+        for entry in scanner:
+            if not entry.name.startswith("live-"):
+                continue
+            try:
+                if not entry.is_dir():
+                    continue
+                live.append((entry.stat().st_mtime, entry.path))
+            except OSError:
+                continue
+    if len(live) <= keep:
+        return 0
+    live.sort(key=lambda item: item[0], reverse=True)
+    removed = 0
+    for _mtime, path in live[keep:]:
+        shutil.rmtree(path, ignore_errors=True)
+        removed += 1
+    return removed
+
+
+def _collect_bench_results(bench_root: Path) -> list[dict[str, Any]]:
+    """Read every ``results.json`` under bench_root, canonical batch first, attaching a
+    server-computed paired-stats block (bootstrap CI + sign-test p + power + verdict) so
+    the BenchTab never reimplements stats in TS. Pure/blocking — call via run_in_threadpool.
+
+    Control = the deterministic scripted baseline; an arm with no common seeds is omitted
+    (never an error), so a single-arm result yields an empty paired_stats list.
+    """
+    if not bench_root.exists():
+        return []
+    results: list[tuple[float, str, Any]] = []
+    # results.json files live in dated subdirectories (bench/results/<date>/), or directly
+    # under bench_root — scan recursively for the canonical name.
+    for entry in sorted(bench_root.rglob("results.json")):
+        try:
+            data = json.loads(entry.read_text(encoding="utf-8"))
+            mtime = entry.stat().st_mtime
+            results.append((mtime, entry.parent.name, data))
+        except Exception:  # noqa: BLE001
+            continue
+    # Canonical demo batch first, then the rest newest-first by mtime.
+    results.sort(key=lambda x: (x[1] != _CANONICAL_BENCH_DIR, -x[0]))
+    from aftershock.bench import paired_comparisons
+
+    served: list[dict[str, Any]] = []
+    for _, dirname, data in results:
+        if isinstance(data, dict):
+            data = dict(data)
+            data["batch"] = dirname
+            data["canonical"] = dirname == _CANONICAL_BENCH_DIR
+            if isinstance(data.get("paired"), dict):
+                prov = data.get("provenance")
+                data["paired_stats"] = paired_comparisons(
+                    data["paired"],
+                    provenance=prov if isinstance(prov, dict) else None,
+                )
+        served.append(data)
+    return served
+
+
+# The curated demo arc (DEMO.md) committed under demo_runs/ so a fresh clone or a fresh
+# Docker volume shows real recorded data immediately instead of an empty "No runs found".
+# The serve command seeds the live runs-dir from here at startup.
+DEMO_RUNS_DIRNAME = "demo_runs"
+
+
+def seed_demo_runs(runs_root: Path, seed_root: Path) -> int:
+    """Copy curated demo run dirs from ``seed_root`` into ``runs_root`` when missing.
+
+    Idempotent and best-effort: a run that already exists in ``runs_root`` is left
+    untouched (a deployment's own runs always win), and any copy error is swallowed so a
+    seeding hiccup can never stop the server from starting. Returns the number of run dirs
+    newly copied. Only directories are seeded; loose files (memory.json) are skipped.
+    """
+    if not seed_root.is_dir():
+        return 0
+    try:
+        runs_root.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return 0
+    copied = 0
+    for src in sorted(seed_root.iterdir()):
+        if not src.is_dir():
+            continue
+        dst = runs_root / src.name
+        if dst.exists():
+            continue
+        try:
+            shutil.copytree(src, dst)
+            copied += 1
+        except OSError:
+            continue
+    return copied
 
 
 # ---------------------------------------------------------------------------
@@ -691,6 +850,11 @@ async def _ambient_demo_loop(runs_root: Path) -> None:
                 fail_streak += 1
             else:
                 fail_streak = 0
+            # Rotate: keep only the newest _AMBIENT_KEEP ambient runs so the run dir
+            # (and the /api/runs scan) stays bounded on a long-lived demo box. Off the
+            # event loop — the first prune after a redeploy may remove thousands of dirs.
+            with contextlib.suppress(Exception):
+                await run_in_threadpool(_prune_ambient_runs, runs_root, _AMBIENT_KEEP)
             delay = _AMBIENT_RESTART_DELAY_S
             if fail_streak >= 3:
                 delay = min(60.0, _AMBIENT_RESTART_DELAY_S * 2 ** (fail_streak - 2))
@@ -888,7 +1052,9 @@ def create_app(
 
     @app.get("/api/runs")
     async def list_runs() -> JSONResponse:
-        runs = _scan_runs(runs_root)
+        # Off the event loop: the scan is filesystem-bound, and keeping it here is what
+        # let an unbounded runs dir hang /api/runs *and* starve sibling endpoints.
+        runs = await run_in_threadpool(_scan_runs, runs_root)
         return JSONResponse(runs)
 
     # ------------------------------------------------------------------
@@ -1003,40 +1169,10 @@ def create_app(
 
     @app.get("/api/bench")
     async def bench_results() -> JSONResponse:
-        if not bench_root.exists():
-            return JSONResponse([])
-        results: list[tuple[float, str, Any]] = []
-        # results.json files live in dated subdirectories (bench/results/<date>/),
-        # or directly under bench_root — scan recursively for the canonical name.
-        for entry in sorted(bench_root.rglob("results.json")):
-            try:
-                data = json.loads(entry.read_text(encoding="utf-8"))
-                mtime = entry.stat().st_mtime
-                results.append((mtime, entry.parent.name, data))
-            except Exception:  # noqa: BLE001
-                continue
-        # Canonical demo batch first, then the rest newest-first by mtime.
-        results.sort(key=lambda x: (x[1] != _CANONICAL_BENCH_DIR, -x[0]))
-        # Attach a pure paired-stats block (bootstrap CI + sign-test p + power +
-        # verdict) to each result, computed server-side from its `paired` table
-        # so the BenchTab never reimplements stats in TS. Control = the
-        # deterministic scripted baseline; an arm with no common seeds is omitted
-        # (never an error), so a single-arm result yields an empty list.
-        from aftershock.bench import paired_comparisons
-
-        served: list[dict[str, Any]] = []
-        for _, dirname, data in results:
-            if isinstance(data, dict):
-                data = dict(data)
-                data["batch"] = dirname
-                data["canonical"] = dirname == _CANONICAL_BENCH_DIR
-                if isinstance(data.get("paired"), dict):
-                    prov = data.get("provenance")
-                    data["paired_stats"] = paired_comparisons(
-                        data["paired"],
-                        provenance=prov if isinstance(prov, dict) else None,
-                    )
-            served.append(data)
+        # Off the event loop: reads + paired-stats are CPU/IO-bound, and the old
+        # unbounded /api/runs scan blocked the loop long enough to starve this endpoint
+        # (the "Loading bench results… forever" half of the regression).
+        served = await run_in_threadpool(_collect_bench_results, bench_root)
         return JSONResponse(served)
 
     # ------------------------------------------------------------------
