@@ -21,7 +21,9 @@ A reader looked at the running theme of this log — *a coordinated society of s
 uncoordinated swarm* — and asked the sharp question: **isn't that a Nash-equilibrium story? Does the
 hypothesis actually hold if you frame it that way?**
 
-It's the best framing question I've gotten, because it turns out [**Aftershock**](https://github.com/bluntmachetti/aftershock)
+It's the best framing question I've gotten — and one I couldn't resist, because I'm an economics and
+game-theory geek at heart (my first degree was in Economics). That's the honest reason this entry runs
+longer and digs deeper into the theory than usual. Because it turns out [**Aftershock**](https://github.com/bluntmachetti/aftershock)
 isn't *like* a game-theory problem — it *is* one, almost on the nose. So I spent today building a ruler
 for it and reading the literature to make sure I was using the words correctly. This is what the ruler
 said, what it can't say yet, and where it points next.
