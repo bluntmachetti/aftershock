@@ -596,3 +596,47 @@ Per-role: rescue −0.048 / medical −0.021 / comms −0.018 took most of it; i
 lives cost, inside the healthy 0.85–0.90 band → KEEP the trim.** The −16% cost win is **nearly free,
 not perfectly free.** Not worth more seeds to resolve credible-vs-suggestive on a −0.019 effect.
 This updates §21's watch-item. New reusable surface: `aftershock ablation --ablate contract`.
+
+## 25. Price of anarchy: the protocol recovers ~9 pts of the lives a resource scramble leaves behind (2026-06-25)
+
+A game-theory reframe of "society beats swarm." The town is a **common-pool resource game** —
+roles claim from finite shared pools (ambulances, crews, engines, fuel) toward missions with
+severity/deadline, and one claim is a negative externality on the others. Classic setting where
+the *uncoordinated* outcome is inefficient (the **price of anarchy**) and a mechanism recovers
+welfare. The arms line up on exactly that axis: `swarm`/`solo` have no arbitration (`DefaultResolver`,
+direct dispatch) = uncoordinated; `society` adds the per-tick auction (`TownResolver`) + doctrine =
+mechanism + correlation device.
+
+Rather than raw lives, measure a bounded **efficiency** grounded in the sim's own exact accounting:
+every imperiled life is saved, lost, or still-open, so `total_at_risk = lives_saved + lives_lost +
+open_remaining` (an identity, no model) and `efficiency = lives_saved / total_at_risk ∈ [0,1]`.
+
+**4-arm efficiency** (`bench/results/2026-06-22-4arm-refresh`, n=5, computed by `town/poa.py`):
+
+| arm | efficiency | coordinated? |
+|---|---|---|
+| **society** | **67.3%** | yes (auction + doctrine) |
+| scripted | 66.2% | yes (central heuristic) |
+| solo | 58.9% | no |
+| swarm | 58.1% | no |
+
+The structural separation is the real result: **both coordinated arms (~66–67%) sit above both
+uncoordinated ones (~58%)**, and the *expensive single big model (solo) lands at the swarm's anarchy
+level* — coordination beats raw model size for this allocation problem.
+
+**society vs swarm, paired within-batch, pooled to n=15** (refresh seeds {11,23,37,42,57} +
+`2026-06-22-swarm-firm` {60..69}): **mean +6.7 efficiency pts**, society wins **11/15**, bootstrap
+95% CI **[+2.6, +10.8] excludes 0**, sign-test **p=0.118**, **price of anarchy 1.11×** → **suggestive,
+not significant** — the *same* statistical strength as the raw-lives §23 result. The reframe is more
+*interpretable* (bounded, structural) but does **not** manufacture significance.
+
+**Honesty bound:** the denominator is the rigorous **save-everyone ceiling** (efficiency=1.0), NOT a
+tight *achievable* optimum — the true optimum is a multi-tick resource-scheduling problem over the
+deterministic world and is intractable to compute exactly, so we report "fraction of saveable," never
+"fraction of optimal." **Real-scenario caveat:** on the brutal NYC-Ida pack (`seed91`) the order
+*flips* — scripted saves 32.2% vs society's 8.9%; the coordination edge is a synthetic-benchmark
+finding, and the LLM society is not magic on a hard real scenario.
+
+**Verdict:** the coordinated-vs-uncoordinated efficiency gap is a clean *structural* pattern (and
+`solo ≈ swarm` is the sharp honest point); the pairwise society-vs-swarm edge stays **suggestive**
+(p=0.118), consistent with §23. New reusable surface: `aftershock poa` / `town/poa.py`.
