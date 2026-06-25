@@ -5,6 +5,7 @@ import {
   selectRunningCost,
   deriveScrubberEvents,
 } from '../timeline'
+import { pickDefaultComparePair } from '../compare'
 import type {
   TickRecord,
   WorldState,
@@ -12,6 +13,7 @@ import type {
   TokenUsage,
   WorldEvent,
   MissionState,
+  RunSummary,
 } from '../../types'
 
 // ---- Tiny typed builders (keep fixtures readable + strict) ----
@@ -279,5 +281,64 @@ describe('deriveScrubberEvents', () => {
     expect(deriveScrubberEvents([], null)).toEqual([])
     expect(deriveScrubberEvents([], [])).toEqual([])
     expect(deriveScrubberEvents([], [world(0, [mission('m1', 'open')])])).toEqual([])
+  })
+})
+
+describe('pickDefaultComparePair (lives-guarded)', () => {
+  function run(
+    o: Partial<RunSummary> & Pick<RunSummary, 'run_id' | 'arm' | 'seed'>,
+  ): RunSummary {
+    return { ticks: 60, has_world: true, final_scores: { lives_saved: 0 }, ...o }
+  }
+
+  it('defaults to the society-vs-baseline pair the society WINS (the seed-11 blowout)', () => {
+    const runs = [
+      // Real-data NYC-Ida seed: society honestly trails — must NOT be the default.
+      run({ run_id: 'seed91-society', arm: 'society', seed: 91, final_scores: { lives_saved: 8 } }),
+      run({ run_id: 'seed91-scripted', arm: 'scripted', seed: 91, final_scores: { lives_saved: 29 } }),
+      // Price-of-anarchy pair: coordinated society beats the uncoordinated swarm.
+      run({ run_id: 'seed11-society', arm: 'society', seed: 11, final_scores: { lives_saved: 113 } }),
+      run({ run_id: 'seed11-swarm', arm: 'swarm', seed: 11, final_scores: { lives_saved: 74 } }),
+    ]
+    expect(pickDefaultComparePair(runs)).toEqual({
+      left: 'seed11-society',
+      right: 'seed11-swarm',
+    })
+  })
+
+  it('returns null (→ picker) when the society loses every same-seed baseline', () => {
+    const runs = [
+      run({ run_id: 'seed91-society', arm: 'society', seed: 91, final_scores: { lives_saved: 8 } }),
+      run({ run_id: 'seed91-scripted', arm: 'scripted', seed: 91, final_scores: { lives_saved: 29 } }),
+    ]
+    expect(pickDefaultComparePair(runs)).toBeNull()
+  })
+
+  it('skips worldless / truncated / score-less runs and needs a same-seed baseline', () => {
+    // Different seed → no comparable baseline.
+    expect(
+      pickDefaultComparePair([
+        run({ run_id: 's', arm: 'society', seed: 5, final_scores: { lives_saved: 100 } }),
+        run({ run_id: 'b', arm: 'swarm', seed: 9, final_scores: { lives_saved: 10 } }),
+      ]),
+    ).toBeNull()
+    // Truncated society run is not comparable.
+    expect(
+      pickDefaultComparePair([
+        run({ run_id: 's', arm: 'society', seed: 5, ticks: 5, final_scores: { lives_saved: 100 } }),
+        run({ run_id: 'b', arm: 'swarm', seed: 5, final_scores: { lives_saved: 10 } }),
+      ]),
+    ).toBeNull()
+    expect(pickDefaultComparePair([])).toBeNull()
+  })
+
+  it('prefers the largest society margin when several winning pairs qualify', () => {
+    const runs = [
+      run({ run_id: 'a-society', arm: 'society', seed: 1, final_scores: { lives_saved: 50 } }),
+      run({ run_id: 'a-swarm', arm: 'swarm', seed: 1, final_scores: { lives_saved: 40 } }), // +10
+      run({ run_id: 'b-society', arm: 'society', seed: 2, final_scores: { lives_saved: 90 } }),
+      run({ run_id: 'b-swarm', arm: 'swarm', seed: 2, final_scores: { lives_saved: 30 } }), // +60
+    ]
+    expect(pickDefaultComparePair(runs)).toEqual({ left: 'b-society', right: 'b-swarm' })
   })
 })
