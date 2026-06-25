@@ -928,6 +928,28 @@ def cmd_diagnose(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_poa(args: argparse.Namespace) -> int:
+    """Price-of-anarchy ruler: fraction of imperiled lives saved per arm, over recorded runs."""
+    from aftershock.town import poa
+
+    results_root = Path(args.results_dir)
+    if not results_root.is_dir():
+        print(f"error: results directory not found: {results_root}", file=sys.stderr)
+        return 1
+
+    if getattr(args, "json", False):
+        batches = poa.discover_batches(results_root)
+        report = {
+            "per_arm": {b.name: poa.arm_means(poa.batch_cells(b)) for b in batches},
+            "society_vs_swarm": poa.paired_efficiency_verdict(batches),
+        }
+        print(json.dumps(report, indent=2, sort_keys=True, default=str))
+        return 0
+
+    print(poa.format_report(results_root))
+    return 0
+
+
 def cmd_episodes(args: argparse.Namespace) -> int:
     """Run N sequential society runs with AAR+memory between them.
 
@@ -1286,6 +1308,16 @@ def main() -> None:
     p_diagnose.add_argument("--json", action="store_true",
                             help="Output raw JSON instead of markdown")
 
+    # poa
+    p_poa = sub.add_parser(
+        "poa",
+        help="Price-of-anarchy ruler: fraction of imperiled lives saved per arm",
+    )
+    p_poa.add_argument("--results-dir", default="bench/results",
+                       help="Bench results root to scan (default: bench/results)")
+    p_poa.add_argument("--json", action="store_true",
+                       help="Output raw JSON instead of the text report")
+
     # verify
     p_verify = sub.add_parser("verify", help="Verify determinism")
     p_verify.add_argument(
@@ -1454,5 +1486,7 @@ def main() -> None:
         sys.exit(cmd_ablation(args))
     elif args.command == "diagnose":
         sys.exit(cmd_diagnose(args))
+    elif args.command == "poa":
+        sys.exit(cmd_poa(args))
     elif args.command == "compile-scenario":
         sys.exit(cmd_compile_scenario(args))
