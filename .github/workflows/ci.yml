@@ -1,0 +1,60 @@
+name: CI
+
+# Runs the lint gate, the deterministic Python test suite, and the determinism
+# self-check on pushes to main and on PRs targeting main (so the merge gate has
+# results). The suite is fully offline — the DashScope provider is mocked and
+# the few env-sensitive tests delete DASHSCOPE_API_KEY themselves — so this
+# workflow needs no secrets.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer push to the same branch/PR cancels an in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      # Report every version's result rather than stopping at the first failure.
+      fail-fast: false
+      matrix:
+        # The declared floor (pyproject requires-python >= 3.11) and the version
+        # the project develops and ships on.
+        python-version: ["3.11", "3.13"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install uv (with cache)
+        # setup-uv publishes no floating major tag, so pin the full version.
+        uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: true
+          python-version: ${{ matrix.python-version }}
+
+      # --frozen installs exactly what uv.lock pins and fails if the lock is out
+      # of sync with pyproject.toml, so CI can't drift from the committed lock.
+      - name: Install dependencies (locked)
+        run: uv sync --frozen
+
+      # ruff's DTZ rule is part of the determinism contract (no naive datetimes).
+      - name: Lint (ruff)
+        run: uv run ruff check src tests
+
+      - name: Test (pytest)
+        run: uv run pytest -q
+
+      # The core contract: two runs of the same seed must produce identical
+      # world-digest sequences.
+      - name: Determinism self-check
+        run: uv run aftershock verify --seed 42 --ticks 60
