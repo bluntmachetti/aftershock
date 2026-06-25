@@ -21,6 +21,7 @@ This folder is the Jekyll source for that site (built to GitHub Pages by
 
 ## Posts
 
+- **2026-06-26 · Log 009 — [We put a number on coordination: the price of anarchy in an agent society.](_posts/2026-06-26-the-price-of-anarchy.md)**
 - **2026-06-25 · Log 008 — [We firmed our headline until it broke. Here's the one that didn't.](_posts/2026-06-25-the-headline-that-survives.md)**
 - **2026-06-22 · Log 007 — [The protocol was 'worth 28 lives.' At fifteen seeds it's worth a caveat.](_posts/2026-06-22-the-protocol-was-worth-28-lives-now-its-worth-a-caveat.md)**
 - **2026-06-19 · Log 006 — [We built a proof pack so judges could check our numbers. Auditing it ourselves found a wrong p-value, a fabricated source, and a cherry-picked run.](_posts/2026-06-19-we-proof-checked-our-proof-pack.md)**
