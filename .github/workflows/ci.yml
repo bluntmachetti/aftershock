@@ -36,7 +36,8 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Install uv (with cache)
-        uses: astral-sh/setup-uv@v8
+        # setup-uv publishes no floating major tag, so pin the full version.
+        uses: astral-sh/setup-uv@v8.2.0
         with:
           enable-cache: true
           python-version: ${{ matrix.python-version }}
