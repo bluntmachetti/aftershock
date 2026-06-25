@@ -864,6 +864,28 @@ async def _ambient_demo_loop(runs_root: Path) -> None:
             await asyncio.sleep(_AMBIENT_POLL_S)
 
 
+class _CachingStaticFiles(StaticFiles):
+    """StaticFiles with the SPA caching policy Starlette omits by default.
+
+    ``index.html`` is served ``no-cache`` so a returning visitor always revalidates the entry
+    point (cheap — the etag yields a 304) and therefore always loads the *current* hashed
+    bundle. Without this, a browser can serve a heuristically-cached old ``index.html`` that
+    points at a now-renamed/404'd bundle → a blank page after a deploy. Content-hashed files
+    under ``assets/`` are immutable (a new build changes the filename), so they get a one-year
+    cache. Everything else keeps Starlette's default (etag + last-modified).
+    """
+
+    async def get_response(self, path: str, scope: Any) -> Any:
+        response = await super().get_response(path, scope)
+        if path.startswith("assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        elif path in (".", "", "index.html") or response.headers.get(
+            "content-type", ""
+        ).startswith("text/html"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 # ---------------------------------------------------------------------------
 # create_app
 # ---------------------------------------------------------------------------
@@ -1521,7 +1543,7 @@ def create_app(
 
     web_dist = Path(__file__).parent.parent.parent / "web" / "dist"
     if web_dist.exists() and web_dist.is_dir():
-        app.mount("/", StaticFiles(directory=str(web_dist), html=True), name="static")
+        app.mount("/", _CachingStaticFiles(directory=str(web_dist), html=True), name="static")
     else:
 
         @app.get("/")
