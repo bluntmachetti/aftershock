@@ -51,7 +51,7 @@ function makeTick(overrides: Partial<TickRecord> = {}): TickRecord {
 describe('NegotiationFeed', () => {
   it('renders empty state when no ticks', () => {
     render(<NegotiationFeed ticks={[]} cursor={-1} />)
-    expect(screen.getByText('No rulings yet.')).toBeInTheDocument()
+    expect(screen.getByText(/No rulings yet/)).toBeInTheDocument()
   })
 
   it('renders resource request rulings', () => {
@@ -95,7 +95,7 @@ describe('NegotiationFeed', () => {
     expect(screen.getByText(/aftershock/)).toBeInTheDocument()
   })
 
-  it('renders recent ticks only (sliding window)', () => {
+  it('shows a cumulative newest-first log up to the cursor', () => {
     const ticks = Array.from({ length: 10 }, (_, i) =>
       makeTick({
         tick: i,
@@ -113,9 +113,35 @@ describe('NegotiationFeed', () => {
       }),
     )
     render(<NegotiationFeed ticks={ticks} cursor={9} />)
-    // Should show entries from recent ticks (cursor - 4 to cursor)
+    // Cumulative (not a 5-tick window): every tick 0..9 contributes a ruling.
     const entries = screen.getAllByText(/medical/)
-    expect(entries.length).toBeGreaterThan(0)
-    expect(entries.length).toBeLessThanOrEqual(6)
+    expect(entries.length).toBe(10)
+    // Newest tick leads the log; the earliest tick (T0) — which the old sliding
+    // window dropped at cursor 9 — is now present.
+    const tickLabels = screen.getAllByText(/^T\d$/).map((el) => el.textContent)
+    expect(tickLabels[0]).toBe('T9')
+    expect(tickLabels).toContain('T0')
+  })
+
+  it('caps the cumulative log so a long run stays bounded', () => {
+    const ticks = Array.from({ length: 120 }, (_, i) =>
+      makeTick({
+        tick: i,
+        responses: [
+          {
+            agent_id: 'medical',
+            decisions: [],
+            proposals: [makeProposal({ proposal_id: `p-${i}` })],
+            responses: [],
+            usage: null,
+            error: '',
+          },
+        ],
+        rulings: [makeRuling({ proposal_id: `p-${i}` })],
+      }),
+    )
+    render(<NegotiationFeed ticks={ticks} cursor={119} />)
+    // One ruling per tick, 120 ticks, but the feed caps at 60 rows.
+    expect(screen.getAllByText(/medical/).length).toBe(60)
   })
 })

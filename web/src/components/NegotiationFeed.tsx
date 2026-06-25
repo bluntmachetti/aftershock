@@ -37,6 +37,12 @@ interface InjectMarker {
   tick: number
 }
 
+// The feed is a CUMULATIVE auction log up to the cursor — not a 5-tick window — so
+// the society's coordination is visible the moment the cursor advances past the first
+// contested tick, and scrubbing to the end shows the full negotiation history. Capped
+// so a long run stays bounded (the user scrolls for older rulings).
+const FEED_CAP = 60
+
 function buildFeed(
   ticks: TickRecord[],
   cursor: number,
@@ -44,7 +50,12 @@ function buildFeed(
 ): AnyEntry[] {
   const entries: AnyEntry[] = []
 
-  for (let i = Math.max(0, cursor - 4); i <= cursor; i++) {
+  // Walk from the cursor back to tick 0, newest-tick-first, accumulating each tick's
+  // inject markers + rulings until the cap. (Previously this was a fixed cursor-4..cursor
+  // window, which read as "No rulings yet" at the start of a replay and never surfaced
+  // the run's full auction history.)
+  const start = Math.min(cursor, ticks.length - 1)
+  for (let i = start; i >= 0 && entries.length < FEED_CAP; i--) {
     const tick = ticks[i]
     if (!tick) continue
 
@@ -90,7 +101,7 @@ function buildFeed(
     })
   }
 
-  return entries.slice(0, 40)
+  return entries.slice(0, FEED_CAP)
 }
 
 interface Props {
@@ -111,7 +122,10 @@ export function NegotiationFeed({ ticks, cursor, injectMarker = null, onSelectRu
         Negotiation Feed
       </h3>
       {entries.length === 0 && (
-        <div className="px-2 py-3 text-[11px] text-eoc-secondary font-mono">No rulings yet.</div>
+        <div className="px-2 py-3 text-[11px] text-eoc-secondary font-mono leading-relaxed">
+          No rulings yet — auction rulings appear here as roles bid for scarce units and
+          the kernel grants or declines each request.
+        </div>
       )}
       {entries.map((e, i) => {
         if (e.type === 'inject') {
