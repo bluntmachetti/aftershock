@@ -914,8 +914,10 @@ def _poll_live(client: TestClient, predicate, timeout: float = 6.0) -> dict:
 def test_ambient_demo_loop_starts_when_demo_mode(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """With AFTERSHOCK_DEMO_MODE set, the app lifespan auto-starts a looping scripted
-    ambient run — the public Live tab is alive with no client POST."""
+    """With AFTERSHOCK_DEMO_MODE set, the app lifespan auto-starts a looping ambient run
+    — the public Live tab is alive with no client POST. The ambient demo now REPLAYS a
+    recorded society run (resolved here from the bundled demo_runs/ since runs_root is
+    empty), so the live auction (rulings) is visible with no DashScope key."""
     import aftershock.web as web_mod
 
     runs_root = tmp_path / "runs"
@@ -931,7 +933,10 @@ def test_ambient_demo_loop_starts_when_demo_mode(
 
     assert data["running"] is True
     assert data["mode"] == "ambient"
-    assert data["arm"] == "scripted"
+    # Society replay (from the bundled demo arc), not a scripted engine run.
+    assert data["arm"] == "society"
+    # The replay streams a recording — it must not write a throwaway live-* run dir.
+    assert not list(runs_root.glob("live-*"))
 
 
 def test_ambient_disabled_without_demo_mode(
@@ -1547,3 +1552,108 @@ def test_live_memory_loads_lessons_into_commander(
         )
         assert "Prioritise fire missions early" in system
         assert "Always broadcast at panic > 0.4" in system
+
+
+# ---------------------------------------------------------------------------
+# Tests: ambient Live demo replays a recorded society run (rulings surface live)
+# ---------------------------------------------------------------------------
+
+
+def _write_recording(run_dir: Path, *, run_id: str, arm: str = "society", seed: int = 91) -> None:
+    """Write a minimal, contract-shaped recording: run.json + ticks.ndjson + world.ndjson.
+
+    Tick 1 carries an accepted auction ruling so a replay test can assert the rulings
+    actually reach the WS buffer (the reviewer's 'No rulings yet' fix)."""
+    run_dir.mkdir(parents=True, exist_ok=True)
+    manifest = {
+        "run_id": run_id,
+        "arm": arm,
+        "seed": seed,
+        "ticks": 2,
+        "final_scores": {"lives_saved": 7, "lives_lost": 1},
+        "cost": {"usd_total": 0.04},
+    }
+    (run_dir / "run.json").write_text(json.dumps(manifest), encoding="utf-8")
+    tick0 = {"tick": 0, "responses": [], "rulings": [], "events": [], "scores": {}}
+    tick1 = {
+        "tick": 1,
+        "responses": [
+            {
+                "agent_id": "fire",
+                "proposals": [
+                    {
+                        "proposal_id": "fire-t1-p0",
+                        "sender": "fire",
+                        "kind": "resource_request",
+                        "body": {"mission_id": "m1", "resource": "fire_engine", "qty": 1},
+                    }
+                ],
+            }
+        ],
+        "rulings": [
+            {
+                "proposal_id": "fire-t1-p0",
+                "accepted": True,
+                "decided_by": "kernel:auction",
+                "reason": "",
+            }
+        ],
+        "events": [],
+        "scores": {},
+    }
+    with (run_dir / "ticks.ndjson").open("w", encoding="utf-8") as fh:
+        fh.write(json.dumps(tick0) + "\n")
+        fh.write(json.dumps(tick1) + "\n")
+    w0 = {"tick": 0, "state": {"tick": 0, "missions": {}, "pools": {}, "panic": 0.0}}
+    w1 = {"tick": 1, "state": {"tick": 1, "missions": {}, "pools": {}, "panic": 0.1}}
+    with (run_dir / "world.ndjson").open("w", encoding="utf-8") as fh:
+        fh.write(json.dumps(w0) + "\n")
+        fh.write(json.dumps(w1) + "\n")
+
+
+def test_ambient_replay_streams_recorded_rulings(runs_root: Path) -> None:
+    """The ambient demo replay surfaces the society's auction rulings over the WS buffer
+    (the 'No rulings yet' fix): each recorded tick is broadcast as a {type:tick, record,
+    world} message carrying the recording's rulings, then a 'done' summary — no engine,
+    no DashScope key, and (crucially) no new live-* run dir."""
+    import aftershock.web as web_mod
+
+    rec = runs_root / "seed91-society"
+    _write_recording(rec, run_id="seed91-society")
+
+    state = web_mod._LiveState(live_id="testlive", arm="society", seed=91, mode="ambient")
+    asyncio.run(web_mod._run_ambient_replay(state, rec))
+
+    tick_msgs = [m for m in state.buffer if m["type"] == "tick"]
+    assert [m["record"]["tick"] for m in tick_msgs] == [0, 1]
+    # World snapshots are paired by tick and unwrapped to the bare state the UI reads.
+    assert tick_msgs[1]["world"]["panic"] == 0.1
+    # The auction ruling from the recording is surfaced live — the headline fix.
+    assert tick_msgs[1]["record"]["rulings"][0]["proposal_id"] == "fire-t1-p0"
+    assert tick_msgs[1]["record"]["rulings"][0]["accepted"] is True
+    # Finished cleanly with a scoreboard summary; wrote no engine output.
+    assert state.running is False
+    assert state.tick == 1
+    assert state.summary is not None
+    assert state.summary["final_scores"]["lives_saved"] == 7
+    assert state.summary["ticks_run"] == 2
+    # The replay must never grow the live-* firehose it was built to replace.
+    assert not list(runs_root.glob("live-*"))
+
+
+def test_resolve_replay_dir_prefers_seeded_then_bundled(runs_root: Path) -> None:
+    """_resolve_replay_dir finds a top-level seeded copy, an episodes/-nested copy, and
+    returns None for an id with no recording anywhere."""
+    import aftershock.web as web_mod
+
+    _write_recording(runs_root / "seed91-society", run_id="seed91-society")
+    _write_recording(runs_root / "episodes" / "ep1-seed100-society", run_id="ep1-seed100-society")
+
+    top = web_mod._resolve_replay_dir("seed91-society", runs_root)
+    assert top is not None and top.name == "seed91-society"
+    assert (top / "ticks.ndjson").exists()
+
+    nested = web_mod._resolve_replay_dir("ep1-seed100-society", runs_root)
+    assert nested is not None and nested.name == "ep1-seed100-society"
+
+    assert web_mod._resolve_replay_dir("does-not-exist-xyz", runs_root) is None

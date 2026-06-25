@@ -24,6 +24,7 @@ import {
   sideUnderPaged,
   worldlessRuns,
   winnerColor,
+  pickDefaultComparePair,
 } from '../lib/compare'
 import { usePlaybackClock as useSharedClock } from '../lib/usePlaybackClock'
 import {
@@ -176,6 +177,28 @@ export function CompareTab({
       .catch(() => {})
     return () => { cancelled = true }
   }, [])
+
+  // Zero-click default: when COMPARE opens with NO deep link and nothing is selected,
+  // auto-select the bundled society-WINS pair (guarded so it can never showcase a loss —
+  // see pickDefaultComparePair). A deep link or an existing selection always wins; the
+  // effect runs once, and falls back to the picker when no winning pair exists.
+  const autoPickedRef = useRef(false)
+  useEffect(() => {
+    if (autoPickedRef.current) return
+    if (initialLeft != null || initialRight != null) return
+    if (controller.leftRunId != null || controller.rightRunId != null) return
+    if (runs.length === 0) return
+    const pair = pickDefaultComparePair(runs)
+    if (!pair) return
+    autoPickedRef.current = true
+    setController((s) => ({
+      ...s,
+      leftRunId: pair.left,
+      rightRunId: pair.right,
+      cursorTick: 0,
+      playing: false,
+    }))
+  }, [runs, initialLeft, initialRight, controller.leftRunId, controller.rightRunId])
 
   const runById = useMemo(() => {
     const m = new Map<string, RunSummary>()

@@ -81,6 +81,22 @@ _LIVE_TICK_DELAY_S = 0.6
 # manual operator run pre-empts the current ambient run; the loop resumes after it ends.
 _AMBIENT_TICKS = 30
 _AMBIENT_SEEDS = (42, 7, 13, 23, 57)
+# The ambient Live demo REPLAYS these recorded society runs (newest-rich first) over
+# the read-only WS instead of executing a fresh scripted engine. This surfaces the
+# full Qwen auction — rulings, GRANTED/declined reasons, contention — for a judge
+# watching the simulation "play out", with no DashScope key, no token cost, and no
+# throwaway ``live-*`` run-dir churn. Rotated for variety; each id is resolved via
+# _resolve_replay_dir (seeded copy under runs_root, else the bundled demo_runs/).
+# If NONE resolve (e.g. --no-seed-demo on a bare box) the loop falls back to the
+# scripted engine so the demo is never dark.
+_AMBIENT_REPLAY_RUNS = (
+    "seed91-society",
+    "ep1-seed100-society",
+    "ep2-seed101-society",
+    "ep3-seed102-society",
+    "ep4-seed103-society",
+    "ep5-seed104-society",
+)
 _AMBIENT_RESTART_DELAY_S = 4.0  # pause on the final scoreboard between ambient runs
 _AMBIENT_POLL_S = 2.0  # re-check cadence while a manual run holds the floor
 # The ambient loop writes one throwaway ``live-*`` run dir per pass. On a long-lived
@@ -426,7 +442,7 @@ def _scan_runs(runs_root: Path) -> list[dict[str, Any]]:
 
     # --- Phase 2: build summaries only for the selected runs (reads run.json + counts
     # ticks). Bounded by (#curated + _MAX_LIVE_RUNS_LISTED), never the whole directory.
-    results: list[tuple[float, dict[str, Any]]] = []
+    results: list[tuple[bool, float, dict[str, Any]]] = []
     for entry_path, run_id, mtime in selected:
         run_json = entry_path / "run.json"
         try:
@@ -449,10 +465,14 @@ def _scan_runs(runs_root: Path) -> list[dict[str, Any]]:
             # divergeTick from this list row to draw the DIVERGES marker.
             "counterfactual": manifest.get("counterfactual"),
         }
-        results.append((mtime, result))
+        results.append((run_id.startswith("live-"), mtime, result))
 
-    results.sort(key=lambda x: x[0], reverse=True)
-    return [r for _, r in results]
+    # Curated runs (the demo arc — seed*/ep*/cf-*) always lead, newest-first within
+    # each group, so the ambient ``live-*`` firehose can never bury the society /
+    # episode runs below the COMPARE picker fold. ``False < True`` sorts curated
+    # before live; ``-mtime`` keeps newest-first inside each group.
+    results.sort(key=lambda x: (x[0], -x[1]))
+    return [r for _, _, r in results]
 
 
 def _prune_ambient_runs(runs_root: Path, keep: int) -> int:
@@ -711,6 +731,115 @@ async def _run_live(
         state.connections.clear()
 
 
+def _resolve_replay_dir(run_id: str, runs_root: Path) -> Path | None:
+    """Locate a curated recording to replay on the ambient Live demo.
+
+    Prefers the seeded copy under ``runs_root`` (incl. the ``episodes/`` subdir, via
+    _resolve_run_dir), then the bundled ``demo_runs/`` source — so the demo is rich
+    even when ``--no-seed-demo`` skipped seeding. Returns a directory that contains a
+    ``ticks.ndjson``, or None when nothing replayable is found.
+    """
+    found = _resolve_run_dir(run_id, runs_root)
+    if found is not None and (found / "ticks.ndjson").exists():
+        return found
+    for base in (
+        Path(DEMO_RUNS_DIRNAME) / run_id,
+        Path(DEMO_RUNS_DIRNAME) / _EPISODES_SUBDIR / run_id,
+    ):
+        if (base / "ticks.ndjson").exists():
+            return base
+    return None
+
+
+def _replay_seed(run_dir: Path) -> int:
+    """The recorded run's seed (for the live header), or 0 if unreadable."""
+    try:
+        manifest = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 — metadata only; a missing seed must not crash the loop
+        return 0
+    seed = manifest.get("seed")
+    return seed if isinstance(seed, int) else 0
+
+
+def _replay_summary(run_dir: Path, ticks_run: int) -> dict[str, Any]:
+    """Build the ``done`` scoreboard from the recording's run.json, mirroring the
+    summary shape _run_live emits so the Live tab renders the final scores identically."""
+    try:
+        manifest = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        manifest = {}
+    return {
+        "run_id": manifest.get("run_id", run_dir.name),
+        "seed": manifest.get("seed"),
+        "ticks_run": ticks_run,
+        "final_scores": manifest.get("final_scores", {}),
+        "cost": manifest.get("cost", {}),
+        "run_dir": str(run_dir),
+        "arm": manifest.get("arm", "society"),
+    }
+
+
+async def _run_ambient_replay(state: _LiveState, run_dir: Path) -> None:
+    """Stream a recorded society run over the live WS as the ambient demo.
+
+    Mirrors _run_live's WS contract — one ``{"type": "tick", "record", "world"}`` per
+    tick paced by _LIVE_TICK_DELAY_S, then ``{"type": "done", "summary"}`` (+ an
+    ``aar`` message if the recording has one) — and its connection-cleanup ``finally``,
+    so the ambient loop's pre-empt/resume logic is unchanged. Unlike _run_live it runs
+    NO engine and writes NO run dir: the recording already exists, so this adds zero
+    cost, needs no DashScope key, and never grows the ``live-*`` firehose.
+
+    A read error or cancellation propagates to the loop (which counts a failed run or
+    resumes after a manual pre-empt); the ``finally`` always releases WS clients.
+    """
+    try:
+        tick_lines = (run_dir / "ticks.ndjson").read_text(encoding="utf-8").splitlines()
+        worlds_by_tick: dict[Any, Any] = {}
+        world_path = run_dir / "world.ndjson"
+        if world_path.exists():
+            for wl in world_path.read_text(encoding="utf-8").splitlines():
+                try:
+                    wd = json.loads(wl)
+                except json.JSONDecodeError:
+                    continue
+                worlds_by_tick[wd.get("tick")] = wd.get("state")
+
+        ticks_run = 0
+        for tl in tick_lines:
+            try:
+                record = json.loads(tl)
+            except json.JSONDecodeError:
+                continue
+            tick_no = record.get("tick")
+            msg = {"type": "tick", "record": record, "world": worlds_by_tick.get(tick_no)}
+            if isinstance(tick_no, int):
+                state.tick = tick_no
+            state.buffer.append(msg)
+            await _broadcast(state, msg)
+            ticks_run += 1
+            await asyncio.sleep(_LIVE_TICK_DELAY_S)
+
+        summary = _replay_summary(run_dir, ticks_run)
+        state.summary = summary
+        await _broadcast(state, {"type": "done", "summary": summary})
+
+        aar_path = run_dir / "aar.json"
+        if aar_path.exists():
+            try:
+                report = json.loads(aar_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                report = None
+            if report is not None:
+                state.aar_msg = {"type": "aar", "report": report}
+                await _broadcast(state, state.aar_msg)
+    finally:
+        state.running = False
+        for ws in list(state.connections):
+            with contextlib.suppress(Exception):
+                await ws.close()
+        state.connections.clear()
+
+
 def _cf_run_id(live_id: str, req: CounterfactualRequest) -> str:
     """Deterministic branch run id, shared by the endpoint (returned to the client)
     and the background runner so Compare can select the branch once it appears.
@@ -815,17 +944,34 @@ async def _ambient_demo_loop(runs_root: Path) -> None:
         state_ref: _LiveState | None = None
         async with _live_lock:
             if _live is None or not _live.running:
-                seed = _AMBIENT_SEEDS[seed_idx % len(_AMBIENT_SEEDS)]
+                replay_id = _AMBIENT_REPLAY_RUNS[seed_idx % len(_AMBIENT_REPLAY_RUNS)]
                 seed_idx += 1
-                _live = _LiveState(
-                    live_id=str(uuid.uuid4()),
-                    arm="scripted",
-                    seed=seed,
-                    mode="ambient",
-                )
-                _live._task = asyncio.create_task(
-                    _run_live(_live, "scripted", seed, _AMBIENT_TICKS, runs_root)
-                )
+                replay_dir = _resolve_replay_dir(replay_id, runs_root)
+                if replay_dir is not None:
+                    # Rich society auction streamed from a recording: free, key-less,
+                    # and it writes no live-* dir (the firehose that buried the demo).
+                    _live = _LiveState(
+                        live_id=str(uuid.uuid4()),
+                        arm="society",
+                        seed=_replay_seed(replay_dir),
+                        mode="ambient",
+                    )
+                    _live._task = asyncio.create_task(
+                        _run_ambient_replay(_live, replay_dir)
+                    )
+                else:
+                    # No recording available (e.g. --no-seed-demo on a bare box) — keep
+                    # the demo alive with the scripted engine, the prior behavior.
+                    seed = _AMBIENT_SEEDS[(seed_idx - 1) % len(_AMBIENT_SEEDS)]
+                    _live = _LiveState(
+                        live_id=str(uuid.uuid4()),
+                        arm="scripted",
+                        seed=seed,
+                        mode="ambient",
+                    )
+                    _live._task = asyncio.create_task(
+                        _run_live(_live, "scripted", seed, _AMBIENT_TICKS, runs_root)
+                    )
                 current = _live._task
                 state_ref = _live
         if current is not None:

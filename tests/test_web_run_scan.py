@@ -83,8 +83,17 @@ def test_scan_runs_caps_live_but_keeps_every_curated(tmp_path: Path) -> None:
     newest_expected = {f"live-{i:05d}" for i in range(n_live - _MAX_LIVE_RUNS_LISTED, n_live)}
     assert set(live_ids) == newest_expected
 
-    # Result is sorted newest-first by mtime; the newest live run leads.
-    assert rows[0]["run_id"] == f"live-{n_live - 1:05d}"
+    # Curated runs (the demo arc) ALWAYS lead — newest-first within the curated group
+    # — so the ambient live-* firehose can never bury the society/episode runs below
+    # the COMPARE picker fold. (mtimes: ep1=1002 > cf-abc=1001 > seed91=1000.)
+    assert [r["run_id"] for r in rows[:3]] == [
+        "ep1-seed100-society",
+        "cf-abc-none",
+        "seed91-society",
+    ]
+    # The capped live firehose follows the curated block, newest-first within its group.
+    assert rows[3]["run_id"].startswith("live-")
+    assert rows[3]["run_id"] == f"live-{n_live - 1:05d}"
 
 
 def test_scan_runs_reports_tick_count_and_world_flag(tmp_path: Path) -> None:

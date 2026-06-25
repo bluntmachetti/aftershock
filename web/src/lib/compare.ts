@@ -207,3 +207,46 @@ export function sideHeaderLabel(run: RunSummary | undefined, finalTick: number):
   if (!run) return '—'
   return `${run.arm.toUpperCase()} · seed ${run.seed} · T${finalTick}`
 }
+
+// ---- Zero-click default pair ----
+
+/** A run can seed a COMPARE default only if the two-map replay is meaningful (world
+ *  snapshots + enough ticks) AND it carries a final lives score to gate on. */
+function comparableDefault(run: RunSummary): boolean {
+  return (
+    run.has_world !== false &&
+    (run.ticks ?? 0) >= 10 &&
+    typeof run.final_scores?.lives_saved === 'number'
+  )
+}
+
+/**
+ * The default COMPARE pair to auto-select when the tab opens with no deep link.
+ *
+ * GUARDED: it only ever defaults to a society-vs-baseline pair on the SAME seed where
+ * the society does NOT lose on lives, and among those picks the largest society margin.
+ * A single-seed COMPARE view must never contradict the thesis: the society's edge is
+ * lives-per-dollar and beating the *uncoordinated swarm* (price of anarchy), so the
+ * bundled default is the seed-11 society-vs-swarm blowout. The real-data NYC-Ida seed,
+ * where the society honestly trails (FIELD-NOTES §25), is left for a judge to select —
+ * never forced as the default. Returns null (→ the picker) when no winning pair exists.
+ */
+export function pickDefaultComparePair(
+  runs: RunSummary[],
+): { left: string; right: string } | null {
+  const lives = (r: RunSummary): number => r.final_scores?.lives_saved as number
+  let best: { left: string; right: string; margin: number } | null = null
+  for (const soc of runs) {
+    if (soc.arm !== 'society' || !comparableDefault(soc)) continue
+    for (const base of runs) {
+      if (base.arm === 'society' || !comparableDefault(base)) continue
+      if (base.seed !== soc.seed || base.run_id === soc.run_id) continue
+      if (lives(soc) < lives(base)) continue // never showcase a society loss
+      const margin = lives(soc) - lives(base)
+      if (!best || margin > best.margin) {
+        best = { left: soc.run_id, right: base.run_id, margin }
+      }
+    }
+  }
+  return best ? { left: best.left, right: best.right } : null
+}

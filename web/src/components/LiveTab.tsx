@@ -354,7 +354,12 @@ export function LiveTab({ onTickReceived }: Props) {
           <span className="text-[10px] font-mono text-eoc-secondary">
             {isRunning
               ? status?.mode === 'ambient'
-                ? `LIVE DEMO — ${status?.arm} / T${status?.tick}`
+                ? // The ambient demo REPLAYS a recorded society run (society arm); only
+                  // the bare-box fallback runs a live scripted engine. Label honestly so
+                  // a judge never reads a recording as live Qwen inference.
+                  status?.arm === 'scripted'
+                  ? `LIVE DEMO — scripted / T${status?.tick}`
+                  : `REPLAY — ${status?.arm} / T${status?.tick}`
                 : `RUNNING — ${status?.arm} / seed ${status?.seed} / T${status?.tick}`
               : 'IDLE'}
           </span>
@@ -370,7 +375,14 @@ export function LiveTab({ onTickReceived }: Props) {
 
         {!operator && (
           <div className="text-[10px] font-mono text-eoc-secondary leading-relaxed p-2 bg-eoc-surface border border-eoc-border rounded-lg">
-            Live demo — auto-running scripted negotiations. Read-only view; append{' '}
+            {/* Mirror the status banner: the ambient demo normally REPLAYS a recorded
+                society run, but the bare-box fallback (no recording seeded) runs a live
+                scripted engine — describe whichever is actually running so the caption
+                never contradicts the banner. */}
+            {status?.mode === 'ambient' && status?.arm === 'scripted'
+              ? 'Live demo — auto-running scripted negotiations (no recording seeded).'
+              : 'Live demo — replaying a recorded Qwen society run so its auction (real rulings) is visible with no live key.'}{' '}
+            Read-only view; append{' '}
             <span className="text-eoc-primary">?token=…</span> to the URL for operator
             controls.
           </div>
