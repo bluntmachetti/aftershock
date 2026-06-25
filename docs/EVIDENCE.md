@@ -2,7 +2,7 @@
 
 > A single frozen, citable proof bundle. Every number below traces to a file in
 > this repo — no figure is asserted without a source path. Last verified
-> 2026-06-22.
+> 2026-06-25.
 
 ## 1. The claim (60-second read)
 
@@ -87,6 +87,40 @@ small models coordinate to out-deliver a single big model for less money.
 (106.8 vs 108.4). Society **matches the expert heuristics on lives** (108.4 vs
 106.8) — a coordinated team of small models holds its own against hand-tuned
 domain expertise, at ~$0.035/run.
+
+**Price of anarchy (the same result, as efficiency):** The town is a common-pool
+resource game (finite shared pools, negative externalities), so uncoordinated arms
+should leave welfare on the table. Measure the **fraction of imperiled lives saved** —
+`efficiency = lives_saved / total_at_risk`, where `total_at_risk = lives_saved +
+lives_lost + open_remaining` is the sim's exact life-accounting identity (no modelling).
+
+| Arm | Efficiency (lives saved / imperiled) | Coordinated? |
+|---|---|---|
+| **society** (auction + doctrine) | **67.3%** | yes |
+| scripted (central heuristic) | 66.2% | yes |
+| solo (one big model) | 58.9% | no |
+| swarm (flat, no protocol) | 58.1% | no |
+
+Both **coordinated** arms (~66–67%) sit above both **uncoordinated** arms (~58%), and
+the expensive solo big model lands at the swarm's anarchy level — coordination beats
+raw model size for this allocation game. Paired society-vs-swarm over n=15 (refresh +
+swarm-firm): **+6.7 efficiency points, wins 11/15, bootstrap CI [+2.6, +10.8] excludes
+0, sign-test p=0.118 → suggestive** (price of anarchy **1.11×**) — the same statistical
+strength as the lives delta above, just bounded and interpretable.
+
+> **Honesty bound:** the denominator is the rigorous **save-everyone ceiling**
+> (efficiency = 1.0), *not* a tight achievable optimum — the true multi-tick scheduling
+> optimum is intractable, so this is "fraction of saveable," never "fraction of optimal."
+> On the brutal real **NYC-Ida** pack the order *flips* (scripted 32.2% vs society 8.9%);
+> the coordination edge is a synthetic-benchmark finding. Method + verdict:
+> [FIELD-NOTES §25](FIELD-NOTES.md).
+
+Reproduce (deterministic, no DASHSCOPE spend):
+```bash
+uv run aftershock poa     # per-arm efficiency + paired society-vs-swarm verdict
+```
+Source: `town/poa.py` over `bench/results/2026-06-22-4arm-refresh` (4-arm, n=5) and
+`bench/results/2026-06-22-swarm-firm` (society/swarm, seeds 60–69).
 
 ### Reproduce
 
