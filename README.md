@@ -1,5 +1,12 @@
 # Aftershock
 
+[![Live observatory](https://img.shields.io/badge/observatory-live-06b6d4?style=flat-square&logo=react&logoColor=white)](https://aftershock.redoubtlabs.dev)
+[![CodeQL](https://img.shields.io/github/actions/workflow/status/bluntmachetti/aftershock/codeql.yml?branch=main&style=flat-square&logo=github&label=CodeQL)](https://github.com/bluntmachetti/aftershock/actions/workflows/codeql.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)](pyproject.toml)
+[![Tests](https://img.shields.io/badge/tests-986%20passing-2ea043?style=flat-square&logo=pytest&logoColor=white)](tests)
+[![Determinism](https://img.shields.io/badge/determinism-verified-2ea043?style=flat-square)](docs/DESIGN.md)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+
 **A deterministic agent-society benchmark: a disaster-struck town run by a society of Qwen
 agents that split tasks and negotiate scarce rescue resources — six cheap models that match
 expert heuristics and a single big model on lives saved, at far better lives-per-dollar.**
