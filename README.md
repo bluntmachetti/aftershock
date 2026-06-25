@@ -1,6 +1,7 @@
 # Aftershock
 
 [![Live observatory](https://img.shields.io/badge/observatory-live-06b6d4?style=flat-square&logo=react&logoColor=white)](https://aftershock.redoubtlabs.dev)
+[![CI](https://img.shields.io/github/actions/workflow/status/bluntmachetti/aftershock/ci.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/bluntmachetti/aftershock/actions/workflows/ci.yml)
 [![CodeQL](https://img.shields.io/github/actions/workflow/status/bluntmachetti/aftershock/codeql.yml?branch=main&style=flat-square&logo=github&label=CodeQL)](https://github.com/bluntmachetti/aftershock/actions/workflows/codeql.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)](pyproject.toml)
 [![Tests](https://img.shields.io/badge/tests-986%20passing-2ea043?style=flat-square&logo=pytest&logoColor=white)](tests)
