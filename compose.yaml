@@ -18,6 +18,43 @@ services:
     volumes:
       - aftershock-runs:/data/runs
     restart: unless-stopped
+    # Liveness probe: /api/status is cheap (no file IO) and hangs whenever the single
+    # event loop is blocked — the failure mode behind the 2026-06-25 "No runs found"
+    # outage (a 62.5s /api/runs scan starved every endpoint). Marks the container
+    # unhealthy; the `autoheal` sidecar then restarts it (Compose's restart policy acts
+    # only on EXIT, not on a hung-but-running app). Uses the app's own Python — the
+    # slim image has no curl/wget. start_period covers boot + demo-run seeding.
+    healthcheck:
+      test:
+        - CMD
+        - uv
+        - run
+        - --no-sync
+        - python
+        - -c
+        - import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8788/api/status', timeout=5).getcode()==200 else 1)
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 45s
+    labels:
+      autoheal: "true"
+
+  # Restarts any container labelled autoheal=true the moment its healthcheck goes
+  # unhealthy — Docker Compose's restart policy only reacts to a container EXITING, not
+  # to a process that is still running but wedged. Needs read/write on the Docker socket
+  # to issue the restart, so it is effectively root on the host: acceptable on this
+  # single-tenant demo box. Pin `latest` → a digest for stricter supply-chain hygiene.
+  autoheal:
+    image: willfarrell/autoheal:latest
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: "10"
+      AUTOHEAL_START_PERIOD: "60"
+      AUTOHEAL_DEFAULT_STOP_TIMEOUT: "20"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
   caddy:
     image: caddy:2-alpine
