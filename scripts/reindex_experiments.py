@@ -60,6 +60,11 @@ _DIR_TO_SECTION: dict[str, int] = {
     # Doctrine ablations link to §18 (doctrine buys conformance, not lives). Kept a
     # small explicit map — never guessed for other dirs (they stay null).
     "2026-06-22-doctrine-6seed": 18,
+    # §26 whole-roster model-tier sweep (flash/plus/max): bigger model is outcome-
+    # neutral; one cell per tier.
+    "2026-06-30-mtier-flash": 26,
+    "2026-06-30-mtier-plus": 26,
+    "2026-06-30-mtier-max": 26,
 }
 
 # Dirs that predate the provenance stamp / verdict hardening — their verdict (if any)

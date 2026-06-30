@@ -1,0 +1,42 @@
+{
+  "arms": {
+    "society": {
+      "lives_per_dollar": 445.07714726013836,
+      "mean_cost_usd": 0.24040776,
+      "mean_lives_lost": 52.9,
+      "mean_lives_saved": 107.0,
+      "mean_missions_failed": 0.2,
+      "mean_missions_resolved": 10.8,
+      "mean_team_alignment": 0.8785207229109229,
+      "mean_wall_s": 92.37426882809959,
+      "n": 10,
+      "sd_cost_usd": 0.014899200030068747,
+      "sd_lives_lost": 12.905209972892514,
+      "sd_lives_saved": 16.57307052620807,
+      "sd_missions_failed": 0.42163702135578396,
+      "sd_missions_resolved": 1.8135294011647258,
+      "sd_wall_s": 6.665503376226082
+    }
+  },
+  "paired": {
+    "society": {
+      "11": 136.0,
+      "23": 91.0,
+      "37": 106.0,
+      "42": 94.0,
+      "57": 110.0,
+      "73": 130.0,
+      "89": 102.0,
+      "101": 108.0,
+      "113": 111.0,
+      "127": 82.0
+    }
+  },
+  "provenance": {
+    "dirty": false,
+    "git_sha": "d6450751f274420fb206760c28a935dc34a07639",
+    "model_endpoint": "dashscope-intl",
+    "schema_version": 1,
+    "scripted_verify_digest": null
+  }
+}

@@ -640,3 +640,41 @@ finding, and the LLM society is not magic on a hard real scenario.
 **Verdict:** the coordinated-vs-uncoordinated efficiency gap is a clean *structural* pattern (and
 `solo ≈ swarm` is the sharp honest point); the pairwise society-vs-swarm edge stays **suggestive**
 (p=0.118), consistent with §23. New reusable surface: `aftershock poa` / `town/poa.py`.
+
+## 26. Bigger model, same outcome: a whole-roster tier sweep says harness beats model size (2026-06-30)
+
+§20 found a **model-capability floor** by swapping *one* role (infra) flash→plus. This generalises
+it to the **whole roster**: hold the society arm, the auction, the doctrine, and the seeded world
+byte-fixed, and swap **all six** roles across three price tiers — `flash` (0.10/0.40 \$/Mtok),
+`plus` (0.40/2.40), `max` (1.20/6.00) — via `aftershock bench --role-model "commander=…,…"`. 10
+paired synthetic seeds {11,23,37,42,57,73,89,101,113,127} × 60 ticks. Motivated by an external
+question (does a bigger C-suite model decide better, i.e. is GPU capex justified?) — the answer is
+meant to gate hardware spend *before* it happens.
+
+| tier | lives saved (sd) | team-align | cost / run | lives-per-\$ | wall |
+|---|---|---|---|---|---|
+| **flash** (all six) | 106.0 (±16.9) | 0.872 | \$0.0248 | **4272** | 55 s |
+| **plus** (all six) | 107.5 (±17.0) | 0.890 | \$0.0892 | 1205 | 88 s |
+| **max** (all six) | 107.0 (±16.6) | 0.879 | \$0.2404 | **445** | 92 s |
+
+**Lives are flat.** Every pairwise paired delta is noise: plus−flash **+1.5** (sign p=0.754, 4+/6−),
+max−flash **+1.0** (p=1.000, 5+/5−), max−plus **−0.5** (p=0.453) — all dwarfed by the per-seed sd
+≈17. The seed-paired rows are nearly identical across tiers (seed 11: 140/136/136; seed 127:
+83/82/82; seed 73: 126/131/130): the **world draw sets the outcome, not the model tier** — §14's
+"world = 79 % of variance" showing through directly. Conformance (team-alignment) is also flat
+(0.872 / 0.890 / 0.879), while **cost rises 9.7×** and **lives-per-\$ collapses 9.6×** flash→max.
+
+**Harness beats model size.** Put this next to the cheap levers: doctrine on/off buys a **credible**
+team-alignment **+0.125** (§18, p=0.031) at **\$0** extra; the §21 contract trim *cuts* cost −14 %
+for +21 % lives-per-\$. A 10× whole-roster model spend buys **neither lives nor conformance** above
+the §22 capability floor. So once the roster clears that floor, the lever that moves the outcome is
+the *harness* (doctrine, contract, prompt — §18/§19/§21), not the model tier.
+
+**Verdict (the GPU-capex gate): KILL.** The (bigger − smaller) decision-quality delta is inside
+control noise on every axis, so no GPU capex is justified for this allocation task — the cheapest
+roster that clears the §22 floor stands, and discretionary spend should go to harness/doctrine, not
+a larger model. **Caveats:** this is *above-floor* (the §22 1.7B-collapse is the real boundary;
+below it model size is everything); lives sd≈17 means small per-tier lives effects (<~3) stay
+underpowered at n=10 — but a *flat* result across a 10× tier span is itself the finding, and it is
+monotone-null (no tier ordering on lives). Reusable surface: `bench --role-model "<six roles>"`.
+Data: `bench/results/2026-06-30-mtier-{flash,plus,max}`.

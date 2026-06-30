@@ -1,0 +1,120 @@
+{
+  "arm": "society",
+  "notes": [],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 1.0,
+    "fire": 0.9285714285714286,
+    "infrastructure": 1.0,
+    "medical": 0.7272727272727273,
+    "rescue": 0.9
+  },
+  "rules": {
+    "C1": {
+      "commander": {
+        "applicable": 13,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "C2": {},
+    "C3": {},
+    "F1": {},
+    "F2": {},
+    "I1": {
+      "infrastructure": {
+        "applicable": 2,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "I2": {},
+    "M1": {},
+    "M2": {},
+    "R1": {},
+    "R2": {},
+    "T1": {},
+    "T2": {
+      "fire": {
+        "applicable": 11,
+        "rate": 1.0,
+        "violations": []
+      },
+      "infrastructure": {
+        "applicable": 12,
+        "rate": 1.0,
+        "violations": []
+      },
+      "medical": {
+        "applicable": 18,
+        "rate": 0.8888888888888888,
+        "violations": [
+          {
+            "detail": "requested 2 'ambulance' for 'm10' but max allowed is 0 (required=2, assigned=2)",
+            "tick": 15
+          },
+          {
+            "detail": "requested 2 'supply_truck' for 'm10' but max allowed is 0 (required=2, assigned=2)",
+            "tick": 15
+          }
+        ]
+      },
+      "rescue": {
+        "applicable": 9,
+        "rate": 0.8888888888888888,
+        "violations": [
+          {
+            "detail": "requested 3 'rescue_crew' for 'm4' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 3
+          }
+        ]
+      }
+    },
+    "T3": {
+      "fire": {
+        "applicable": 3,
+        "rate": 0.6666666666666667,
+        "violations": [
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=6 > 4 for 'm10'",
+            "tick": 13
+          }
+        ]
+      },
+      "medical": {
+        "applicable": 4,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "urgency=10 > 8 but severity=3 < 4 and deadline_in=6 > 4 for 'm4'",
+            "tick": 2
+          },
+          {
+            "detail": "urgency=10 > 8 but severity=3 < 4 and deadline_in=6 > 4 for 'm4'",
+            "tick": 2
+          },
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=5 > 4 for 'm4'",
+            "tick": 3
+          },
+          {
+            "detail": "urgency=9 > 8 but severity=3 < 4 and deadline_in=5 > 4 for 'm4'",
+            "tick": 3
+          }
+        ]
+      },
+      "rescue": {
+        "applicable": 1,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "T4": {},
+    "T5": {},
+    "T6": {},
+    "X1": {},
+    "X2": {}
+  },
+  "seed": 73,
+  "team_alignment": 0.8620689655172413
+}

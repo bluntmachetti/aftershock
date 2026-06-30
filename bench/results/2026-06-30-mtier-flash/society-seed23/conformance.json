@@ -1,0 +1,181 @@
+{
+  "arm": "society",
+  "notes": [],
+  "role_conformance": {
+    "commander": 0.9,
+    "comms": 1.0,
+    "fire": 0.8888888888888888,
+    "infrastructure": 0.8,
+    "medical": 0.8,
+    "rescue": 0.92
+  },
+  "rules": {
+    "C1": {
+      "commander": {
+        "applicable": 9,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "C2": {},
+    "C3": {
+      "commander": {
+        "applicable": 1,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "no response to escalation 'medical-t4-p1' from 'medical'",
+            "tick": 5
+          }
+        ]
+      }
+    },
+    "F1": {},
+    "F2": {},
+    "I1": {
+      "infrastructure": {
+        "applicable": 9,
+        "rate": 0.7777777777777778,
+        "violations": [
+          {
+            "detail": "repair_road rejected: 'no repair_crew available'",
+            "tick": 2
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'harbor' is not blocked\"",
+            "tick": 11
+          }
+        ]
+      }
+    },
+    "I2": {},
+    "M1": {
+      "medical": {
+        "applicable": 1,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "requested for 'm3' (priority=4) but ignored 'm4' (priority=8) which has unmet requirements",
+            "tick": 3
+          }
+        ]
+      }
+    },
+    "M2": {
+      "medical": {
+        "applicable": 1,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "no escalation for 'm3' within [t=4, t=5] (deadline_in=3, staffing=0.00)",
+            "tick": 5
+          }
+        ]
+      }
+    },
+    "R1": {},
+    "R2": {},
+    "T1": {},
+    "T2": {
+      "comms": {
+        "applicable": 10,
+        "rate": 1.0,
+        "violations": []
+      },
+      "fire": {
+        "applicable": 23,
+        "rate": 0.9130434782608696,
+        "violations": [
+          {
+            "detail": "requested 1 'fire_engine' for 'm7' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 12
+          },
+          {
+            "detail": "requested 1 'fire_engine' for 'm7' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 13
+          }
+        ]
+      },
+      "infrastructure": {
+        "applicable": 6,
+        "rate": 0.8333333333333334,
+        "violations": [
+          {
+            "detail": "requested 2 'repair_crew' for 'm5' but max allowed is 0 (required=2, assigned=2)",
+            "tick": 4
+          }
+        ]
+      },
+      "medical": {
+        "applicable": 26,
+        "rate": 0.8461538461538461,
+        "violations": [
+          {
+            "detail": "requested 1 'supply_truck' for 'm3' but max allowed is 0 (required=1, assigned=1)",
+            "tick": 6
+          },
+          {
+            "detail": "requested 1 'supply_truck' for 'm9' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 28
+          },
+          {
+            "detail": "requested 1 'supply_truck' for 'm9' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 29
+          },
+          {
+            "detail": "requested 1 'supply_truck' for 'm9' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 30
+          }
+        ]
+      },
+      "rescue": {
+        "applicable": 18,
+        "rate": 0.8888888888888888,
+        "violations": [
+          {
+            "detail": "requested 2 'rescue_crew' for 'm4' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 6
+          },
+          {
+            "detail": "requested 2 'rescue_crew' for 'm3' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 6
+          }
+        ]
+      }
+    },
+    "T3": {
+      "comms": {
+        "applicable": 1,
+        "rate": 1.0,
+        "violations": []
+      },
+      "fire": {
+        "applicable": 4,
+        "rate": 0.75,
+        "violations": [
+          {
+            "detail": "urgency=9 > 8 but severity=1 < 4 and deadline_in=9 > 4 for 'm7'",
+            "tick": 13
+          }
+        ]
+      },
+      "medical": {
+        "applicable": 2,
+        "rate": 1.0,
+        "violations": []
+      },
+      "rescue": {
+        "applicable": 7,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "T4": {},
+    "T5": {},
+    "T6": {},
+    "X1": {},
+    "X2": {}
+  },
+  "seed": 23,
+  "team_alignment": 0.8969072164948454
+}

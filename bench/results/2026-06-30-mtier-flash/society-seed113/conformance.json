@@ -1,0 +1,165 @@
+{
+  "arm": "society",
+  "notes": [],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 0.9545454545454546,
+    "fire": 0.8823529411764706,
+    "infrastructure": 0.9047619047619048,
+    "medical": 0.9333333333333333,
+    "rescue": 0.8857142857142857
+  },
+  "rules": {
+    "C1": {
+      "commander": {
+        "applicable": 10,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "C2": {},
+    "C3": {},
+    "F1": {},
+    "F2": {},
+    "I1": {
+      "infrastructure": {
+        "applicable": 7,
+        "rate": 0.4285714285714286,
+        "violations": [
+          {
+            "detail": "repair_road rejected: \"road in district 'industrial' is not blocked\"",
+            "tick": 5
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'hospital_district' is not blocked\"",
+            "tick": 6
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'market' is not blocked\"",
+            "tick": 9
+          },
+          {
+            "detail": "repair_road rejected: \"road in district 'hospital_district' is not blocked\"",
+            "tick": 25
+          }
+        ]
+      }
+    },
+    "I2": {},
+    "M1": {},
+    "M2": {},
+    "R1": {},
+    "R2": {},
+    "T1": {},
+    "T2": {
+      "comms": {
+        "applicable": 21,
+        "rate": 1.0,
+        "violations": []
+      },
+      "fire": {
+        "applicable": 27,
+        "rate": 0.8518518518518519,
+        "violations": [
+          {
+            "detail": "requested 2 'supply_truck' for 'm4' but max allowed is 0 (required=1, assigned=3)",
+            "tick": 6
+          },
+          {
+            "detail": "requested 1 'fire_engine' for 'm4' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 7
+          },
+          {
+            "detail": "requested 1 'fire_engine' for 'm3' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 8
+          },
+          {
+            "detail": "requested 1 'fire_engine' for 'm9' but max allowed is 0 (required=1, assigned=1)",
+            "tick": 27
+          }
+        ]
+      },
+      "infrastructure": {
+        "applicable": 31,
+        "rate": 1.0,
+        "violations": []
+      },
+      "medical": {
+        "applicable": 23,
+        "rate": 0.9130434782608696,
+        "violations": [
+          {
+            "detail": "requested 2 'supply_truck' for 'm4' but max allowed is 0 (required=1, assigned=3)",
+            "tick": 6
+          },
+          {
+            "detail": "requested 2 'supply_truck' for 'm4' but max allowed is 0 (required=1, assigned=3)",
+            "tick": 8
+          }
+        ]
+      },
+      "rescue": {
+        "applicable": 24,
+        "rate": 0.8333333333333334,
+        "violations": [
+          {
+            "detail": "requested 1 'rescue_crew' for 'm3' but max allowed is 0 (required=1, assigned=1)",
+            "tick": 7
+          },
+          {
+            "detail": "requested 2 'rescue_crew' for 'm6' but max allowed is 0 (required=2, assigned=2)",
+            "tick": 7
+          },
+          {
+            "detail": "requested 1 'rescue_crew' for 'm7' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 10
+          },
+          {
+            "detail": "requested 1 'rescue_crew' for 'm8' but max allowed is 0 (required=0, assigned=0)",
+            "tick": 10
+          }
+        ]
+      }
+    },
+    "T3": {
+      "fire": {
+        "applicable": 7,
+        "rate": 1.0,
+        "violations": []
+      },
+      "infrastructure": {
+        "applicable": 4,
+        "rate": 1.0,
+        "violations": []
+      },
+      "medical": {
+        "applicable": 7,
+        "rate": 1.0,
+        "violations": []
+      },
+      "rescue": {
+        "applicable": 11,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "T4": {},
+    "T5": {},
+    "T6": {},
+    "X1": {},
+    "X2": {
+      "comms": {
+        "applicable": 1,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "broadcast at t=5 is only 2 tick(s) after previous broadcast at t=3 (minimum gap: 3)",
+            "tick": 5
+          }
+        ]
+      }
+    }
+  },
+  "seed": 113,
+  "team_alignment": 0.935483870967742
+}
