@@ -678,3 +678,43 @@ below it model size is everything); lives sd≈17 means small per-tier lives eff
 underpowered at n=10 — but a *flat* result across a 10× tier span is itself the finding, and it is
 monotone-null (no tier ordering on lives). Reusable surface: `bench --role-model "<six roles>"`.
 Data: `bench/results/2026-06-30-mtier-{flash,plus,max}`.
+
+## 27. The coordination advantage is friction-gated: a price-of-anarchy curve across pool scarcity (2026-06-30)
+
+§25 measured the price of anarchy at *one* scarcity level. This sweeps it. Hold the seeded world
+and the arms fixed and vary only the resource abundance — a clean uniform pool ladder
+`ambulance=…=supply_truck = {12, 6, 4, 2, 1}` via `bench --pools` — running the coordinated arms
+(`scripted` central heuristic, `society` LLM+auction) against the uncoordinated `swarm`
+(`DefaultResolver`, direct dispatch). 8 paired seeds × 60 ticks per level. Efficiency =
+`lives_saved / (saved+lost+open)` ∈ [0,1] via `town/poa.py`. This answers an external open question
+(arena `econ-theory-partial-equilibrium-agents-matter`: *which frictions are load-bearing for agent
+strategy to matter?*) on the abstract structural claim.
+
+| pool / kind | contested losses† | scripted eff | society eff | swarm eff | society − swarm | PoA | sign(soc>swarm) |
+|---|---|---|---|---|---|---|---|
+| **12 (abundance)** | 12 | 73.9 % | 73.7 % | **79.3 %** | **−5.6 pt** | 0.93 | **0/8, p=0.008** |
+| 6 | — | 72.4 % | 72.1 % | 72.3 % | −0.1 pt | 1.00 | 3/8, p=0.727 |
+| 4 (≈default) | 222 | 69.2 % | 68.0 % | 61.9 % | +6.1 pt | 1.10 | 6/8, p=0.289 |
+| **2** | 612 | 50.7 % | 47.1 % | 39.7 % | **+7.3 pt** | **1.18** | 6/8, p=0.289 |
+| 1 (extreme) | 1424 | 23.6 % | 20.1 % | 19.9 % | +0.2 pt | 1.01 | 4/8, p=1.000 |
+
+†`pure_shortage` contested-loss count from `aftershock diagnose` (3-seed society sample) — friction
+bites monotonically as pools tighten (12 → 222 → 612 → 1424), and **priority inversions stay 0 until
+pool=1** (then 26), corroborating §15 (the auction is arbitration-sound except at the brutal floor).
+
+**The coordination advantage is an inverted-U, gated by friction.** At **abundance** there is no
+contention, so the auction is *pure overhead*: the uncoordinated swarm wins (79.3 % vs 73.7 %, PoA
+**0.93**, society loses **8/8 seeds, p=0.008** — the statistically *strongest* cell). At **moderate
+scarcity** (pool 2–4) coordination pulls ahead (+6–7 pt, PoA up to **1.18**), though the win is
+**suggestive not significant** at n=8 (p=0.289 — the same strength as §23/§25). At the **extreme
+floor** (pool=1) everyone collapses to ~20 % and the gap vanishes (p=1.0) — nothing left to arbitrate.
+
+**Two durable reads.** (1) **Friction is necessary for coordination to matter — and its absence makes
+coordination net-harmful**, so any "agents/structure beat the baseline" claim must declare its
+scarcity regime or it is unfalsifiable (directly the arena methodological point). (2) **`scripted` ≈
+`society` at every single level** (73.9/73.7, 72.4/72.1, 69.2/68.0, 50.7/47.1, 23.6/20.1) → the lever
+is the *coordination mechanism*, not LLM-vs-heuristic — the same conclusion as §26 (model tier inert)
+and §25 (`solo ≈ swarm`). **Honesty bound:** the abundance reversal is significant (p=0.008); the
+mid-scarcity coordination wins are suggestive (p=0.289, n=8) — add seeds before quoting the +7 pt as
+real. Reusable surface: `bench --pools` + `aftershock poa` / `diagnose`. Data:
+`bench/results/2026-06-30-fric-{p12,p6,p4,p2,p1}` (lean — summaries only).

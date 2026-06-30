@@ -65,6 +65,13 @@ _DIR_TO_SECTION: dict[str, int] = {
     "2026-06-30-mtier-flash": 26,
     "2026-06-30-mtier-plus": 26,
     "2026-06-30-mtier-max": 26,
+    # §27 friction-necessity curve: per-arm efficiency vs pool size (abundance→extreme);
+    # one cell per pool level (records lean — summaries only, like §3).
+    "2026-06-30-fric-p12": 27,
+    "2026-06-30-fric-p6": 27,
+    "2026-06-30-fric-p4": 27,
+    "2026-06-30-fric-p2": 27,
+    "2026-06-30-fric-p1": 27,
 }
 
 # Dirs that predate the provenance stamp / verdict hardening — their verdict (if any)

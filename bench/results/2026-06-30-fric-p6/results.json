@@ -1,0 +1,93 @@
+{
+  "arms": {
+    "scripted": {
+      "mean_cost_usd": 0.0,
+      "mean_lives_lost": 44.75,
+      "mean_lives_saved": 116.625,
+      "mean_missions_failed": 0.0,
+      "mean_missions_resolved": 11.375,
+      "mean_team_alignment": 1.0,
+      "mean_wall_s": 0.03266440477455035,
+      "n": 8,
+      "sd_cost_usd": 0.0,
+      "sd_lives_lost": 10.05342869728674,
+      "sd_lives_saved": 16.59550283316882,
+      "sd_missions_failed": 0.0,
+      "sd_missions_resolved": 1.7677669529663689,
+      "sd_wall_s": 0.002870569640088435
+    },
+    "society": {
+      "lives_per_dollar": 3390.0261631114026,
+      "mean_cost_usd": 0.034218024999999985,
+      "mean_lives_lost": 45.375,
+      "mean_lives_saved": 116.0,
+      "mean_missions_failed": 0.0,
+      "mean_missions_resolved": 11.375,
+      "mean_team_alignment": 0.8827350258098009,
+      "mean_wall_s": 67.7659229869023,
+      "n": 8,
+      "sd_cost_usd": 0.0024702328749388372,
+      "sd_lives_lost": 11.249603167604244,
+      "sd_lives_saved": 15.5195728954486,
+      "sd_missions_failed": 0.0,
+      "sd_missions_resolved": 1.7677669529663689,
+      "sd_wall_s": 8.366721872478116
+    },
+    "swarm": {
+      "lives_per_dollar": 9942.820872121407,
+      "mean_cost_usd": 0.011855287499999999,
+      "mean_lives_lost": 45.375,
+      "mean_lives_saved": 117.875,
+      "mean_missions_failed": 0.25,
+      "mean_missions_resolved": 11.125,
+      "mean_team_alignment": 0.125,
+      "mean_wall_s": 40.11719534435542,
+      "n": 8,
+      "sd_cost_usd": 0.0008040135934129864,
+      "sd_lives_lost": 11.173150214433068,
+      "sd_lives_saved": 17.504591234465153,
+      "sd_missions_failed": 0.4629100498862757,
+      "sd_missions_resolved": 1.9594095320493148,
+      "sd_wall_s": 2.8742794740260464
+    }
+  },
+  "paired": {
+    "scripted": {
+      "11": 141.0,
+      "23": 98.0,
+      "37": 123.0,
+      "42": 101.0,
+      "57": 120.0,
+      "73": 138.0,
+      "89": 108.0,
+      "101": 104.0
+    },
+    "society": {
+      "11": 141.0,
+      "23": 100.0,
+      "37": 117.0,
+      "42": 101.0,
+      "57": 119.0,
+      "73": 136.0,
+      "89": 109.0,
+      "101": 105.0
+    },
+    "swarm": {
+      "11": 129.0,
+      "23": 89.0,
+      "37": 129.0,
+      "42": 106.0,
+      "57": 126.0,
+      "73": 144.0,
+      "89": 105.0,
+      "101": 115.0
+    }
+  },
+  "provenance": {
+    "dirty": false,
+    "git_sha": "388c7fe78840eb3bc46271d9b57dbe5c12eb527f",
+    "model_endpoint": "dashscope-intl",
+    "schema_version": 1,
+    "scripted_verify_digest": "5aa7e8c7d670095d26fc920e73e194179c219b50b82fbf6055eb008b773c917d"
+  }
+}
