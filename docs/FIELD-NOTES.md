@@ -640,3 +640,81 @@ finding, and the LLM society is not magic on a hard real scenario.
 **Verdict:** the coordinated-vs-uncoordinated efficiency gap is a clean *structural* pattern (and
 `solo ≈ swarm` is the sharp honest point); the pairwise society-vs-swarm edge stays **suggestive**
 (p=0.118), consistent with §23. New reusable surface: `aftershock poa` / `town/poa.py`.
+
+## 26. Bigger model, same outcome: a whole-roster tier sweep says harness beats model size (2026-06-30)
+
+§20 found a **model-capability floor** by swapping *one* role (infra) flash→plus. This generalises
+it to the **whole roster**: hold the society arm, the auction, the doctrine, and the seeded world
+byte-fixed, and swap **all six** roles across three price tiers — `flash` (0.10/0.40 \$/Mtok),
+`plus` (0.40/2.40), `max` (1.20/6.00) — via `aftershock bench --role-model "commander=…,…"`. 10
+paired synthetic seeds {11,23,37,42,57,73,89,101,113,127} × 60 ticks. Motivated by an external
+question (does a bigger C-suite model decide better, i.e. is GPU capex justified?) — the answer is
+meant to gate hardware spend *before* it happens.
+
+| tier | lives saved (sd) | team-align | cost / run | lives-per-\$ | wall |
+|---|---|---|---|---|---|
+| **flash** (all six) | 106.0 (±16.9) | 0.872 | \$0.0248 | **4272** | 55 s |
+| **plus** (all six) | 107.5 (±17.0) | 0.890 | \$0.0892 | 1205 | 88 s |
+| **max** (all six) | 107.0 (±16.6) | 0.879 | \$0.2404 | **445** | 92 s |
+
+**Lives are flat.** Every pairwise paired delta is noise: plus−flash **+1.5** (sign p=0.754, 4+/6−),
+max−flash **+1.0** (p=1.000, 5+/5−), max−plus **−0.5** (p=0.453) — all dwarfed by the per-seed sd
+≈17. The seed-paired rows are nearly identical across tiers (seed 11: 140/136/136; seed 127:
+83/82/82; seed 73: 126/131/130): the **world draw sets the outcome, not the model tier** — §14's
+"world = 79 % of variance" showing through directly. Conformance (team-alignment) is also flat
+(0.872 / 0.890 / 0.879), while **cost rises 9.7×** and **lives-per-\$ collapses 9.6×** flash→max.
+
+**Harness beats model size.** Put this next to the cheap levers: doctrine on/off buys a **credible**
+team-alignment **+0.125** (§18, p=0.031) at **\$0** extra; the §21 contract trim *cuts* cost −14 %
+for +21 % lives-per-\$. A 10× whole-roster model spend buys **neither lives nor conformance** above
+the §22 capability floor. So once the roster clears that floor, the lever that moves the outcome is
+the *harness* (doctrine, contract, prompt — §18/§19/§21), not the model tier.
+
+**Verdict (the GPU-capex gate): KILL.** The (bigger − smaller) decision-quality delta is inside
+control noise on every axis, so no GPU capex is justified for this allocation task — the cheapest
+roster that clears the §22 floor stands, and discretionary spend should go to harness/doctrine, not
+a larger model. **Caveats:** this is *above-floor* (the §22 1.7B-collapse is the real boundary;
+below it model size is everything); lives sd≈17 means small per-tier lives effects (<~3) stay
+underpowered at n=10 — but a *flat* result across a 10× tier span is itself the finding, and it is
+monotone-null (no tier ordering on lives). Reusable surface: `bench --role-model "<six roles>"`.
+Data: `bench/results/2026-06-30-mtier-{flash,plus,max}`.
+
+## 27. The coordination advantage is friction-gated: a price-of-anarchy curve across pool scarcity (2026-06-30)
+
+§25 measured the price of anarchy at *one* scarcity level. This sweeps it. Hold the seeded world
+and the arms fixed and vary only the resource abundance — a clean uniform pool ladder
+`ambulance=…=supply_truck = {12, 6, 4, 2, 1}` via `bench --pools` — running the coordinated arms
+(`scripted` central heuristic, `society` LLM+auction) against the uncoordinated `swarm`
+(`DefaultResolver`, direct dispatch). 8 paired seeds × 60 ticks per level. Efficiency =
+`lives_saved / (saved+lost+open)` ∈ [0,1] via `town/poa.py`. This answers an external open question
+(arena `econ-theory-partial-equilibrium-agents-matter`: *which frictions are load-bearing for agent
+strategy to matter?*) on the abstract structural claim.
+
+| pool / kind | contested losses† | scripted eff | society eff | swarm eff | society − swarm | PoA | sign(soc>swarm) |
+|---|---|---|---|---|---|---|---|
+| **12 (abundance)** | 12 | 73.9 % | 73.7 % | **79.3 %** | **−5.6 pt** | 0.93 | **0/8, p=0.008** |
+| 6 | — | 72.4 % | 72.1 % | 72.3 % | −0.1 pt | 1.00 | 3/8, p=0.727 |
+| 4 (≈default) | 222 | 69.2 % | 68.0 % | 61.9 % | +6.1 pt | 1.10 | 6/8, p=0.289 |
+| **2** | 612 | 50.7 % | 47.1 % | 39.7 % | **+7.3 pt** | **1.18** | 6/8, p=0.289 |
+| 1 (extreme) | 1424 | 23.6 % | 20.1 % | 19.9 % | +0.2 pt | 1.01 | 4/8, p=1.000 |
+
+†`pure_shortage` contested-loss count from `aftershock diagnose` (3-seed society sample) — friction
+bites monotonically as pools tighten (12 → 222 → 612 → 1424), and **priority inversions stay 0 until
+pool=1** (then 26), corroborating §15 (the auction is arbitration-sound except at the brutal floor).
+
+**The coordination advantage is an inverted-U, gated by friction.** At **abundance** there is no
+contention, so the auction is *pure overhead*: the uncoordinated swarm wins (79.3 % vs 73.7 %, PoA
+**0.93**, society loses **8/8 seeds, p=0.008** — the statistically *strongest* cell). At **moderate
+scarcity** (pool 2–4) coordination pulls ahead (+6–7 pt, PoA up to **1.18**), though the win is
+**suggestive not significant** at n=8 (p=0.289 — the same strength as §23/§25). At the **extreme
+floor** (pool=1) everyone collapses to ~20 % and the gap vanishes (p=1.0) — nothing left to arbitrate.
+
+**Two durable reads.** (1) **Friction is necessary for coordination to matter — and its absence makes
+coordination net-harmful**, so any "agents/structure beat the baseline" claim must declare its
+scarcity regime or it is unfalsifiable (directly the arena methodological point). (2) **`scripted` ≈
+`society` at every single level** (73.9/73.7, 72.4/72.1, 69.2/68.0, 50.7/47.1, 23.6/20.1) → the lever
+is the *coordination mechanism*, not LLM-vs-heuristic — the same conclusion as §26 (model tier inert)
+and §25 (`solo ≈ swarm`). **Honesty bound:** the abundance reversal is significant (p=0.008); the
+mid-scarcity coordination wins are suggestive (p=0.289, n=8) — add seeds before quoting the +7 pt as
+real. Reusable surface: `bench --pools` + `aftershock poa` / `diagnose`. Data:
+`bench/results/2026-06-30-fric-{p12,p6,p4,p2,p1}` (lean — summaries only).

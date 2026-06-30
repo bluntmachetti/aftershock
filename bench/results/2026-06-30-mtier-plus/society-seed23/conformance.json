@@ -1,0 +1,104 @@
+{
+  "arm": "society",
+  "notes": [],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 1.0,
+    "fire": 0.8888888888888888,
+    "infrastructure": 0.9545454545454546,
+    "medical": 1.0,
+    "rescue": 0.75
+  },
+  "rules": {
+    "C1": {
+      "commander": {
+        "applicable": 9,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "C2": {},
+    "C3": {},
+    "F1": {},
+    "F2": {},
+    "I1": {
+      "infrastructure": {
+        "applicable": 7,
+        "rate": 0.8571428571428572,
+        "violations": [
+          {
+            "detail": "repair_road rejected: \"road in district 'harbor' is not blocked\"",
+            "tick": 11
+          }
+        ]
+      }
+    },
+    "I2": {},
+    "M1": {},
+    "M2": {},
+    "R1": {},
+    "R2": {},
+    "T1": {},
+    "T2": {
+      "fire": {
+        "applicable": 6,
+        "rate": 1.0,
+        "violations": []
+      },
+      "infrastructure": {
+        "applicable": 15,
+        "rate": 1.0,
+        "violations": []
+      },
+      "medical": {
+        "applicable": 10,
+        "rate": 1.0,
+        "violations": []
+      },
+      "rescue": {
+        "applicable": 6,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "T3": {
+      "fire": {
+        "applicable": 2,
+        "rate": 1.0,
+        "violations": []
+      },
+      "rescue": {
+        "applicable": 2,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "urgency=10 > 8 but severity=1 < 4 and deadline_in=11 > 4 for 'm7'",
+            "tick": 11
+          },
+          {
+            "detail": "urgency=10 > 8 but severity=1 < 4 and deadline_in=11 > 4 for 'm7'",
+            "tick": 11
+          }
+        ]
+      }
+    },
+    "T4": {},
+    "T5": {},
+    "T6": {
+      "fire": {
+        "applicable": 1,
+        "rate": 0.0,
+        "violations": [
+          {
+            "detail": "re-requested 'fire_engine' for 'm1' when requirement already met in worlds[t-1] (grant at t=1)",
+            "tick": 2
+          }
+        ]
+      }
+    },
+    "X1": {},
+    "X2": {}
+  },
+  "seed": 23,
+  "team_alignment": 0.9285714285714286
+}

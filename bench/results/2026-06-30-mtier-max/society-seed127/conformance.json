@@ -1,0 +1,98 @@
+{
+  "arm": "society",
+  "notes": [],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 1.0,
+    "fire": 0.8333333333333334,
+    "infrastructure": 0.9393939393939394,
+    "medical": 1.0,
+    "rescue": 1.0
+  },
+  "rules": {
+    "C1": {
+      "commander": {
+        "applicable": 9,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "C2": {},
+    "C3": {},
+    "F1": {},
+    "F2": {},
+    "I1": {
+      "infrastructure": {
+        "applicable": 5,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "I2": {},
+    "M1": {},
+    "M2": {},
+    "R1": {},
+    "R2": {},
+    "T1": {},
+    "T2": {
+      "comms": {
+        "applicable": 8,
+        "rate": 1.0,
+        "violations": []
+      },
+      "fire": {
+        "applicable": 6,
+        "rate": 0.8333333333333334,
+        "violations": [
+          {
+            "detail": "requested 1 'fire_engine' for 'm1' but max allowed is 0 (required=2, assigned=2)",
+            "tick": 3
+          }
+        ]
+      },
+      "infrastructure": {
+        "applicable": 23,
+        "rate": 0.9130434782608696,
+        "violations": [
+          {
+            "detail": "requested 1 'repair_crew' for 'm5' but max allowed is 0 (required=1, assigned=1)",
+            "tick": 12
+          },
+          {
+            "detail": "requested 1 'supply_truck' for 'm7' but max allowed is 0 (required=1, assigned=1)",
+            "tick": 27
+          }
+        ]
+      },
+      "medical": {
+        "applicable": 4,
+        "rate": 1.0,
+        "violations": []
+      },
+      "rescue": {
+        "applicable": 16,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "T3": {
+      "comms": {
+        "applicable": 4,
+        "rate": 1.0,
+        "violations": []
+      },
+      "infrastructure": {
+        "applicable": 5,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "T4": {},
+    "T5": {},
+    "T6": {},
+    "X1": {},
+    "X2": {}
+  },
+  "seed": 127,
+  "team_alignment": 0.9545454545454546
+}

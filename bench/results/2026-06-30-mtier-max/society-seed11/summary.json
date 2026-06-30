@@ -1,0 +1,74 @@
+{
+  "arm": "society",
+  "cost": {
+    "by_agent": {
+      "commander": {
+        "completion_tokens": 1622,
+        "cost_usd": 0.04026479999999999,
+        "prompt_tokens": 25444
+      },
+      "comms": {
+        "completion_tokens": 490,
+        "cost_usd": 0.032246399999999995,
+        "prompt_tokens": 24422
+      },
+      "fire": {
+        "completion_tokens": 767,
+        "cost_usd": 0.0357636,
+        "prompt_tokens": 25968
+      },
+      "infrastructure": {
+        "completion_tokens": 1147,
+        "cost_usd": 0.043279200000000004,
+        "prompt_tokens": 30331
+      },
+      "medical": {
+        "completion_tokens": 691,
+        "cost_usd": 0.03546119999999998,
+        "prompt_tokens": 26096
+      },
+      "rescue": {
+        "completion_tokens": 931,
+        "cost_usd": 0.03692879999999999,
+        "prompt_tokens": 26119
+      }
+    },
+    "by_model": {
+      "qwen3-max": {
+        "completion_tokens": 5648,
+        "cost_usd": 0.22394399999999998,
+        "prompt_tokens": 158380
+      }
+    },
+    "completion_tokens": 5648,
+    "cost_usd": 0.22394399999999998,
+    "prompt_tokens": 158380
+  },
+  "models": [
+    "qwen3-max"
+  ],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 1.0,
+    "fire": 0.9333333333333333,
+    "infrastructure": 0.7727272727272727,
+    "medical": 0.8333333333333334,
+    "rescue": 0.8095238095238095
+  },
+  "scores": {
+    "avg_response_ticks": 5.333333333333333,
+    "lives_lost": 56.0,
+    "lives_saved": 136.0,
+    "missions_failed": 0.0,
+    "missions_open": 0.0,
+    "missions_resolved": 12.0,
+    "panic": 0.22999999999999982,
+    "resource_utilization": 0.0
+  },
+  "seed": 11,
+  "team_alignment": 0.8955223880597015,
+  "ticks_requested": 60,
+  "ticks_run": 26,
+  "wall_s": 95.9320783209987,
+  "world_digest": "86b227f1ea4a126685db9913fa86658f199e3a570b67e010741bca72299a8c5b"
+}

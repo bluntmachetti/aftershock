@@ -1,0 +1,107 @@
+{
+  "arm": "society",
+  "notes": [],
+  "role_conformance": {
+    "commander": 1.0,
+    "comms": 1.0,
+    "fire": 1.0,
+    "infrastructure": 0.9444444444444444,
+    "medical": 0.8333333333333334,
+    "rescue": 1.0
+  },
+  "rules": {
+    "C1": {
+      "commander": {
+        "applicable": 10,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "C2": {},
+    "C3": {},
+    "F1": {},
+    "F2": {},
+    "I1": {
+      "infrastructure": {
+        "applicable": 4,
+        "rate": 0.75,
+        "violations": [
+          {
+            "detail": "repair_road rejected: \"road in district 'industrial' is not blocked\"",
+            "tick": 5
+          }
+        ]
+      }
+    },
+    "I2": {},
+    "M1": {},
+    "M2": {},
+    "R1": {},
+    "R2": {},
+    "T1": {},
+    "T2": {
+      "fire": {
+        "applicable": 4,
+        "rate": 1.0,
+        "violations": []
+      },
+      "infrastructure": {
+        "applicable": 30,
+        "rate": 0.9666666666666667,
+        "violations": [
+          {
+            "detail": "requested 1 'supply_truck' for 'm4' but max allowed is 0 (required=1, assigned=3)",
+            "tick": 7
+          }
+        ]
+      },
+      "medical": {
+        "applicable": 14,
+        "rate": 0.7857142857142857,
+        "violations": [
+          {
+            "detail": "requested 2 'supply_truck' for 'm4' but max allowed is 0 (required=1, assigned=3)",
+            "tick": 6
+          },
+          {
+            "detail": "requested 2 'supply_truck' for 'm4' but max allowed is 0 (required=1, assigned=3)",
+            "tick": 7
+          },
+          {
+            "detail": "requested 2 'supply_truck' for 'm4' but max allowed is 0 (required=1, assigned=3)",
+            "tick": 8
+          }
+        ]
+      },
+      "rescue": {
+        "applicable": 12,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "T3": {
+      "infrastructure": {
+        "applicable": 2,
+        "rate": 1.0,
+        "violations": []
+      },
+      "medical": {
+        "applicable": 4,
+        "rate": 1.0,
+        "violations": []
+      },
+      "rescue": {
+        "applicable": 4,
+        "rate": 1.0,
+        "violations": []
+      }
+    },
+    "T4": {},
+    "T5": {},
+    "T6": {},
+    "X1": {},
+    "X2": {}
+  },
+  "seed": 113,
+  "team_alignment": 0.9428571428571428
+}
