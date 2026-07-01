@@ -72,6 +72,8 @@ _DIR_TO_SECTION: dict[str, int] = {
     "2026-06-30-fric-p4": 27,
     "2026-06-30-fric-p2": 27,
     "2026-06-30-fric-p1": 27,
+    # §28 cross-family panel: one combined dir, arms keyed by MODEL id (solo arm).
+    "2026-07-01-panelA-solo": 28,
 }
 
 # Dirs that predate the provenance stamp / verdict hardening — their verdict (if any)

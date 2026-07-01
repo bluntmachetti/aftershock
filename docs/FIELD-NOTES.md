@@ -718,3 +718,37 @@ and §25 (`solo ≈ swarm`). **Honesty bound:** the abundance reversal is signif
 mid-scarcity coordination wins are suggestive (p=0.289, n=8) — add seeds before quoting the +7 pt as
 real. Reusable surface: `bench --pools` + `aftershock poa` / `diagnose`. Data:
 `bench/results/2026-06-30-fric-{p12,p6,p4,p2,p1}` (lean — summaries only).
+
+## 28. Is it just Qwen? A 12-model cross-family panel says the claim holds (2026-07-01)
+
+Every claim so far rides on Qwen models, so the fair critique is: *is "coordination beats model size"
+a Qwen artifact?* This tests it across **12 models from ~9 families** on the substrate's honest,
+subsidy-free outcome. Each model powers the **`solo` arm** (one model runs the whole town) over the
+same 10 paired seeds × 60 ticks, served via OpenRouter (the new family-agnostic provider path), priced
+from a committed list. Comparator = the cheap all-flash Qwen **society** (§26): **106.0 lives,
+$0.025/run, 4272 lives/$**.
+
+| solo model | lives (sd) | cost | lives/$ | Δ vs society | sign test |
+|---|---|---|---|---|---|
+| gpt-5 · gemini-3.1-pro · opus-4.8 · grok-4.3 (US frontier) | 106–109 | $0.08–0.36 | 306–1408 | +0 … +3 | all p ≥ 0.29 |
+| deepseek-v4-pro/flash · kimi-k2.7 · glm-5.2 (CN frontier) | 102–105 | $0.006–0.076 | 1345–**17782** | −0.6 … −4.4 | all p ≥ 0.5 |
+| **cheap Qwen society** | **106.0** | **$0.025** | **4272** | — | — |
+| mistral-large / llama-3.3-70b / qwen3-235b (open-weight) | 80–98 | $0.003–0.023 | 4114–28k | −8 … −26 | 2 of 3 p=0.002 |
+| llama-3.1-8b (floor) | 24.6 (±22.3) | $0.001 | 32958 | −81.4 | p=0.002 |
+
+**Three durable reads.** (1) **No model's solo beats the cheap six-flash coordinated society on
+lives.** The eight frontier-class models — US *and* Chinese — only **tie** it (Δ ∈ [−4.4, +3.0], every
+sign test p ≥ 0.29 → indistinguishable at n=10, sd≈16). So the claim *survives* cross-family, but with
+an honest refinement of the Qwen-only §4 result: a genuine frontier solo *reaches* the coordination
+ceiling on the outcome (a big *Qwen* solo did not). (2) **The frontiers pay 3–14× for that tie** —
+lives-per-$ 306–1595 vs the society's 4272 — so the win is decisively on **cost-efficiency**, family-
+wide. The one honest dent: `deepseek-v4-flash` ties on lives at **4× better** cost-efficiency
+($17782/life), a genuinely strong cheap solo. (3) **Below the frontier, solos fall off** (mistral
+−10.9, qwen3-235b −26.3, both p=0.002) and the **8B floor collapses** (24.6 lives, p=0.002) — a clean
+cross-family capability floor, echoing §22's 1.7B.
+
+**Caveats:** independent-seed (LLM layer non-deterministic, §13); the prompts/contract are Qwen-tuned,
+so a weaker cross-family score is partly prompt-fit — but all 12 parsed the JSON contract cleanly, and
+the *frontier* tie is the load-bearing result. External list prices drift (as-of 2026-07-01). Spend
+~$14.5. New reusable surface: family-agnostic provider (`DASHSCOPE_BASE_URL` → OpenRouter/Featherless)
++ `AFTERSHOCK_MODEL_PRICES`. Data: `bench/results/2026-07-01-panelA-solo/` (12 model cells + comparator).

@@ -562,9 +562,38 @@
       ],
       "verdict": null,
       "verdict_note": null
+    },
+    {
+      "ablate": null,
+      "conformance_verdict": null,
+      "cost_usd": 1.290759039,
+      "dir": "2026-07-01-panelA-solo",
+      "field_notes_section": 28,
+      "git_sha": null,
+      "kind": "results",
+      "lives_per_dollar": 345.43142946242216,
+      "lives_saved": 109.0,
+      "mean_team_alignment": 0.6166666666666667,
+      "model_endpoint": "dashscope-intl",
+      "records_committed": false,
+      "schema_version": null,
+      "seeds": [
+        11,
+        23,
+        37,
+        42,
+        57,
+        73,
+        89,
+        101,
+        113,
+        127
+      ],
+      "verdict": null,
+      "verdict_note": null
     }
   ],
-  "generated_by_git_sha": "388c7fe78840eb3bc46271d9b57dbe5c12eb527f",
-  "n_experiments": 22,
+  "generated_by_git_sha": "b95957f32d2d389d21fe6e15d56f31f5e08bb2fa",
+  "n_experiments": 23,
   "schema_version": 1
 }
