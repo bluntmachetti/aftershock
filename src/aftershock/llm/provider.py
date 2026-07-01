@@ -11,6 +11,7 @@ import json
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Protocol
 
 import httpx
@@ -19,7 +20,10 @@ from aftershock.kernel.protocol import TokenUsage
 
 DASHSCOPE_INTL_BASE = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 
-# (usd_per_1M_input, usd_per_1M_output) — first price tier
+# (usd_per_1M_input, usd_per_1M_output) — first price tier. These are the project's
+# own production Qwen models; external validation models (OpenRouter/Featherless) are
+# supplied separately via AFTERSHOCK_MODEL_PRICES (see _load_extra_prices) so this
+# table stays the authoritative Qwen price of record.
 MODEL_PRICES_USD_PER_MTOK: dict[str, tuple[float, float]] = {
     "qwen3.5-flash": (0.10, 0.40),
     "qwen3.5-plus": (0.40, 2.40),
@@ -30,10 +34,87 @@ MODEL_PRICES_USD_PER_MTOK: dict[str, tuple[float, float]] = {
     "qwen-turbo": (0.05, 0.20),
 }
 
+# Endpoint classification from a base_url. Governs (a) which API key env var to read,
+# (b) request-body shaping (Qwen-only params vs plain OpenAI-compatible), and (c) the
+# provenance label. "ollama" is the catch-all for a self-hosted OpenAI-compatible
+# endpoint (Ollama/vLLM), distinct from the managed aggregators OpenRouter/Featherless.
+_ENDPOINTS = ("dashscope", "openrouter", "featherless", "ollama")
+
+
+def classify_endpoint(base_url: str) -> str:
+    """Classify a base_url into one of _ENDPOINTS (default 'ollama' for self-hosted)."""
+    u = base_url.lower()
+    if "dashscope" in u:
+        return "dashscope"
+    if "openrouter" in u:
+        return "openrouter"
+    if "featherless" in u:
+        return "featherless"
+    return "ollama"
+
+
+# Which env var holds the API key for each endpoint. OpenRouter/Featherless require
+# their OWN key (no fall-back to the Qwen key — sending a DashScope key to OpenRouter
+# would just 401). DashScope and self-hosted Ollama use DASHSCOPE_API_KEY (the latter
+# is usually keyless; a dummy value satisfies the non-empty check).
+_ENDPOINT_KEY_ENV: dict[str, str] = {
+    "dashscope": "DASHSCOPE_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    "featherless": "FEATHERLESS_API_KEY",
+    "ollama": "DASHSCOPE_API_KEY",
+}
+
+
+def _key_for_endpoint(endpoint: str) -> str:
+    return os.environ.get(_ENDPOINT_KEY_ENV.get(endpoint, "DASHSCOPE_API_KEY"), "")
+
+
+# Cache parsed AFTERSHOCK_MODEL_PRICES by its raw value so a file path isn't re-read
+# on every cost computation. Keyed on the raw string → invalidates when the env changes.
+_EXTRA_PRICE_CACHE: dict[str, dict[str, tuple[float, float]]] = {}
+
+
+def _parse_extra_prices(raw: str) -> dict[str, tuple[float, float]]:
+    """Parse AFTERSHOCK_MODEL_PRICES (inline JSON or a path to a JSON file).
+
+    Shape: ``{"model-id": [usd_per_1M_input, usd_per_1M_output], ...}``. Any parse
+    error yields {} (unknown models then cost $0.0 — honest, never a crash)."""
+    try:
+        raw_json = raw if raw.lstrip().startswith("{") else Path(raw).read_text()
+        data = json.loads(raw_json)
+        # Skip non-[in, out] entries (e.g. a "_comment" string) so a documented
+        # price file doesn't blow the whole parse away.
+        return {
+            str(k): (float(v[0]), float(v[1]))
+            for k, v in data.items()
+            if isinstance(v, list | tuple) and len(v) == 2
+        }
+    except (OSError, ValueError, TypeError, KeyError, IndexError, json.JSONDecodeError):
+        return {}
+
+
+def _load_extra_prices() -> dict[str, tuple[float, float]]:
+    raw = os.environ.get("AFTERSHOCK_MODEL_PRICES", "").strip()
+    if not raw:
+        return {}
+    if raw not in _EXTRA_PRICE_CACHE:
+        _EXTRA_PRICE_CACHE[raw] = _parse_extra_prices(raw)
+    return _EXTRA_PRICE_CACHE[raw]
+
+
+def _price_for(model: str) -> tuple[float, float] | None:
+    """Look up (in, out) price for a model — Qwen table first, then extra prices."""
+    return MODEL_PRICES_USD_PER_MTOK.get(model) or _load_extra_prices().get(model)
+
+
+def known_models() -> set[str]:
+    """All models with a known price (Qwen table + AFTERSHOCK_MODEL_PRICES)."""
+    return set(MODEL_PRICES_USD_PER_MTOK) | set(_load_extra_prices())
+
 
 def _compute_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
     """Compute cost in USD given model and token counts. Unknown model -> 0.0."""
-    prices = MODEL_PRICES_USD_PER_MTOK.get(model)
+    prices = _price_for(model)
     if prices is None:
         return 0.0
     input_price, output_price = prices
@@ -43,14 +124,18 @@ def _compute_cost(model: str, prompt_tokens: int, completion_tokens: int) -> flo
 def endpoint_label(base_url: str | None) -> str:
     """Map a provider base_url to a provenance endpoint label.
 
-    Mirrors QwenProvider's own endpoint detection (``"dashscope" in base_url``):
-    a DashScope-International cloud URL -> "dashscope-intl"; any other (local /
-    self-hosted Ollama OpenAI-compatible) URL -> "ollama-k12". ``None`` means no
-    provider was wired at all (an LLM-free scripted-only run) -> "scripted".
-    """
+    ``None`` means no provider was wired (an LLM-free scripted-only run) -> "scripted".
+    DashScope cloud -> "dashscope-intl"; a self-hosted Ollama/vLLM -> "ollama-k12";
+    the managed aggregators keep their own label so provenance never mislabels an
+    OpenRouter/Featherless run as self-hosted."""
     if base_url is None:
         return "scripted"
-    return "dashscope-intl" if "dashscope" in base_url else "ollama-k12"
+    return {
+        "dashscope": "dashscope-intl",
+        "openrouter": "openrouter",
+        "featherless": "featherless",
+        "ollama": "ollama-k12",
+    }[classify_endpoint(base_url)]
 
 
 @dataclass(frozen=True)
@@ -90,23 +175,27 @@ class QwenProvider:
         max_retries: int = 2,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        resolved_key = api_key or os.environ.get("DASHSCOPE_API_KEY", "")
-        if not resolved_key:
-            raise ProviderError(
-                "No DashScope API key found. "
-                "Set the DASHSCOPE_API_KEY environment variable or pass api_key=."
-            )
-        self._api_key = resolved_key
         # base_url precedence: explicit arg > DASHSCOPE_BASE_URL env > DashScope cloud.
-        # The env hook lets the whole stack point at a local OpenAI-compatible endpoint
-        # (e.g. a self-hosted Ollama at http://host:11434/v1) with no code change.
+        # The env hook lets the whole stack point at any OpenAI-compatible endpoint
+        # (self-hosted Ollama, or the OpenRouter/Featherless aggregators) with no code
+        # change — the model id and Bearer key pass straight through.
         self._base_url = (
             base_url or os.environ.get("DASHSCOPE_BASE_URL") or DASHSCOPE_INTL_BASE
         ).rstrip("/")
-        # Cloud DashScope disables Qwen3 reasoning via `enable_thinking`; a self-hosted
-        # Ollama OpenAI endpoint ignores that and instead honors `reasoning_effort`.
-        # Detect the endpoint so the cloud request stays byte-identical.
-        self._is_dashscope = "dashscope" in self._base_url
+        # Endpoint governs body shaping (Qwen-only params stay off non-Qwen providers)
+        # and which key env var to read. Cloud DashScope stays byte-identical.
+        self._endpoint = classify_endpoint(self._base_url)
+        self._is_dashscope = self._endpoint == "dashscope"
+        # Key precedence: explicit arg > the endpoint's own key env var. OpenRouter and
+        # Featherless require their own key so a Qwen key is never sent to the wrong host.
+        resolved_key = api_key or _key_for_endpoint(self._endpoint)
+        if not resolved_key:
+            key_env = _ENDPOINT_KEY_ENV.get(self._endpoint, "DASHSCOPE_API_KEY")
+            raise ProviderError(
+                f"No API key found for the {self._endpoint} endpoint. "
+                f"Set the {key_env} environment variable or pass api_key=."
+            )
+        self._api_key = resolved_key
         self._timeout_s = timeout_s
         self._max_retries = max_retries
         self._transport = transport
@@ -152,17 +241,24 @@ class QwenProvider:
         # ignored, so it is sent in both JSON and tool modes.
         if seed is not None:
             body["seed"] = seed
+        # enable_thinking is a Qwen/DashScope param (self-hosted Ollama ignores it,
+        # OpenRouter/Featherless may reject an unknown field) → Qwen endpoints only.
+        # This keeps the DashScope cloud AND self-hosted Ollama bodies byte-identical.
+        _qwen_endpoint = self._endpoint in ("dashscope", "ollama")
         if tools:
             body["tools"] = tools
             body["tool_choice"] = tool_choice or "auto"
             body["parallel_tool_calls"] = True
-            body["enable_thinking"] = False
+            if _qwen_endpoint:
+                body["enable_thinking"] = False
         elif json_mode:
             body["response_format"] = {"type": "json_object"}
-            body["enable_thinking"] = False
-        # Self-hosted Ollama endpoints disable Qwen3 thinking via reasoning_effort
-        # (they ignore enable_thinking). Gated on the endpoint → cloud body unchanged.
-        if not self._is_dashscope:
+            if _qwen_endpoint:
+                body["enable_thinking"] = False
+        # A self-hosted Ollama endpoint disables Qwen3 thinking via reasoning_effort:'none'
+        # (it ignores enable_thinking). DashScope uses enable_thinking; OpenRouter and
+        # Featherless reject the 'none' value, so this stays Ollama-only.
+        if self._endpoint == "ollama":
             body["reasoning_effort"] = "none"
 
         url = f"{self._base_url}/chat/completions"

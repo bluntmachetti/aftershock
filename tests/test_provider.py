@@ -16,6 +16,9 @@ from aftershock.llm.provider import (
     ProviderError,
     QwenProvider,
     _compute_cost,
+    classify_endpoint,
+    endpoint_label,
+    known_models,
 )
 
 # ---------------------------------------------------------------------------
@@ -577,3 +580,88 @@ async def test_reasoning_effort_absent_on_dashscope_cloud(
         )
 
     assert "reasoning_effort" not in captured[0]
+
+
+# ---------------------------------------------------------------------------
+# Cross-family endpoint support: OpenRouter/Featherless key resolution, body
+# shaping (Qwen-only params stay off non-Qwen hosts), provenance labels, and
+# external prices via AFTERSHOCK_MODEL_PRICES.
+# ---------------------------------------------------------------------------
+
+
+_DS_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+
+
+def test_classify_endpoint_cases() -> None:
+    assert classify_endpoint(_DS_URL) == "dashscope"
+    assert classify_endpoint("https://openrouter.ai/api/v1") == "openrouter"
+    assert classify_endpoint("https://api.featherless.ai/v1") == "featherless"
+    assert classify_endpoint("http://localhost:11434/v1") == "ollama"
+
+
+def test_endpoint_label_cases() -> None:
+    assert endpoint_label(None) == "scripted"
+    assert endpoint_label(_DS_URL) == "dashscope-intl"
+    assert endpoint_label("https://openrouter.ai/api/v1") == "openrouter"
+    assert endpoint_label("https://api.featherless.ai/v1") == "featherless"
+    assert endpoint_label("http://localhost:11434/v1") == "ollama-k12"
+
+
+def test_openrouter_uses_its_own_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-key-xyz")
+    monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
+    provider = QwenProvider(base_url="https://openrouter.ai/api/v1")
+    assert provider._endpoint == "openrouter"
+    assert provider._api_key == "or-key-xyz"
+
+
+def test_openrouter_missing_key_raises_named(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Qwen key present must NOT satisfy an OpenRouter endpoint (no cross-leak)."""
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "qwen-secret")
+    with pytest.raises(ProviderError, match="OPENROUTER_API_KEY"):
+        QwenProvider(base_url="https://openrouter.ai/api/v1")
+
+
+@pytest.mark.asyncio
+async def test_openrouter_body_omits_qwen_only_params() -> None:
+    """OpenRouter json_mode body carries response_format but NOT enable_thinking or
+    reasoning_effort (Qwen-only fields that a strict router would reject)."""
+    captured: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(json.loads(request.content))
+        return _ok_response()
+
+    transport = httpx.MockTransport(handler)
+    provider = QwenProvider(
+        api_key="or-key",
+        base_url="https://openrouter.ai/api/v1",
+        transport=transport,
+        max_retries=0,
+    )
+    with patch("asyncio.sleep"):
+        await provider.chat(
+            model="openai/gpt-5", system="s", user="u", temperature=0.3, json_mode=True
+        )
+
+    body = captured[0]
+    assert body["response_format"] == {"type": "json_object"}
+    assert "enable_thinking" not in body
+    assert "reasoning_effort" not in body
+
+
+def test_extra_prices_extend_known_models_and_cost(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AFTERSHOCK_MODEL_PRICES", '{"openai/gpt-5": [1.25, 10.0]}')
+    assert "openai/gpt-5" in known_models()
+    expected = (1000 * 1.25 + 500 * 10.0) / 1_000_000
+    assert _compute_cost("openai/gpt-5", 1000, 500) == pytest.approx(expected)
+    # Qwen table still authoritative; genuinely-unknown model still costs 0.
+    assert "qwen3.5-flash" in known_models()
+    assert _compute_cost("mystery/model", 1000, 500) == 0.0
+
+
+def test_extra_prices_malformed_is_safe(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AFTERSHOCK_MODEL_PRICES", "not-json-and-not-a-path")
+    assert known_models() == set(MODEL_PRICES_USD_PER_MTOK)
+    assert _compute_cost("anything", 100, 100) == 0.0

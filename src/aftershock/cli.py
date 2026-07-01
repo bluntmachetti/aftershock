@@ -131,8 +131,9 @@ def _parse_role_models(spec: str | None) -> dict[str, str] | None:
     """
     if spec is None:
         return None
-    from aftershock.llm.provider import MODEL_PRICES_USD_PER_MTOK
+    from aftershock.llm.provider import known_models
 
+    priced = known_models()
     override: dict[str, str] = {}
     for part in spec.split(","):
         part = part.strip()
@@ -148,10 +149,10 @@ def _parse_role_models(spec: str | None) -> dict[str, str] | None:
                 file=sys.stderr,
             )
             raise SystemExit(1)
-        if model not in MODEL_PRICES_USD_PER_MTOK:
+        if model not in priced:
             print(
-                f"error: unknown model {model!r}; priced models: "
-                f"{sorted(MODEL_PRICES_USD_PER_MTOK)}",
+                f"error: unknown model {model!r}; priced models: {sorted(priced)}. "
+                "Add external (OpenRouter/Featherless) models via AFTERSHOCK_MODEL_PRICES.",
                 file=sys.stderr,
             )
             raise SystemExit(1)
@@ -505,12 +506,17 @@ def cmd_bench(args: argparse.Namespace) -> int:
     needs_llm = any(a in _LLM_ARMS for a in requested_arms)
     provider: Any = None
     if needs_llm:
-        api_key = os.environ.get("DASHSCOPE_API_KEY", "")
-        if not api_key:
-            print(_KEY_HINT)
+        # Resolve the key endpoint-aware (DASHSCOPE_BASE_URL may point at OpenRouter/
+        # Featherless, which need their OWN key — passing the Qwen key explicitly would
+        # 401). --timeout overrides the 45s default for slow frontier/reasoning models.
+        from aftershock.llm.provider import ProviderError, QwenProvider
+
+        tmo = getattr(args, "timeout", None)
+        try:
+            provider = QwenProvider(api_key=None, timeout_s=tmo if tmo is not None else 45.0)
+        except ProviderError as exc:
+            print(f"{exc}\n{_KEY_HINT}", file=sys.stderr)
             return 2
-        from aftershock.llm.provider import QwenProvider
-        provider = QwenProvider(api_key=api_key)
 
     seed_sampler = getattr(args, "seed_sampler", False)
     society_tools = getattr(args, "society_tools", False)
@@ -736,17 +742,26 @@ def cmd_mcp(args: argparse.Namespace) -> int:
 
 
 def cmd_smoke_llm(args: argparse.Namespace) -> int:
-    """Make one tiny JSON-mode call and print reply, token counts, and cost."""
-    api_key = os.environ.get("DASHSCOPE_API_KEY", "")
-    if not api_key:
-        print(_KEY_HINT)
-        return 2
+    """Make one tiny JSON-mode call and print reply, token counts, cost, and endpoint.
+
+    Endpoint-aware: with DASHSCOPE_BASE_URL (or --base-url) pointing at OpenRouter/
+    Featherless and the matching key set, this pre-flights an arbitrary frontier /
+    open-weight model against the JSON contract before a paid sweep spends on it."""
+    from aftershock.llm.provider import ProviderError, QwenProvider, endpoint_label
 
     model: str = args.model
+    base_url = getattr(args, "base_url", None)
+    tmo = getattr(args, "timeout", None)
+    try:
+        provider = QwenProvider(
+            api_key=None, base_url=base_url, timeout_s=tmo if tmo is not None else 45.0
+        )
+    except ProviderError as exc:
+        print(f"{exc}\n{_KEY_HINT}", file=sys.stderr)
+        return 2
 
-    from aftershock.llm.provider import QwenProvider
-
-    provider = QwenProvider(api_key=api_key)
+    print(f"Endpoint:          {endpoint_label(provider.base_url)}  ({provider.base_url})")
+    print(f"Model:             {model}")
 
     system = (
         "You are a test assistant. Respond with ONLY a JSON object. "
@@ -872,12 +887,17 @@ def cmd_ablation(args: argparse.Namespace) -> int:
     needs_llm = any(a in _LLM_ARMS for a in (control, treatment))
     provider: Any = None
     if needs_llm:
-        api_key = os.environ.get("DASHSCOPE_API_KEY", "")
-        if not api_key:
-            print(_KEY_HINT)
+        # Resolve the key endpoint-aware (DASHSCOPE_BASE_URL may point at OpenRouter/
+        # Featherless, which need their OWN key — passing the Qwen key explicitly would
+        # 401). --timeout overrides the 45s default for slow frontier/reasoning models.
+        from aftershock.llm.provider import ProviderError, QwenProvider
+
+        tmo = getattr(args, "timeout", None)
+        try:
+            provider = QwenProvider(api_key=None, timeout_s=tmo if tmo is not None else 45.0)
+        except ProviderError as exc:
+            print(f"{exc}\n{_KEY_HINT}", file=sys.stderr)
             return 2
-        from aftershock.llm.provider import QwenProvider
-        provider = QwenProvider(api_key=api_key)
 
     result = run_ablation(
         control, treatment, seeds, args.ticks, provider, out_dir,
@@ -1269,6 +1289,13 @@ def main() -> None:
             "never overwrites the cost-optimal default benchmark."
         ),
     )
+    p_bench.add_argument(
+        "--timeout", type=float, default=None,
+        help=(
+            "Per-call LLM timeout in seconds (default 45). Raise for slow frontier / "
+            "reasoning models served via a DASHSCOPE_BASE_URL aggregator (OpenRouter)."
+        ),
+    )
 
     # ablation
     p_ablation = sub.add_parser(
@@ -1298,6 +1325,9 @@ def main() -> None:
                             help="Target power for the seeds-needed curve (default 0.8)")
     p_ablation.add_argument("--alpha", type=float, default=0.05,
                             help="Significance level (default 0.05)")
+    p_ablation.add_argument("--timeout", type=float, default=None,
+                            help="Per-call LLM timeout in seconds (default 45); raise for "
+                                 "slow frontier/reasoning models via an OpenRouter base URL")
 
     # diagnose
     p_diagnose = sub.add_parser(
@@ -1348,6 +1378,11 @@ def main() -> None:
     # smoke-llm
     p_smoke = sub.add_parser("smoke-llm", help="Make one test LLM call and print results")
     p_smoke.add_argument("--model", default="qwen3.5-flash")
+    p_smoke.add_argument("--base-url", default=None,
+                         help="Override the endpoint (else DASHSCOPE_BASE_URL / DashScope cloud); "
+                              "e.g. https://openrouter.ai/api/v1")
+    p_smoke.add_argument("--timeout", type=float, default=None,
+                         help="Per-call timeout in seconds (default 45)")
 
     # serve
     p_serve = sub.add_parser(
