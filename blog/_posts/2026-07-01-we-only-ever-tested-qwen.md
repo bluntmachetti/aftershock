@@ -129,5 +129,13 @@ any single frontier model's outcome — at up to a tenth of the flagship's cost 
 ten families, not one.** It's not the flashier "the small society beats the big model." It's the true
 one, and now it's the one I'll say.
 
+One more data point, for anyone keeping score across projects: a sibling research effort of mine,
+[Redoubt Arena](https://blog.redoubtlabs.dev/arena/), ran the same kind of check on a completely
+different simulated world — an enterprise-resilience mission instead of a disaster response — sweeping
+15 models against a deterministic recovery baseline. Same shape of result: zero model runs beat the
+baseline outright; strong models only tie it. Different domain, same finding, twice now: a well-designed
+non-LLM baseline is a harder bar to clear than it looks, and it's worth measuring before assuming an LLM
+adds value.
+
 Live demo: **<https://aftershock.redoubtlabs.dev>** · Code: **<https://github.com/bluntmachetti/aftershock>**
 (method + verdict in `docs/FIELD-NOTES.md` §28; data under `bench/results/2026-07-01-panelA-solo/`)
