@@ -21,6 +21,7 @@ This folder is the Jekyll source for that site (built to GitHub Pages by
 
 ## Posts
 
+- **2026-07-01 · Log 011 — [We only ever tested Qwen. So we ran the headline against eleven other models — and had to correct how we say it.](_posts/2026-07-01-we-only-ever-tested-qwen.md)**
 - **2026-06-30 · Log 010 — [We paid 10× for a bigger model and saved zero extra lives — then watched coordination backfire when nothing was scarce.](_posts/2026-06-30-bigger-model-same-lives-scarcity-is-the-game.md)**
 - **2026-06-26 · Log 009 — [We put a number on coordination: the price of anarchy in an agent society.](_posts/2026-06-26-the-price-of-anarchy.md)**
 - **2026-06-25 · Log 008 — [We firmed our headline until it broke. Here's the one that didn't.](_posts/2026-06-25-the-headline-that-survives.md)**
