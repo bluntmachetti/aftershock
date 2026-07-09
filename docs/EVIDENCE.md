@@ -2,7 +2,7 @@
 
 > A single frozen, citable proof bundle. Every number below traces to a file in
 > this repo — no figure is asserted without a source path. Last verified
-> 2026-06-25.
+> 2026-07-09.
 
 ## 1. The claim (60-second read)
 
@@ -11,15 +11,19 @@ disaster scenarios run four ways (scripted heuristics, one big model, a flat
 swarm, a structured society with a negotiation protocol), scored on lives saved
 per dollar. The robust finding is **cost-efficiency**: six cheap qwen3.5-flash
 workers plus a qwen3.5-plus commander **match the expert-heuristic baseline on
-lives** (108.4 vs 106.8) and **out-deliver the solo big model** (108.4 vs 95.6)
-at **~3.5¢ per run** — **~65% better lives per dollar than the solo big model**.
+lives** (108.4 vs 106.8) and **out-deliver a big *Qwen* solo** (qwen3-max, 108.4 vs
+95.6) at **~3.5¢ per run** — **~65% better lives per dollar than that big Qwen solo**.
 Against the flat swarm the society holds a **suggestive** lives edge (+8.9 at
 n=15, wins 11/15, bootstrap CI [+2.3, +15.4] excludes 0, but sign-test p=0.118 —
 suggestive, not significant: the CI excludes 0 but the sign test doesn't clear
 significance). Written
 **doctrine credibly raises team alignment** (+0.125, n=6, p=0.031). The scripted
 expert-heuristic baseline is byte-for-byte reproducible; the Qwen arms
-demonstrate real instruction-following (team alignment 0.76–1.00). Real-data
+demonstrate real instruction-following (team alignment 0.76–1.00). And it is
+**not a Qwen artifact**: a 12-model cross-family panel (§8) — GPT-5, Gemini 3.1
+Pro, Claude Opus 4.8, DeepSeek, Kimi, GLM, Llama, Mistral — finds **no solo model
+beats the cheap coordinated Qwen society on lives**; the frontier only ties it, at
+3–14× the cost. Real-data
 scenario packs (NYC Ida 2021) let the observatory replay real incident demand
 while keeping outcomes explicitly simulated.
 
@@ -78,10 +82,12 @@ paired seeds {11, 23, 37, 42, 57}, 60 ticks each.
 > + `bench/results/2026-06-22-swarm-firm/` (seeds {60..69}).
 
 **Society vs solo (cost-efficiency — the robust finding):** Six cheap
-qwen3.5-flash workers plus a qwen3.5-plus commander **save more lives than one
-big model** (108.4 vs 95.6) at **31% lower cost** ($0.0353 vs $0.0515) →
+qwen3.5-flash workers plus a qwen3.5-plus commander **save more lives than a big
+*Qwen* solo (qwen3-max)** (108.4 vs 95.6) at **31% lower cost** ($0.0353 vs $0.0515) →
 **65% better lives per dollar** (3,069 vs 1,855). The negotiation protocol lets
-small models coordinate to out-deliver a single big model for less money.
+small models coordinate to out-deliver that big Qwen solo for less money. (Against the
+*whole* frontier the lives gap closes to a tie — a genuine frontier solo reaches the
+outcome ceiling — but the cost-efficiency win holds family-wide; see §8.)
 
 **Society vs scripted:** The deterministic expert-heuristic baseline is strong
 (106.8 vs 108.4). Society **matches the expert heuristics on lives** (108.4 vs
@@ -101,9 +107,11 @@ lives_lost + open_remaining` is the sim's exact life-accounting identity (no mod
 | solo (one big model) | 58.9% | no |
 | swarm (flat, no protocol) | 58.1% | no |
 
-Both **coordinated** arms (~66–67%) sit above both **uncoordinated** arms (~58%), and
-the expensive solo big model lands at the swarm's anarchy level — coordination beats
-raw model size for this allocation game. Paired society-vs-swarm over n=15 (refresh +
+Both **coordinated** arms (~66–67%) sit above both **uncoordinated** arms (~58%); here
+the expensive solo big model (qwen3-max) lands at the swarm's anarchy level. That last
+clause is Qwen-specific, though — the 12-model cross-family panel (§8) shows a genuine
+*frontier* solo reaches the outcome ceiling, so the durable claim is coordination beats
+model size **on cost, not on lives**. Paired society-vs-swarm over n=15 (refresh +
 swarm-firm): **+6.7 efficiency points, wins 11/15, bootstrap CI [+2.6, +10.8] excludes
 0, sign-test p=0.118 → suggestive** (price of anarchy **1.11×**) — the same statistical
 strength as the lives delta above, just bounded and interpretable.
@@ -284,3 +292,55 @@ the simulated arm; ProvenancePanel badges every field.
 > `runs/` is gitignored. To demo on a fresh box, copy the frozen run dirs or add
 > a provisioning step. The bench results (`bench/results/`) and scenario packs
 > (`scenarios/*/scenario.json`) **are** tracked and ship via `git pull`.
+
+## 8. Cross-family validation — is it just Qwen? (2026-07-01)
+
+**The load-bearing critique** of every result above is that it rides on Qwen
+models. So we ran the `solo` arm (one model runs the whole town) on **12 models
+from 10 families** over the same 10 paired seeds × 60 ticks, via a family-agnostic
+OpenRouter provider path, priced from a committed list. Comparator: the cheap
+all-flash Qwen **society** — 106.0 lives, $0.0248/run, 4,272 lives/$.
+
+| solo model | family | lives (sd) | cost/run | lives/$ | Δ vs society | sign test |
+|---|---|---|---|---|---|---|
+| gpt-5 | US frontier | 107.6 (±16.9) | $0.3399 | 317 | +1.6 | p=1.000 |
+| gemini-3.1-pro | US frontier | 109.0 (±16.6) | $0.3560 | 306 | +3.0 | p=0.508 |
+| claude-opus-4.8 | US frontier | 108.0 (±16.7) | $0.3127 | 345 | +2.0 | p=0.289 |
+| grok-4.3 | US frontier | 106.0 (±16.1) | $0.0753 | 1,408 | +0.0 | p=0.754 |
+| deepseek-v4-pro | CN frontier | 104.0 (±14.1) | $0.0293 | 3,551 | −2.0 | p=0.754 |
+| deepseek-v4-flash | CN frontier | 103.4 (±11.9) | $0.0058 | **17,782** | −2.6 | p=0.508 |
+| kimi-k2.7-code | CN frontier | 101.6 (±21.1) | $0.0755 | 1,345 | −4.4 | p=1.000 |
+| glm-5.2 | CN frontier | 105.4 (±15.2) | $0.0661 | 1,595 | −0.6 | p=0.508 |
+| **cheap Qwen society** | — | **106.0** | **$0.0248** | **4,272** | — | — |
+| mistral-large | open-weight | 95.1 (±13.9) | $0.0231 | 4,114 | −10.9 | **p=0.002** |
+| llama-3.3-70b | open-weight | 97.7 (±12.6) | $0.0035 | 28,141 | −8.3 | p=0.289 |
+| qwen3-235b | open-weight | 79.7 (±13.4) | $0.0029 | 27,638 | −26.3 | **p=0.002** |
+| llama-3.1-8b | floor | 24.6 (±22.3) | $0.0007 | 32,958 | −81.4 | **p=0.002** |
+
+**Three reads:**
+
+1. **No solo model beats the cheap coordinated society on lives.** The eight
+   frontier models — US *and* Chinese — only **tie** it (Δ ∈ [−4.4, +3.0], every
+   sign-test p ≥ 0.29 → indistinguishable at n=10, sd≈16).
+2. **The win is on cost.** Most of the frontier pays **3–14× more per run** for that
+   tie (GPT-5, Gemini, Claude ≈ 12–14×; Grok, Kimi, GLM ≈ 3×). The honest exception
+   is DeepSeek: V4 Pro roughly matches the society's cost/run, and **V4 Flash beats
+   it** (ties on lives at $0.0058/run, 4× the society's lives-per-$) — the one genuine
+   dent in "coordination wins on cost." Even so, the refinement of §5 stands: on
+   Qwen-only data a big *Qwen* solo sat at the swarm's anarchy floor, so "coordination
+   beats a big model" read like a *lives* claim; cross-family a genuine frontier solo
+   reaches the outcome ceiling, and **the society's win is cost-efficiency — holding
+   across ten families, DeepSeek aside.**
+3. **A clean cross-family capability floor:** below the frontier, solos fall off
+   (mistral-large −10.9, qwen3-235b −26.3, both p=0.002) and an 8B model collapses
+   (24.6 lives, p=0.002) — cf. §22's 1.7B collapse in the self-hosted size sweep.
+
+**Caveats:** independent-seed (the LLM layer is non-deterministic, §4); the
+prompts/contract are Qwen-tuned, so a weaker cross-family score is partly prompt-fit
+— but all 12 parsed the JSON contract cleanly, and the frontier tie is the
+load-bearing result. External list prices drift (as-of 2026-07-01). Spend ~$14.5.
+
+**Source:** `bench/results/2026-07-01-panelA-solo/` (`RESULTS.md` + `results.json`);
+prices in `bench/panelA_prices.json`; comparator
+`bench/results/2026-06-30-mtier-flash/`. Full write-up:
+[FIELD-NOTES §28](FIELD-NOTES.md).

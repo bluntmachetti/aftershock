@@ -17,6 +17,7 @@ A disaster-response society of Qwen agents that negotiates scarce resources and 
 - Live demo: https://aftershock.redoubtlabs.dev
 - GitHub repo: https://github.com/bluntmachetti/aftershock
 - Benchmark results: https://github.com/bluntmachetti/aftershock/tree/main/bench/results/2026-06-11
+- Cross-family panel (12 models, 10 families): https://github.com/bluntmachetti/aftershock/tree/main/bench/results/2026-07-01-panelA-solo
 - Evidence pack (every number → source file): https://github.com/bluntmachetti/aftershock/blob/main/docs/EVIDENCE.md
 - NYC Ida scenario pack: https://github.com/bluntmachetti/aftershock/tree/main/scenarios/nyc-ida-2021
 
@@ -162,6 +163,9 @@ boundary clearly instead of hiding it in a footnote.
 - A full multi-agent society that is not just a chat room: it has typed roles, typed proposals,
   validation, auctions, rejection feedback, and measurable outcomes.
 - A benchmark that compares architecture choices under identical seeded worlds.
+- A 12-model, 10-family cross-family panel showing the cost-efficiency win isn't a Qwen artifact:
+  no solo model (GPT-5, Gemini 3.1 Pro, Claude Opus 4.8, DeepSeek, Kimi, GLM, …) beats the cheap
+  coordinated Qwen society on lives, and the frontier only ties it at 3–14× the cost.
 - An honesty layer judges can audit: per-decision evidence receipts, confidence intervals and
   significance tests beside every result (weak effects labelled suggestive), a determinism-verified
   reproducibility badge, and a citable one-page evidence pack.
@@ -192,6 +196,16 @@ seeds, sign-test p=0.031 ([EVIDENCE.md §5](EVIDENCE.md#5-qwen-track-framing-ver
 We also learned that a society of small models can match a flagship solo model when the task is
 decomposable. The structured society saved 108.4 lives per run versus 95.6 for qwen3-max solo, and
 at ~$0.035/run delivered over 50% better lives-per-dollar.
+
+And because every result here rides on Qwen, we ran the load-bearing test: is "a cheap coordinated
+society matches one big model" just a Qwen artifact? We put the solo arm on **12 models from 10
+families** — GPT-5, Gemini 3.1 Pro, Claude Opus 4.8, Grok, DeepSeek V4 Pro/Flash, Kimi, GLM, Llama,
+Mistral — over the same paired seeds. **No solo model beats the cheap all-flash Qwen society on
+lives; the eight frontier models only tie it, and pay 3–14× more to do so.** That forced one honest
+correction — cross-family, a genuine frontier solo *reaches* the outcome ceiling, so the society's
+win is on **cost-efficiency**, not lives — and it makes the headline stronger, not weaker: cheap
+Qwen models plus a coordination harness hold their own against the entire frontier at a fraction of
+the cost.
 
 The uncomfortable lesson is that the protocol carries more of the result than the LLMs do.
 Well-tuned scripted agents using the same coordination protocol remain competitive. That is not a

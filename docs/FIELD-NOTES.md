@@ -622,7 +622,9 @@ open_remaining` (an identity, no model) and `efficiency = lives_saved / total_at
 
 The structural separation is the real result: **both coordinated arms (~66–67%) sit above both
 uncoordinated ones (~58%)**, and the *expensive single big model (solo) lands at the swarm's anarchy
-level* — coordination beats raw model size for this allocation problem.
+level* — coordination beats raw model size for this allocation problem. *(Refined in §28: the "big
+solo sits at the anarchy floor" reading is Qwen-specific — a genuine frontier solo reaches the
+outcome ceiling; the durable claim is coordination beats model size on **cost**, not lives.)*
 
 **society vs swarm, paired within-batch, pooled to n=15** (refresh seeds {11,23,37,42,57} +
 `2026-06-22-swarm-firm` {60..69}): **mean +6.7 efficiency pts**, society wins **11/15**, bootstrap
