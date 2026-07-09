@@ -9,8 +9,10 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
 **A deterministic agent-society benchmark: a disaster-struck town run by a society of Qwen
-agents that split tasks and negotiate scarce rescue resources — six cheap models that match
-expert heuristics and a single big model on lives saved, at far better lives-per-dollar.**
+agents that split tasks and negotiate scarce rescue resources. Six cheap qwen3.5-flash workers
+under a qwen3.5-plus commander match a whole frontier of solo models — GPT-5, Gemini 3.1 Pro,
+Claude Opus 4.8 — on lives saved, at up to ~14× better lives-per-dollar. Tested across 12 models
+from 10 families: coordination, not model scale, closes the gap.**
 
 > **Judges:** see [docs/EVIDENCE.md](docs/EVIDENCE.md) — a frozen, citable proof bundle where
 > every number traces to a file. The 60-second read, the simulated-vs-real boundary, the
@@ -114,6 +116,29 @@ most of the outcome. That is the point of the project.
 
 Everything we've learned about agent behavior along the way — including the negative
 results — is logged with evidence in [docs/FIELD-NOTES.md](docs/FIELD-NOTES.md).
+
+### Not just Qwen: a 12-model cross-family panel
+
+The load-bearing critique of everything above is *"you only ever tested Qwen."* So we ran the
+`solo` arm — one model runs the whole town — on **12 models from 10 families** (GPT-5,
+Gemini 3.1 Pro, Claude Opus 4.8, Grok 4.3, DeepSeek V4 Pro/Flash, Kimi K2.7, GLM 5.2,
+Qwen3-235B, Llama-3.3-70B, Mistral Large, and a Llama-3.1-8B floor), 10 paired seeds each, via a
+family-agnostic OpenRouter provider path, against the same cheap all-flash Qwen **society**
+(106.0 lives, $0.025/run, 4,272 lives/$). Full table:
+[bench/results/2026-07-01-panelA-solo/](bench/results/2026-07-01-panelA-solo/RESULTS.md).
+
+**No solo model beats the cheap coordinated society on lives.** The eight frontier models — US
+*and* Chinese — only **tie** it (Δ ∈ [−4.4, +3.0], every paired sign-test p ≥ 0.29). Most pay
+**3–14× more per run** for that tie (GPT-5, Gemini, Claude ≈ 12–14×); the one honest exception is
+DeepSeek V4 Flash, which ties on lives *and* beats the society on cost. Below the frontier, solos
+fall off and an 8B model collapses — a clean cross-family capability floor.
+
+**The honest refinement this forced:** on Qwen-only data a big *Qwen* solo (qwen3-max) sat at the
+swarm's anarchy floor, which made "coordination beats a big model" sound like a *lives* claim.
+Cross-family it isn't — a genuine frontier solo reaches the outcome ceiling. The society's win is
+on **cost-efficiency**, and *that* holds across all ten families. (The one honest dent:
+DeepSeek V4 Flash ties on lives at 4× better cost-efficiency.) See
+[docs/FIELD-NOTES.md §28](docs/FIELD-NOTES.md) and blog Log 011.
 
 ### Native Qwen function calling (measured ablation)
 
