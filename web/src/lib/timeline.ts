@@ -149,6 +149,26 @@ export function selectAtEnd(state: TimelineState): boolean {
   return state.cursor >= selectMaxCursor(state)
 }
 
+/**
+ * Pick a useful zero-click replay frame for a first-time visitor. Prefer the
+ * earliest tick where the negotiation protocol has both a ruling and an
+ * accepted/rejected action, then any protocol activity, then any world event.
+ * Explicit deep links and manual run selections do not use this helper.
+ */
+export function judgeStartIndex(ticks: TickRecord[]): number {
+  if (ticks.length === 0) return 0
+  const ruledAction = ticks.findIndex(
+    (tick) => tick.rulings.length > 0 && (tick.accepted.length > 0 || tick.rejected.length > 0),
+  )
+  if (ruledAction >= 0) return ruledAction
+  const protocolActivity = ticks.findIndex(
+    (tick) => tick.rulings.length > 0 || tick.accepted.length > 0 || tick.rejected.length > 0,
+  )
+  if (protocolActivity >= 0) return protocolActivity
+  const worldEvent = ticks.findIndex((tick) => tick.events.length > 0)
+  return worldEvent >= 0 ? worldEvent : 0
+}
+
 // ---- Compare-mode helpers (additive; pure) ----
 //
 // Compare mode replays two arms on the same seed against a shared *logical tick*

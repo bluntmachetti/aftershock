@@ -30,7 +30,7 @@ const STEPS: Array<{ n: number; title: string; body: string; tab: string }> = [
   {
     n: 5,
     title: 'Proof',
-    body: 'Bench tab: lives saved per dollar across 4 arms, with paired-seed CI + sign-test p + a determinism badge (scripted engine, identical digests).',
+    body: 'Bench tab: compare 4 Qwen architectures, then open the 12-model frontier panel. Every delta carries paired statistics and an explicit verdict.',
     tab: 'Bench',
   },
 ]
@@ -43,6 +43,7 @@ export function DemoGuide() {
       return false
     }
   })
+  const [expanded, setExpanded] = useState(false)
 
   const dismiss = () => {
     try {
@@ -59,7 +60,7 @@ export function DemoGuide() {
     return (
       <button
         type="button"
-        onClick={() => setReopened(true)}
+        onClick={() => { setReopened(true); setExpanded(true) }}
         className="absolute top-3 right-3 z-10 px-2 py-1 rounded text-[10px] font-mono uppercase tracking-wider
           bg-signal-cyan/15 border border-signal-cyan/50 text-signal-cyan
           hover:bg-signal-cyan/25 transition-all"
@@ -67,6 +68,41 @@ export function DemoGuide() {
       >
         Demo Guide
       </button>
+    )
+  }
+
+  if (!expanded) {
+    return (
+      <div
+        className="absolute top-3 right-3 z-10 max-w-[19rem] rounded border border-signal-cyan/40 bg-eoc-surface/95 px-3 py-2.5 backdrop-blur-sm shadow-lg"
+        data-testid="demo-guide-compact"
+      >
+        <div className="flex items-start gap-3">
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-widest text-signal-cyan">
+              Judge tour
+            </div>
+            <p className="mt-1 text-[10px] leading-snug text-eoc-secondary">
+              Replay starts at the first negotiation. Follow the five-step proof path when ready.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={dismiss}
+            aria-label="Dismiss demo guide"
+            className="text-xs leading-none text-eoc-faint hover:text-eoc-primary transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="mt-2 rounded border border-signal-cyan/50 bg-signal-cyan/10 px-2 py-1 text-[9px] font-mono uppercase tracking-wider text-signal-cyan hover:bg-signal-cyan/20"
+        >
+          Open 5-step guide
+        </button>
+      </div>
     )
   }
 

@@ -9,6 +9,7 @@ import {
   selectMaxCursor,
   selectNextCursor,
   selectAtEnd,
+  judgeStartIndex,
 } from '../lib/timeline'
 import type { TimelineState, TickRecord, WorldState } from '../types'
 
@@ -204,5 +205,42 @@ describe('selectors', () => {
     // Should return last available world (index 2), not crash
     expect(w).not.toBeNull()
     expect(w!.tick).toBe(fixtureWorlds[2].tick)
+  })
+})
+
+describe('judgeStartIndex', () => {
+  it('prefers the first tick with a ruling and an accepted or rejected action', () => {
+    const ticks: TickRecord[] = fixtureTicks.map((tick) => ({
+      ...tick,
+      rulings: [],
+      accepted: [],
+      rejected: [],
+      events: [],
+    }))
+    ticks[1] = { ...ticks[1], events: [{ event_id: 'e1', tick: 1, kind: 'mission_spawned', payload: {} }] }
+    ticks[2] = {
+      ...ticks[2],
+      rulings: [{ proposal_id: 'p1', accepted: true, decided_by: 'kernel', reason: 'priority' }],
+      accepted: [{ decision_id: 'd1', agent_id: 'medical', decision_type: 'dispatch', params: {}, rationale: '' }],
+    }
+    expect(judgeStartIndex(ticks)).toBe(2)
+  })
+
+  it('falls back to protocol activity, then a world event, then zero', () => {
+    const empty: TickRecord[] = fixtureTicks.map((tick) => ({
+      ...tick,
+      rulings: [],
+      accepted: [],
+      rejected: [],
+      events: [],
+    }))
+    const withEvent = empty.map((tick) => ({ ...tick }))
+    withEvent[1] = {
+      ...withEvent[1],
+      events: [{ event_id: 'e1', tick: 1, kind: 'mission_spawned', payload: {} }],
+    }
+    expect(judgeStartIndex(withEvent)).toBe(1)
+    expect(judgeStartIndex(empty)).toBe(0)
+    expect(judgeStartIndex([])).toBe(0)
   })
 })

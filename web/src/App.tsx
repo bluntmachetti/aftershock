@@ -4,6 +4,7 @@ import {
   timelineReducer,
   initialTimelineState,
   indexForTick,
+  judgeStartIndex,
 } from './lib/timeline'
 import { api } from './lib/api'
 import {
@@ -163,6 +164,10 @@ export default function App() {
               worlds: data.worlds,
               total: data.total,
             })
+            // Zero-click judge experience: land on the first visible protocol
+            // decision instead of an empty T0 map. Explicit deep links retain
+            // their requested tick, and manual run selection still starts at T0.
+            dispatch({ type: 'SET_CURSOR', cursor: judgeStartIndex(data.ticks) })
           } catch (e) {
             if (!cancelled) dispatch({ type: 'SET_ERROR', error: (e as Error).message })
           }

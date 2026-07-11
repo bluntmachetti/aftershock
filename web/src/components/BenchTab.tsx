@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { BenchResult, BenchArm, PairedComparison, DeterminismReport } from '../types'
+import type {
+  BenchResult,
+  BenchArm,
+  BenchComparator,
+  PairedComparison,
+  DeterminismReport,
+} from '../types'
 import { api } from '../lib/api'
 import { ARM_COLORS, STATUS_COLORS, FALLBACK_COLOR, VERDICT_COLORS } from '../lib/palette'
 
@@ -294,11 +300,173 @@ function DeterminismBadge({ report }: { report: DeterminismReport | null }) {
   )
 }
 
+const MODEL_LABELS: Record<string, string> = {
+  'openai/gpt-5': 'GPT-5',
+  'google/gemini-3.1-pro-preview': 'Gemini 3.1 Pro',
+  'anthropic/claude-opus-4.8': 'Claude Opus 4.8',
+  'x-ai/grok-4.3': 'Grok 4.3',
+  'deepseek/deepseek-v4-pro': 'DeepSeek V4 Pro',
+  'deepseek/deepseek-v4-flash': 'DeepSeek V4 Flash',
+  'moonshotai/kimi-k2.7-code': 'Kimi K2.7 Code',
+  'z-ai/glm-5.2': 'GLM 5.2',
+  'mistralai/mistral-large-2512': 'Mistral Large',
+  'meta-llama/llama-3.3-70b-instruct': 'Llama 3.3 70B',
+  'qwen/qwen3-235b-a22b-2507': 'Qwen3 235B',
+  'meta-llama/llama-3.1-8b-instruct': 'Llama 3.1 8B',
+}
+
+function modelLabel(modelId: string): string {
+  const parts = modelId.split('/')
+  return MODEL_LABELS[modelId] ?? parts[parts.length - 1] ?? modelId
+}
+
+function outcomeLabel(comparison: PairedComparison | undefined): {
+  text: string
+  color: string
+} {
+  if (comparison?.verdict === 'credible' && comparison.mean_delta > 0) {
+    return { text: 'solo wins', color: STATUS_COLORS.resolved }
+  }
+  if (comparison?.verdict === 'credible' && comparison.mean_delta < 0) {
+    return { text: 'below society', color: STATUS_COLORS.failed }
+  }
+  return { text: 'ties society', color: VERDICT_COLORS.suggestive }
+}
+
+function costComparison(cost: number, comparatorCost: number): string {
+  if (cost <= 0 || comparatorCost <= 0) return '—'
+  const ratio = cost / comparatorCost
+  return ratio >= 1 ? `${ratio.toFixed(1)}× society` : `${(1 / ratio).toFixed(1)}× cheaper`
+}
+
+function FrontierPanel({ result }: { result: BenchResult }) {
+  const comparator = result.comparator as BenchComparator
+  const comparisons = new Map(
+    (result.panel_stats ?? []).map((comparison) => [comparison.treatment, comparison]),
+  )
+  const rows = Object.entries(result.arms).sort(([, a], [, b]) => {
+    const aFrontier = a.family?.includes('frontier') ? 0 : 1
+    const bFrontier = b.family?.includes('frontier') ? 0 : 1
+    return aFrontier - bFrontier || b.mean_lives_saved - a.mean_lives_saved
+  })
+  const modelFamilies = new Set(rows.map(([model]) => model.split('/')[0]))
+  const frontierRows = rows.filter(([, arm]) => arm.family?.includes('frontier'))
+  const frontierTies = frontierRows.filter(([model]) => {
+    const comparison = comparisons.get(model)
+    return comparison?.verdict !== 'credible'
+  }).length
+  const soloWins = rows.filter(([model]) => {
+    const comparison = comparisons.get(model)
+    return comparison?.verdict === 'credible' && comparison.mean_delta > 0
+  }).length
+  const premiumRatios = frontierRows
+    .map(([, arm]) => arm.mean_cost_usd / comparator.mean_cost_usd)
+    .filter((ratio) => ratio >= 3)
+  const premiumRange = premiumRatios.length > 0
+    ? `${Math.floor(Math.min(...premiumRatios))}–${Math.round(Math.max(...premiumRatios))}×`
+    : '—'
+
+  return (
+    <div className="flex flex-col gap-4" data-testid="frontier-panel">
+      <div className="rounded-lg border border-signal-cyan/40 bg-signal-cyan/5 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="max-w-xl">
+            <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-signal-cyan">
+              Cross-family load-bearing test
+            </div>
+            <h3 className="mt-1 text-base font-mono text-eoc-primary">
+              No solo model beats the coordinated Qwen society on lives.
+            </h3>
+            <p className="mt-1 text-[11px] leading-relaxed text-eoc-secondary">
+              Frontier solos reach the same outcome ceiling, but most pay substantially more.
+              DeepSeek V4 Flash is the honest exception: it ties on lives and costs less.
+            </p>
+          </div>
+          <div className="rounded border border-signal-cyan/30 bg-eoc-ground/60 px-3 py-2 font-mono text-right">
+            <div className="text-[9px] uppercase tracking-widest text-eoc-secondary">Qwen society reference</div>
+            <div className="text-signal-cyan text-sm">{comparator.mean_lives_saved.toFixed(1)} lives</div>
+            <div className="text-[10px] text-eoc-secondary">
+              ${comparator.mean_cost_usd.toFixed(4)}/run · {comparator.lives_per_dollar.toFixed(0)} lives/$
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {[
+          [`${rows.length}`, 'solo models'],
+          [`${modelFamilies.size}`, 'model families'],
+          [`${soloWins}`, 'significant solo wins'],
+          [`${frontierTies}`, `frontier ties · most ${premiumRange} cost`],
+        ].map(([value, label]) => (
+          <div key={label} className="rounded border border-eoc-border bg-eoc-surface px-3 py-2 font-mono">
+            <div className="text-lg text-signal-cyan tabular-nums">{value}</div>
+            <div className="text-[9px] uppercase tracking-wider text-eoc-secondary">{label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="overflow-x-auto rounded-lg border border-eoc-border bg-eoc-surface">
+        <table className="w-full min-w-[820px] text-[10px] font-mono">
+          <thead>
+            <tr className="border-b border-eoc-border bg-eoc-raised/40 text-left uppercase tracking-wider text-eoc-secondary">
+              <th className="px-3 py-2">Solo model</th>
+              <th className="px-3 py-2">Family</th>
+              <th className="px-3 py-2 text-right">Lives ± SD</th>
+              <th className="px-3 py-2 text-right">Δ vs society</th>
+              <th className="px-3 py-2 text-right">Sign p</th>
+              <th className="px-3 py-2 text-right">Cost/run</th>
+              <th className="px-3 py-2">Cost comparison</th>
+              <th className="px-3 py-2">Outcome</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(([model, arm]) => {
+              const comparison = comparisons.get(model)
+              const outcome = outcomeLabel(comparison)
+              return (
+                <tr key={model} className="border-b border-eoc-raised hover:bg-eoc-raised/50">
+                  <td className="px-3 py-2 font-semibold text-eoc-primary">{modelLabel(model)}</td>
+                  <td className="px-3 py-2 text-eoc-secondary">{arm.family ?? '—'}</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-eoc-primary">
+                    {arm.mean_lives_saved.toFixed(1)} ± {arm.sd_lives_saved.toFixed(1)}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-eoc-primary">
+                    {comparison ? `${comparison.mean_delta >= 0 ? '+' : ''}${comparison.mean_delta.toFixed(1)}` : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-eoc-secondary">
+                    {comparison ? comparison.sign_test_p.toFixed(3) : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-eoc-secondary">
+                    ${arm.mean_cost_usd.toFixed(4)}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums text-eoc-secondary">
+                    {costComparison(arm.mean_cost_usd, comparator.mean_cost_usd)}
+                  </td>
+                  <td className="px-3 py-2 uppercase tracking-wider" style={{ color: outcome.color }}>
+                    {outcome.text}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[10px] font-mono leading-relaxed text-eoc-secondary">
+        Same 10 paired world seeds × 60 ticks. Δ = solo − society. “Ties society” means the
+        paired result is not credibly different under the benchmark’s CI + exact sign-test rule;
+        it is not a claim of identical outputs. Qwen inference is stochastic.
+      </p>
+    </div>
+  )
+}
+
 export function BenchTab() {
   const [results, setResults] = useState<BenchResult[]>([])
   const [determinism, setDeterminism] = useState<DeterminismReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [view, setView] = useState<'architecture' | 'frontier'>('architecture')
 
   const load = useCallback(() => {
     setLoading(true)
@@ -352,8 +520,8 @@ export function BenchTab() {
   // stats). For the headline benchmark view, prefer the most recent MULTI-ARM
   // result that carries a paired comparison, so the credibility card renders.
   // Falls back to `latest` when no result has paired stats.
-  // Headline the canonical published batch (the +28 result the narration + the
-  // evidence pack cite), else the most recent multi-arm result, else latest.
+  // Headline the refreshed canonical 4-arm batch, else the most recent
+  // multi-arm result, else latest.
   const headline =
     results.find((r) => r.canonical) ??
     results.find((r) => (r.paired_stats ?? []).length > 0) ??
@@ -364,10 +532,13 @@ export function BenchTab() {
   const methodN = pairedStats[0]?.n ?? headline.arms?.['scripted']?.n ?? 0
   const methodTreatments = pairedStats.map((c) => c.treatment).join(', ') || '—'
   const isHeadlineStale = headline !== latest && !headline.canonical
+  const frontier = results.find(
+    (result) => result.kind === 'panelA-cross-family-solo' && result.comparator,
+  )
 
   return (
     <div className="p-6 overflow-y-auto h-full">
-      <div className="max-w-3xl mx-auto flex flex-col gap-6">
+      <div className={`${view === 'frontier' ? 'max-w-6xl' : 'max-w-3xl'} mx-auto flex flex-col gap-6`}>
         <div className="flex items-center gap-3">
           <div className="w-2 h-2 rounded-full bg-signal-amber" />
           <h2 className="text-sm font-mono uppercase tracking-widest text-signal-amber">
@@ -375,7 +546,38 @@ export function BenchTab() {
           </h2>
         </div>
 
-        <DeterminismBadge report={determinism} />
+        {frontier && (
+          <div className="inline-flex w-fit rounded border border-eoc-border bg-eoc-surface p-1 font-mono text-[10px] uppercase tracking-wider">
+            <button
+              type="button"
+              onClick={() => setView('architecture')}
+              className={`rounded px-3 py-1.5 transition-colors ${
+                view === 'architecture'
+                  ? 'bg-signal-amber text-eoc-ground font-semibold'
+                  : 'text-eoc-secondary hover:text-eoc-primary'
+              }`}
+            >
+              Qwen 4-arm
+            </button>
+            <button
+              type="button"
+              onClick={() => setView('frontier')}
+              className={`rounded px-3 py-1.5 transition-colors ${
+                view === 'frontier'
+                  ? 'bg-signal-cyan text-eoc-ground font-semibold'
+                  : 'text-eoc-secondary hover:text-eoc-primary'
+              }`}
+            >
+              12-model frontier
+            </button>
+          </div>
+        )}
+
+        {view === 'frontier' && frontier ? (
+          <FrontierPanel result={frontier} />
+        ) : (
+          <>
+            <DeterminismBadge report={determinism} />
 
         {isHeadlineStale && (
           <div className="text-[10px] font-mono text-eoc-secondary border border-eoc-border rounded px-2 py-1 bg-eoc-surface">
@@ -451,6 +653,8 @@ export function BenchTab() {
               </table>
             </div>
           </div>
+        )}
+          </>
         )}
       </div>
     </div>
