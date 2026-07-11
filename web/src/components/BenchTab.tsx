@@ -324,10 +324,13 @@ function outcomeLabel(comparison: PairedComparison | undefined): {
   text: string
   color: string
 } {
-  if (comparison?.verdict === 'credible' && comparison.mean_delta > 0) {
+  if (!comparison) {
+    return { text: 'insufficient data', color: FALLBACK_COLOR }
+  }
+  if (comparison.verdict === 'credible' && comparison.mean_delta > 0) {
     return { text: 'solo wins', color: STATUS_COLORS.resolved }
   }
-  if (comparison?.verdict === 'credible' && comparison.mean_delta < 0) {
+  if (comparison.verdict === 'credible' && comparison.mean_delta < 0) {
     return { text: 'below society', color: STATUS_COLORS.failed }
   }
   return { text: 'ties society', color: VERDICT_COLORS.suggestive }
@@ -351,9 +354,11 @@ function FrontierPanel({ result }: { result: BenchResult }) {
   })
   const modelFamilies = new Set(rows.map(([model]) => model.split('/')[0]))
   const frontierRows = rows.filter(([, arm]) => arm.family?.includes('frontier'))
+  const missingComparisons = rows.filter(([model]) => !comparisons.has(model)).length
+  const hasCompleteComparisons = missingComparisons === 0
   const frontierTies = frontierRows.filter(([model]) => {
     const comparison = comparisons.get(model)
-    return comparison?.verdict !== 'credible'
+    return comparison != null && comparison.verdict !== 'credible'
   }).length
   const soloWins = rows.filter(([model]) => {
     const comparison = comparisons.get(model)
@@ -375,11 +380,22 @@ function FrontierPanel({ result }: { result: BenchResult }) {
               Cross-family load-bearing test
             </div>
             <h3 className="mt-1 text-base font-mono text-eoc-primary">
-              No solo model beats the coordinated Qwen society on lives.
+              {hasCompleteComparisons
+                ? 'No solo model beats the coordinated Qwen society on lives.'
+                : 'Some solo models lack a paired comparison.'}
             </h3>
             <p className="mt-1 text-[11px] leading-relaxed text-eoc-secondary">
-              Frontier solos reach the same outcome ceiling, but most pay substantially more.
-              DeepSeek V4 Flash is the honest exception: it ties on lives and costs less.
+              {hasCompleteComparisons ? (
+                <>
+                  Frontier solos reach the same outcome ceiling, but most pay substantially more.
+                  DeepSeek V4 Flash is the honest exception: it ties on lives and costs less.
+                </>
+              ) : (
+                <>
+                  Rows without shared seeds are marked insufficient data and excluded from the tie
+                  and win counts; the available paired results remain visible below.
+                </>
+              )}
             </p>
           </div>
           <div className="rounded border border-signal-cyan/30 bg-eoc-ground/60 px-3 py-2 font-mono text-right">
@@ -455,7 +471,8 @@ function FrontierPanel({ result }: { result: BenchResult }) {
       <p className="text-[10px] font-mono leading-relaxed text-eoc-secondary">
         Same 10 paired world seeds × 60 ticks. Δ = solo − society. “Ties society” means the
         paired result is not credibly different under the benchmark’s CI + exact sign-test rule;
-        it is not a claim of identical outputs. Qwen inference is stochastic.
+        it is not a claim of identical outputs. Rows without a paired comparison are marked
+        “insufficient data” and excluded from tie and win counts. Qwen inference is stochastic.
       </p>
     </div>
   )

@@ -160,4 +160,21 @@ describe('BenchTab — paired stats credibility', () => {
     expect(screen.getByText('4.3× cheaper')).toBeInTheDocument()
     expect(screen.getAllByText('ties society')).toHaveLength(2)
   })
+
+  it('marks missing panel comparisons as insufficient data and excludes them from tie counts', async () => {
+    const incompleteFrontier: BenchResult = {
+      ...frontierResult,
+      panel_stats: [frontierResult.panel_stats![0]],
+    }
+    vi.mocked(api.bench).mockResolvedValue([benchResult, incompleteFrontier])
+    render(<BenchTab />)
+    const panelButton = await screen.findByRole('button', { name: /12-model frontier/i })
+    fireEvent.click(panelButton)
+
+    expect(screen.getByText(/Some solo models lack a paired comparison/i)).toBeInTheDocument()
+    expect(screen.getByText('insufficient data')).toBeInTheDocument()
+    expect(screen.getAllByText('ties society')).toHaveLength(1)
+    expect(screen.getByText(/excluded from tie and win counts/i)).toBeInTheDocument()
+  })
+
 })
