@@ -161,6 +161,7 @@ describe('BenchTab — paired stats credibility', () => {
     expect(screen.getAllByText('ties society')).toHaveLength(2)
   })
 
+  // Missing comparisons are unavailable evidence, never statistical ties.
   it('marks missing panel comparisons as insufficient data and excludes them from tie counts', async () => {
     const incompleteFrontier: BenchResult = {
       ...frontierResult,
