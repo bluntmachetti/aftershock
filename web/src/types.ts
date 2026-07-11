@@ -337,13 +337,28 @@ export interface BenchArm {
   sd_lives_saved: number
   mean_cost_usd: number
   lives_per_dollar?: number
+  family?: string
   mean_missions_resolved?: number
   mean_missions_failed?: number
+}
+
+export interface BenchComparator {
+  name: string
+  mean_lives_saved: number
+  mean_cost_usd: number
+  lives_per_dollar: number
+  paired: Record<string, number>
 }
 
 export interface BenchResult {
   arms: Record<string, BenchArm>
   paired?: Record<string, Record<string, number>>
+  kind?: string
+  comparator?: BenchComparator
+  // Cross-family solo-model comparisons against the separately stored Qwen
+  // society comparator. Computed by the server with the same stats adapter as
+  // paired_stats so the UI never derives significance itself.
+  panel_stats?: PairedComparison[]
   // Server-computed paired control-vs-treatment stats (Day 2). One entry per
   // non-control arm sharing seeds with the `scripted` control; absent/empty when
   // no common seeds. The BenchTab renders CI whiskers + sign-test p + power +

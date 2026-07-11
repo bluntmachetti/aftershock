@@ -10,13 +10,14 @@ Aftershock
 
 ### Elevator pitch
 
-A disaster-response society of Qwen agents that negotiates scarce resources and proves — with receipts — when small coordinated models match one big model at lower cost.
+A benchmark and live observatory where a society of small Qwen agents negotiates scarce resources
+and matches frontier solo models at lower cost — with a receipt for every claim.
 
 ### Try it out links
 
 - Live demo: https://aftershock.redoubtlabs.dev
 - GitHub repo: https://github.com/bluntmachetti/aftershock
-- Benchmark results: https://github.com/bluntmachetti/aftershock/tree/main/bench/results/2026-06-11
+- Four-arm Qwen benchmark: https://github.com/bluntmachetti/aftershock/tree/main/bench/results/2026-06-22-4arm-refresh
 - Cross-family panel (12 models, 10 families): https://github.com/bluntmachetti/aftershock/tree/main/bench/results/2026-07-01-panelA-solo
 - Evidence pack (every number → source file): https://github.com/bluntmachetti/aftershock/blob/main/docs/EVIDENCE.md
 - NYC Ida scenario pack: https://github.com/bluntmachetti/aftershock/tree/main/scenarios/nyc-ida-2021
@@ -34,13 +35,14 @@ Months of experimenting with long-running multi-agent simulations taught me an u
 lesson: many "agent teams" are theater. Agents chat, agree with each other, duplicate work, and a
 single strong model with a good prompt quietly outperforms them.
 
-The interesting question is not *can* agents collaborate. It is *when is a society of small models
-actually better than one big model, and can you prove it?*
+The interesting question is not *can* agents collaborate. It is *when does coordination let a
+society of small models match a much larger model, what does it cost, and can you prove it?*
 
-Aftershock answers that question in an unforgiving setting: disaster response, where coordination
-failures cost lives. It asks a concrete question: can a structured society of Qwen agents split
-work, negotiate over scarce resources, and save as many simulated lives as a flagship solo model at
-lower cost — and can every claim be inspected rather than taken on faith?
+Aftershock answers that question in an unforgiving simulated setting: disaster response, where
+coordination failures have measurable consequences. It asks whether a structured society of Qwen
+agents can split work, negotiate over scarce resources, and reach the same outcome as a flagship
+solo model at lower cost — while making every claim inspectable rather than asking judges to take it
+on faith.
 
 ### What it does
 
@@ -49,8 +51,8 @@ societies.
 
 A disaster hits a simulated city. Missions appear on the map: flooded neighborhoods, a collapsed
 school with people trapped, a hospital running on generator fuel. A society of Qwen agents with
-distinct roles must respond: incident commander, medical, fire and rescue, logistics,
-infrastructure, and public communications.
+six distinct roles must respond: incident commander, medical, fire, rescue, infrastructure, and
+public communications.
 
 The project has four core pieces:
 
@@ -71,23 +73,34 @@ The project has four core pieces:
   "agent-stated," never dressed up as ground truth), the token cost, and the recorded outcome. A
   one-page **Evidence Pack** ties every headline number to a source file in the repo.
 
-The headline result is about cost-efficiency: six cheap qwen3.5-flash workers with a qwen3.5-plus
-commander coordinate to match expert scripted heuristics (106.8 lives) and a single big qwen3-max
-solo agent (95.6 lives) on lives saved — 108.4 lives at ~$0.035/run (~3,070 lives/$), about 16%
-cheaper per run than our first benchmark and over 50% better lives-per-dollar than the solo big
-model. A second robust finding: written doctrine raises team conformance by a credible margin
-(+0.125, sign-test p=0.031, positive on 6/6 seeds).
-(Honest caveat on the swarm comparison: against the flat protocol-free swarm the society saves a
-small, directionally-consistent edge — +8.9 lives at n=15 paired seeds, society wins 11/15 — that is
-**suggestive, not significant** (bootstrap 95% CI [+2.3,+15.4] excludes 0, but paired sign-test
-p=0.118 does not clear significance). An earlier n=5 measurement read ~+28 lives; firming to 15 seeds
-collapsed it to +8.9, so we present the swarm edge as suggestive, not significant. See
-[EVIDENCE.md §3](EVIDENCE.md#3-the-benchmark-result).)
+The headline result is about **cost-efficiency, not a claim that more agents save more lives**. In
+the four-arm Qwen benchmark, five qwen3.5-flash role workers under a qwen3.5-plus commander save
+108.4 simulated lives at about $0.035 per run (~3,070 lives/$). That matches expert scripted
+heuristics (106.8) and the qwen3-max solo arm (95.6), while delivering over 50% better
+lives-per-dollar than the solo Qwen flagship.
 
-Every run is replayable. Same seed plus same decisions gives the same outcome, byte for byte. The
-web observatory lets judges scrub through ticks, inspect agent decisions, open a decision receipt for
-any ruling, compare arms with confidence intervals and significance tests, start live runs, follow a
-guided walkthrough, and view an honest real-data scenario based on NYC Hurricane Ida.
+We then ran the load-bearing test: the identical solo arm on 12 models from 10 families, over 10
+paired seeds each. No solo model beat the coordinated Qwen society on lives. Eight frontier models
+only tied its outcome, and most cost 3–14× more per run. The honest exception is DeepSeek V4 Flash,
+which tied on lives and beat the society on cost. The conclusion is therefore precise: coordination
+can substitute for model scale on this decomposable task, and usually does so much more cheaply; it
+does not magically raise the outcome ceiling.
+
+Two further results keep that conclusion honest. Written doctrine raises team conformance by a
+credible +0.125 (positive on 6/6 paired seeds, sign-test p=0.031) at no detectable cost in lives.
+Against the flat protocol-free swarm, however, the society's +8.9-life edge at n=15 is
+**suggestive, not significant**: its bootstrap 95% CI [+2.3,+15.4] excludes zero, but the paired
+sign-test p=0.118 does not. An earlier n=5 estimate of about +28 lives collapsed when we added ten
+seeds; the benchmark caught its own ghost, and we corrected the headline rather than hiding it. The
+full evidence trail is in the
+[Evidence Pack](https://github.com/bluntmachetti/aftershock/blob/main/docs/EVIDENCE.md#3-the-benchmark-result).
+
+Recorded runs are replayable, and the simulator has a strict determinism boundary: the same world
+seed plus the same recorded decisions produces the same outcome byte-for-byte. Qwen inference itself
+is not claimed to be deterministic. The web observatory lets judges scrub through those records,
+inspect agent decisions, open a Decision Receipt for any contested ruling, compare arms with
+confidence intervals and significance tests, branch counterfactual what-if runs, watch live runs,
+and explore an honestly labelled real-data scenario based on NYC Hurricane Ida.
 
 ### How we built it
 
@@ -147,12 +160,15 @@ not more prompting alone. We needed engine-side validation, named rejection reas
 rejection memory in the next observations.
 
 The second challenge was proving the society mattered. If every arm sees a different world, the
-benchmark is just a story. Aftershock therefore uses paired deterministic seeds: the solo agent, the
-swarm, the scripted baseline, and the society all face byte-identical disasters — and it reports the
-result honestly. At fifteen paired seeds the protocol's edge over the swarm is suggestive, not
-statistically significant (+8.9 lives, society wins 11/15, bootstrap 95% CI [+2.3,+15.4] excludes 0,
-but sign-test p=0.118 does not clear significance), so the benchmark surfaces confidence intervals
-and significance tests rather than a single triumphant number.
+benchmark is just a story. Aftershock therefore uses paired world seeds: the solo agent, swarm,
+scripted baseline, and society face byte-identical disasters. Because Qwen output is stochastic, we
+pair the worlds rather than pretending the LLM calls are reproducible, and report confidence
+intervals, exact paired sign-tests, and statistical power beside each delta.
+
+That discipline changed the pitch. At five seeds, society appeared to beat the flat swarm by about
+28 lives. At fifteen seeds the mean fell to +8.9 and failed the paired sign-test, so we downgraded it
+to suggestive. Cross-family testing then showed that genuine frontier solo models reach the same
+outcome ceiling. The durable win is cost-efficiency, not a universal lives advantage for societies.
 
 The third challenge was honesty around real data. NYC Open Data gives real incident timing and
 response latency, but not real "lives saved" for our simulated missions. The UI had to show that
@@ -165,7 +181,8 @@ boundary clearly instead of hiding it in a footnote.
 - A benchmark that compares architecture choices under identical seeded worlds.
 - A 12-model, 10-family cross-family panel showing the cost-efficiency win isn't a Qwen artifact:
   no solo model (GPT-5, Gemini 3.1 Pro, Claude Opus 4.8, DeepSeek, Kimi, GLM, …) beats the cheap
-  coordinated Qwen society on lives, and the frontier only ties it at 3–14× the cost.
+  coordinated Qwen society on lives. Most frontier models only tie it at 3–14× the cost; DeepSeek
+  V4 Flash is the documented exception that ties the outcome and costs less.
 - An honesty layer judges can audit: per-decision evidence receipts, confidence intervals and
   significance tests beside every result (weak effects labelled suggestive), a determinism-verified
   reproducibility badge, and a citable one-page evidence pack.
@@ -178,34 +195,19 @@ boundary clearly instead of hiding it in a footnote.
 
 ### What we learned
 
-The strongest result is that coordination structure matters more than agent count.
+The strongest lesson is that **coordination can substitute for model scale when the work is
+decomposable and the models are above a capability floor**. A society of small Qwen models reaches
+the same outcome ceiling as frontier solo models, usually at a fraction of their cost. More agents
+alone are not the answer: the flat swarm remains at the uncoordinated floor, while the structured
+society gives roles a typed mechanism for exposing and resolving resource contention.
 
-A flat protocol-free swarm of cheap qwen3.5-flash agents saves fewer lives than the same models
-inside a structured society — but the gap is small. The difference, where it exists, is not model
-intelligence; it is the mechanism that turns resource contention into explicit information before
-agents waste actions.
-(Honest read on the swarm edge: at n=15 paired seeds the society saves +8.9 lives over the swarm and
-wins 11/15, an effect that is **suggestive, not significant** — bootstrap 95% CI [+2.3,+15.4] excludes
-0, but paired sign-test p=0.118 does not clear significance. An earlier n=5 measurement read ~+28
-lives, but one seed dominated; firming to 15 seeds collapsed it. We report the swarm edge as
-suggestive, not significant —
-[EVIDENCE.md §3](EVIDENCE.md#3-the-benchmark-result). The most robust effect we report is the
-deterministic doctrine-conformance lever: +0.125 team alignment, credible at n=6, positive on all 6
-seeds, sign-test p=0.031 ([EVIDENCE.md §5](EVIDENCE.md#5-qwen-track-framing-verified-numbers-only)).)
-
-We also learned that a society of small models can match a flagship solo model when the task is
-decomposable. The structured society saved 108.4 lives per run versus 95.6 for qwen3-max solo, and
-at ~$0.035/run delivered over 50% better lives-per-dollar.
-
-And because every result here rides on Qwen, we ran the load-bearing test: is "a cheap coordinated
-society matches one big model" just a Qwen artifact? We put the solo arm on **12 models from 10
-families** — GPT-5, Gemini 3.1 Pro, Claude Opus 4.8, Grok, DeepSeek V4 Pro/Flash, Kimi, GLM, Llama,
-Mistral — over the same paired seeds. **No solo model beats the cheap all-flash Qwen society on
-lives; the eight frontier models only tie it, and pay 3–14× more to do so.** That forced one honest
-correction — cross-family, a genuine frontier solo *reaches* the outcome ceiling, so the society's
-win is on **cost-efficiency**, not lives — and it makes the headline stronger, not weaker: cheap
-Qwen models plus a coordination harness hold their own against the entire frontier at a fraction of
-the cost.
+The qualification matters. The measured society-versus-swarm lives edge is suggestive rather than
+significant, and a very small local Qwen model cannot carry the protocol at all. Coordination is an
+engineering substitute for some model scale, not a free replacement for capability. The most
+statistically credible behavioral lever is written doctrine: +0.125 team alignment at n=6,
+positive on all six seeds, p=0.031, with no detectable lives penalty. The verified numbers and
+qualification rules are collected in the
+[Evidence Pack](https://github.com/bluntmachetti/aftershock/blob/main/docs/EVIDENCE.md#5-qwen-track-framing-verified-numbers-only).
 
 The uncomfortable lesson is that the protocol carries more of the result than the LLMs do.
 Well-tuned scripted agents using the same coordination protocol remain competitive. That is not a
@@ -217,10 +219,13 @@ measurement, not just more agents talking.
 Next we want to turn Aftershock into a general benchmark harness for agent societies:
 
 - More real-data scenario packs from different hazards and cities.
-- A public leaderboard comparing society architectures against solo and swarm baselines.
+- A public leaderboard comparing society architectures against solo, swarm, and cross-family
+  frontier baselines.
 - More seeds per result so today's suggestive edges become statistically settled.
 - Better memory loops where lessons are expressed in the agents' actual action space.
 - More MCP tools for external spectators and human-in-the-loop incident injection.
+- A schema-driven society-pack interface so other domains can replace the disaster roles,
+  resources, actions, scoring, and UI vocabulary without replacing the deterministic kernel.
 - Community-contributed role packs and doctrine files.
 
 The larger goal is to make multi-agent systems falsifiable: not "look how many agents are talking,"
@@ -238,8 +243,8 @@ Aftershock uses Qwen Cloud compatible chat completions for the LLM arms:
 - `qwen3-max` for the solo baseline and after-action analysis.
 
 The benchmark reports token usage and cost per run, so Qwen usage is visible in the results rather
-than hidden behind the demo. A full six-role society run costs about four cents
-(~171k prompt + 24k completion tokens; flash workers + a plus commander).
+than hidden behind the demo. In the refreshed four-arm benchmark, a full six-agent society run —
+five flash workers plus a plus commander — costs about $0.035.
 
 **Native function calling — implemented and measured.** Beyond strict-JSON contracts, the society
 also speaks Qwen Cloud **native function calling**: per-role `tools`, `tool_choice="auto"`,
@@ -270,21 +275,21 @@ https://github.com/bluntmachetti/aftershock
 Eight beats + an architecture beat, ~2:53 of narration. VO lines below are final and feed the TTS
 pass verbatim (DashScope `qwen3-tts-instruct-flash`, voice **Ethan**, documentary pace); the "SHOW"
 line is the captured UI footage cut under each line. Numbers match
-[the README results table](../README.md#results-live-benchmark-2026-06-11). Source narration +
+[the README results table](../README.md#results-live-benchmark-2026-06-22). Source narration +
 durations live in `media/vo/beat*.json`; the cut is assembled by `media/build.sh`.
 
 ### 1 · Hook (0:00–0:20)
 
 VO: "Most multi-agent demos are theater. Agents chat, agree, and a single big model quietly wins.
-Aftershock asks a harder question: when does a society of small models actually save more lives than
-one big model, and can you prove it?"
+Aftershock asks a harder question: when can a society of small models match a frontier model for
+less, and can you prove it?"
 
 SHOW: title card → live map at `aftershock.redoubtlabs.dev`, missions appearing.
 
 ### 2 · The mechanism (0:20–0:43)
 
 VO: "It's a disaster-response simulator. Six Qwen agents — commander, medical, fire, rescue,
-logistics, and comms — don't just talk. They emit typed decisions and negotiate over scarce
+infrastructure, and comms — don't just talk. They emit typed decisions and negotiate over scarce
 ambulances and crews through a proposal protocol. The engine validates every action, rejects bad
 ones with a reason, and resolves contention in an auction every single tick."
 
@@ -302,7 +307,7 @@ kernel-ruling / agent-stated-rationale / cost / outcome chain.
 
 ### 3 · The proof (1:00–1:39)
 
-VO: "Same disaster, run four ways on byte-identical seeds. Here's the comparison that matters: six
+VO: "Same disaster, run four ways on byte-identical seeds. Here's the comparison that matters: five
 cheap flash workers and a plus commander, coordinating, save as many lives as expert scripted
 heuristics and a single big model — about a hundred and eight lives — for three and a half cents a
 run. That's over fifty percent better lives-per-dollar than the solo big model. And written doctrine
@@ -366,7 +371,7 @@ SHOW: final NYC Ida scoreboard / map, then the live URL card.
    deployed observatory): one clip per beat scripted to the matching VO length; replay/scrub recorded
    runs (no live-LLM latency on camera). The NYC beats use the `seed91-society` Ida run; the society
    + Decision-Receipt beats use a `seed42-society` run. The Bench beat reads the canonical
-   `2026-06-11` batch (pinned as the headline batch so it matches the narration).
+   `2026-06-22-4arm-refresh` batch (pinned as the headline batch so it matches the narration).
 3. **Title/section cards**: lower-thirds for the key numbers (~$0.035/run · ~3,070 lives/$,
    108.4 lives vs 95.6 solo, doctrine conformance +0.125 (n=6, p=0.031), 948 s, 16% held) via
    ffmpeg drawtext. If the swarm edge appears, render it "+9 lives (n=15, directional, not

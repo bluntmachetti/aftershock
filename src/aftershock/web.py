@@ -118,10 +118,9 @@ _MAX_PENDING_INJECTIONS = 50
 _LLM_ARMS = ("solo", "swarm", "society")
 
 # The canonical published 4-arm benchmark batch (bench/results/<dir>/). BenchTab
-# headlines THIS batch — the +28 society-vs-swarm result the narration + evidence
-# pack cite — rather than the newest-by-mtime one, so later research-ablation
-# batches stay available via /api/bench but never headline the judge-facing view.
-_CANONICAL_BENCH_DIR = "2026-06-11"
+# headlines this refreshed batch rather than whichever research ablation happens
+# to have the newest mtime.
+_CANONICAL_BENCH_DIR = "2026-06-22-4arm-refresh"
 
 # Cached scripted-engine determinism check (GET /api/determinism). The verify
 # re-run is ~seconds for the scripted arm; cache it per-process so the BenchTab
@@ -544,6 +543,22 @@ def _collect_bench_results(bench_root: Path) -> list[dict[str, Any]]:
                     data["paired"],
                     provenance=prov if isinstance(prov, dict) else None,
                 )
+                # Cross-family panels carry their coordinated society baseline
+                # separately from the solo-model `paired` table. Fold that
+                # comparator into a temporary table and compute the same honest
+                # server-side statistics used by the 4-arm view; the browser must
+                # never reimplement significance tests.
+                comparator = data.get("comparator")
+                comparator_paired = (
+                    comparator.get("paired") if isinstance(comparator, dict) else None
+                )
+                if isinstance(comparator_paired, dict):
+                    panel_paired = {"society": comparator_paired, **data["paired"]}
+                    data["panel_stats"] = paired_comparisons(
+                        panel_paired,
+                        control="society",
+                        provenance=prov if isinstance(prov, dict) else None,
+                    )
         served.append(data)
     return served
 

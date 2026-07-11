@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { BenchTab } from '../BenchTab'
 import { api } from '../../lib/api'
 import type { BenchResult, DeterminismReport, PairedComparison } from '../../types'
@@ -62,6 +62,39 @@ const determinismReport: DeterminismReport = {
   note: 'Two seeded scripted runs produce identical world-digest sequences. DashScope ignores `seed`, so LLM/society arms are NOT reproducible.',
 }
 
+const frontierResult: BenchResult = {
+  kind: 'panelA-cross-family-solo',
+  arms: {
+    'openai/gpt-5': {
+      family: 'US frontier',
+      n: 10,
+      mean_lives_saved: 107.6,
+      sd_lives_saved: 16.9,
+      mean_cost_usd: 0.3399,
+      lives_per_dollar: 317,
+    },
+    'deepseek/deepseek-v4-flash': {
+      family: 'CN frontier',
+      n: 10,
+      mean_lives_saved: 103.4,
+      sd_lives_saved: 11.9,
+      mean_cost_usd: 0.0058,
+      lives_per_dollar: 17782,
+    },
+  },
+  comparator: {
+    name: 'cheap Qwen society',
+    mean_lives_saved: 106,
+    mean_cost_usd: 0.0248,
+    lives_per_dollar: 4272,
+    paired: {},
+  },
+  panel_stats: [
+    { ...noiseCmp, control: 'society', treatment: 'openai/gpt-5', mean_delta: 1.6 },
+    { ...noiseCmp, control: 'society', treatment: 'deepseek/deepseek-v4-flash', mean_delta: -2.6 },
+  ],
+}
+
 beforeEach(() => {
   vi.mocked(api.bench).mockReset()
   vi.mocked(api.determinism).mockReset()
@@ -112,5 +145,19 @@ describe('BenchTab — paired stats credibility', () => {
     )
     // The badge must NOT imply LLM/society arms are reproducible.
     expect(screen.getByText(/NOT reproducible/i)).toBeInTheDocument()
+  })
+
+  it('renders the cross-family panel with the Qwen reference and honest exception', async () => {
+    vi.mocked(api.bench).mockResolvedValue([benchResult, frontierResult])
+    render(<BenchTab />)
+    const panelButton = await screen.findByRole('button', { name: /12-model frontier/i })
+    fireEvent.click(panelButton)
+
+    expect(screen.getByTestId('frontier-panel')).toBeInTheDocument()
+    expect(screen.getByText(/No solo model beats/i)).toBeInTheDocument()
+    expect(screen.getByText('GPT-5')).toBeInTheDocument()
+    expect(screen.getByText('DeepSeek V4 Flash')).toBeInTheDocument()
+    expect(screen.getByText('4.3× cheaper')).toBeInTheDocument()
+    expect(screen.getAllByText('ties society')).toHaveLength(2)
   })
 })

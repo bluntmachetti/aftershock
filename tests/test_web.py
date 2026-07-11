@@ -420,6 +420,48 @@ def test_bench_paired_stats_omits_no_common_seeds(
         assert result.get("paired_stats") == []
 
 
+def test_bench_serves_cross_family_panel_stats(runs_root: Path, tmp_path: Path) -> None:
+    """A panel comparator is exposed as the paired control without client-side stats."""
+    bench_root = tmp_path / "panel_results"
+    panel = bench_root / "2026-07-01-panelA-solo"
+    panel.mkdir(parents=True)
+    results = {
+        "kind": "panelA-cross-family-solo",
+        "arms": {
+            "openai/gpt-test": {
+                "family": "US frontier",
+                "n": 3,
+                "mean_lives_saved": 102.0,
+                "sd_lives_saved": 2.0,
+                "mean_cost_usd": 0.30,
+            }
+        },
+        "paired": {"openai/gpt-test": {1: 102.0, 2: 98.0, 3: 106.0}},
+        "comparator": {
+            "name": "cheap Qwen society",
+            "mean_lives_saved": 100.0,
+            "mean_cost_usd": 0.025,
+            "lives_per_dollar": 4000.0,
+            "paired": {1: 100.0, 2: 100.0, 3: 100.0},
+        },
+    }
+    (panel / "results.json").write_text(json.dumps(results), encoding="utf-8")
+
+    app = create_app(runs_root, bench_root=bench_root)
+    with TestClient(app) as client:
+        response = client.get("/api/bench")
+
+    assert response.status_code == 200
+    served = response.json()[0]
+    assert served["paired_stats"] == []  # no scripted control in this panel
+    assert len(served["panel_stats"]) == 1
+    comparison = served["panel_stats"][0]
+    assert comparison["control"] == "society"
+    assert comparison["treatment"] == "openai/gpt-test"
+    assert comparison["n"] == 3
+    assert comparison["mean_delta"] == 2.0
+
+
 # ---------------------------------------------------------------------------
 # Tests: /api/live status when no run
 # ---------------------------------------------------------------------------
