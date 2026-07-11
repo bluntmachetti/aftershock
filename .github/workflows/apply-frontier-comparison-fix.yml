@@ -2,7 +2,7 @@ name: Apply frontier comparison fix
 
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize]
 
 permissions:
   contents: write
@@ -17,131 +17,102 @@ jobs:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
 
-      - name: Apply reviewed fix and regression test
+      - name: Apply reviewed patch
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          component_path = Path('web/src/components/BenchTab.tsx')
-          component = component_path.read_text()
-
-          old_outcome = """function outcomeLabel(comparison: PairedComparison | undefined): {
-            text: string
-            color: string
-          } {
-            if (comparison?.verdict === 'credible' && comparison.mean_delta > 0) {
-              return { text: 'solo wins', color: STATUS_COLORS.resolved }
-            }
-            if (comparison?.verdict === 'credible' && comparison.mean_delta < 0) {
-              return { text: 'below society', color: STATUS_COLORS.failed }
-            }
-            return { text: 'ties society', color: VERDICT_COLORS.suggestive }
-          }
-          """
-          new_outcome = """function outcomeLabel(comparison: PairedComparison | undefined): {
-            text: string
-            color: string
-          } {
-            if (!comparison) {
-              return { text: 'insufficient data', color: FALLBACK_COLOR }
-            }
-            if (comparison.verdict === 'credible' && comparison.mean_delta > 0) {
-              return { text: 'solo wins', color: STATUS_COLORS.resolved }
-            }
-            if (comparison.verdict === 'credible' && comparison.mean_delta < 0) {
-              return { text: 'below society', color: STATUS_COLORS.failed }
-            }
-            return { text: 'ties society', color: VERDICT_COLORS.suggestive }
-          }
-          """
-          assert old_outcome in component
-          component = component.replace(old_outcome, new_outcome)
-
-          old_counts = """  const modelFamilies = new Set(rows.map(([model]) => model.split('/')[0]))
-            const frontierRows = rows.filter(([, arm]) => arm.family?.includes('frontier'))
-            const frontierTies = frontierRows.filter(([model]) => {
-              const comparison = comparisons.get(model)
-              return comparison?.verdict !== 'credible'
-            }).length
-          """
-          new_counts = """  const modelFamilies = new Set(rows.map(([model]) => model.split('/')[0]))
-            const frontierRows = rows.filter(([, arm]) => arm.family?.includes('frontier'))
-            const missingComparisons = rows.filter(([model]) => !comparisons.has(model)).length
-            const hasCompleteComparisons = missingComparisons === 0
-            const frontierTies = frontierRows.filter(([model]) => {
-              const comparison = comparisons.get(model)
-              return comparison != null && comparison.verdict !== 'credible'
-            }).length
-          """
-          assert old_counts in component
-          component = component.replace(old_counts, new_counts)
-
-          old_intro = """            <h3 className=\"mt-1 text-base font-mono text-eoc-primary\">
-                            No solo model beats the coordinated Qwen society on lives.
-                          </h3>
-                          <p className=\"mt-1 text-[11px] leading-relaxed text-eoc-secondary\">
-                            Frontier solos reach the same outcome ceiling, but most pay substantially more.
-                            DeepSeek V4 Flash is the honest exception: it ties on lives and costs less.
-                          </p>
-          """
-          new_intro = """            <h3 className=\"mt-1 text-base font-mono text-eoc-primary\">
-                            {hasCompleteComparisons
-                              ? 'No solo model beats the coordinated Qwen society on lives.'
-                              : 'Some solo models lack a paired comparison.'}
-                          </h3>
-                          <p className=\"mt-1 text-[11px] leading-relaxed text-eoc-secondary\">
-                            {hasCompleteComparisons ? (
-                              <>
-                                Frontier solos reach the same outcome ceiling, but most pay substantially more.
-                                DeepSeek V4 Flash is the honest exception: it ties on lives and costs less.
-                              </>
-                            ) : (
-                              <>
-                                Rows without shared seeds are marked insufficient data and excluded from the tie
-                                and win counts; the available paired results remain visible below.
-                              </>
-                            )}
-                          </p>
-          """
-          assert old_intro in component
-          component = component.replace(old_intro, new_intro)
-
-          old_note = """        paired result is not credibly different under the benchmark’s CI + exact sign-test rule;
-                  it is not a claim of identical outputs. Qwen inference is stochastic.
-          """
-          new_note = """        paired result is not credibly different under the benchmark’s CI + exact sign-test rule;
-                  it is not a claim of identical outputs. Rows without a paired comparison are marked
-                  “insufficient data” and excluded from tie and win counts. Qwen inference is stochastic.
-          """
-          assert old_note in component
-          component = component.replace(old_note, new_note)
-          component_path.write_text(component)
-
-          test_path = Path('web/src/components/__tests__/BenchTab.test.tsx')
-          tests = test_path.read_text()
-          new_test = """
-
-            it('marks missing panel comparisons as insufficient data and excludes them from tie counts', async () => {
-              const incompleteFrontier: BenchResult = {
-                ...frontierResult,
-                panel_stats: [frontierResult.panel_stats![0]],
-              }
-              vi.mocked(api.bench).mockResolvedValue([benchResult, incompleteFrontier])
-              render(<BenchTab />)
-              const panelButton = await screen.findByRole('button', { name: /12-model frontier/i })
-              fireEvent.click(panelButton)
-
-              expect(screen.getByText(/Some solo models lack a paired comparison/i)).toBeInTheDocument()
-              expect(screen.getByText('insufficient data')).toBeInTheDocument()
-              expect(screen.getAllByText('ties society')).toHaveLength(1)
-              expect(screen.getByText(/excluded from tie and win counts/i)).toBeInTheDocument()
-            })
-          """
-          marker = "\n})\n"
-          assert tests.endswith(marker)
-          tests = tests[:-len(marker)] + new_test + marker
-          test_path.write_text(tests)
-          PY
+          cat > /tmp/frontier-fix.patch <<'PATCH'
+          --- a/web/src/components/BenchTab.tsx
+          +++ b/web/src/components/BenchTab.tsx
+          @@ -324,10 +324,13 @@
+             text: string
+             color: string
+           } {
+          -  if (comparison?.verdict === 'credible' && comparison.mean_delta > 0) {
+          +  if (!comparison) {
+          +    return { text: 'insufficient data', color: FALLBACK_COLOR }
+          +  }
+          +  if (comparison.verdict === 'credible' && comparison.mean_delta > 0) {
+               return { text: 'solo wins', color: STATUS_COLORS.resolved }
+             }
+          -  if (comparison?.verdict === 'credible' && comparison.mean_delta < 0) {
+          +  if (comparison.verdict === 'credible' && comparison.mean_delta < 0) {
+               return { text: 'below society', color: STATUS_COLORS.failed }
+             }
+             return { text: 'ties society', color: VERDICT_COLORS.suggestive }
+          @@ -351,9 +354,11 @@
+             })
+             const modelFamilies = new Set(rows.map(([model]) => model.split('/')[0]))
+             const frontierRows = rows.filter(([, arm]) => arm.family?.includes('frontier'))
+          +  const missingComparisons = rows.filter(([model]) => !comparisons.has(model)).length
+          +  const hasCompleteComparisons = missingComparisons === 0
+             const frontierTies = frontierRows.filter(([model]) => {
+               const comparison = comparisons.get(model)
+          -    return comparison?.verdict !== 'credible'
+          +    return comparison != null && comparison.verdict !== 'credible'
+             }).length
+             const soloWins = rows.filter(([model]) => {
+               const comparison = comparisons.get(model)
+          @@ -375,11 +380,22 @@
+                         Cross-family load-bearing test
+                       </div>
+                       <h3 className="mt-1 text-base font-mono text-eoc-primary">
+          -              No solo model beats the coordinated Qwen society on lives.
+          +              {hasCompleteComparisons
+          +                ? 'No solo model beats the coordinated Qwen society on lives.'
+          +                : 'Some solo models lack a paired comparison.'}
+                       </h3>
+                       <p className="mt-1 text-[11px] leading-relaxed text-eoc-secondary">
+          -              Frontier solos reach the same outcome ceiling, but most pay substantially more.
+          -              DeepSeek V4 Flash is the honest exception: it ties on lives and costs less.
+          +              {hasCompleteComparisons ? (
+          +                <>
+          +                  Frontier solos reach the same outcome ceiling, but most pay substantially more.
+          +                  DeepSeek V4 Flash is the honest exception: it ties on lives and costs less.
+          +                </>
+          +              ) : (
+          +                <>
+          +                  Rows without shared seeds are marked insufficient data and excluded from the tie
+          +                  and win counts; the available paired results remain visible below.
+          +                </>
+          +              )}
+                       </p>
+                     </div>
+                     <div className="rounded border border-signal-cyan/30 bg-eoc-ground/60 px-3 py-2 font-mono text-right">
+          @@ -455,7 +471,8 @@
+                 <p className="text-[10px] font-mono leading-relaxed text-eoc-secondary">
+                   Same 10 paired world seeds × 60 ticks. Δ = solo − society. “Ties society” means the
+                   paired result is not credibly different under the benchmark’s CI + exact sign-test rule;
+          -        it is not a claim of identical outputs. Qwen inference is stochastic.
+          +        it is not a claim of identical outputs. Rows without a paired comparison are marked
+          +        “insufficient data” and excluded from tie and win counts. Qwen inference is stochastic.
+                 </p>
+               </div>
+             )
+          --- a/web/src/components/__tests__/BenchTab.test.tsx
+          +++ b/web/src/components/__tests__/BenchTab.test.tsx
+          @@ -160,4 +160,20 @@
+                 expect(screen.getByText('4.3× cheaper')).toBeInTheDocument()
+                 expect(screen.getAllByText('ties society')).toHaveLength(2)
+               })
+          +
+          +  it('marks missing panel comparisons as insufficient data and excludes them from tie counts', async () => {
+          +    const incompleteFrontier: BenchResult = {
+          +      ...frontierResult,
+          +      panel_stats: [frontierResult.panel_stats![0]],
+          +    }
+          +    vi.mocked(api.bench).mockResolvedValue([benchResult, incompleteFrontier])
+          +    render(<BenchTab />)
+          +    const panelButton = await screen.findByRole('button', { name: /12-model frontier/i })
+          +    fireEvent.click(panelButton)
+          +
+          +    expect(screen.getByText(/Some solo models lack a paired comparison/i)).toBeInTheDocument()
+          +    expect(screen.getByText('insufficient data')).toBeInTheDocument()
+          +    expect(screen.getAllByText('ties society')).toHaveLength(1)
+          +    expect(screen.getByText(/excluded from tie and win counts/i)).toBeInTheDocument()
+          +  })
+             })
+          PATCH
+          git apply --check /tmp/frontier-fix.patch
+          git apply /tmp/frontier-fix.patch
 
       - name: Run focused frontend validation
         working-directory: web
