@@ -1,0 +1,160 @@
+name: Apply frontier comparison fix
+
+on:
+  pull_request:
+    types: [opened]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    if: github.head_ref == 'fix/frontier-missing-comparisons'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Apply reviewed fix and regression test
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          component_path = Path('web/src/components/BenchTab.tsx')
+          component = component_path.read_text()
+
+          old_outcome = """function outcomeLabel(comparison: PairedComparison | undefined): {
+            text: string
+            color: string
+          } {
+            if (comparison?.verdict === 'credible' && comparison.mean_delta > 0) {
+              return { text: 'solo wins', color: STATUS_COLORS.resolved }
+            }
+            if (comparison?.verdict === 'credible' && comparison.mean_delta < 0) {
+              return { text: 'below society', color: STATUS_COLORS.failed }
+            }
+            return { text: 'ties society', color: VERDICT_COLORS.suggestive }
+          }
+          """
+          new_outcome = """function outcomeLabel(comparison: PairedComparison | undefined): {
+            text: string
+            color: string
+          } {
+            if (!comparison) {
+              return { text: 'insufficient data', color: FALLBACK_COLOR }
+            }
+            if (comparison.verdict === 'credible' && comparison.mean_delta > 0) {
+              return { text: 'solo wins', color: STATUS_COLORS.resolved }
+            }
+            if (comparison.verdict === 'credible' && comparison.mean_delta < 0) {
+              return { text: 'below society', color: STATUS_COLORS.failed }
+            }
+            return { text: 'ties society', color: VERDICT_COLORS.suggestive }
+          }
+          """
+          assert old_outcome in component
+          component = component.replace(old_outcome, new_outcome)
+
+          old_counts = """  const modelFamilies = new Set(rows.map(([model]) => model.split('/')[0]))
+            const frontierRows = rows.filter(([, arm]) => arm.family?.includes('frontier'))
+            const frontierTies = frontierRows.filter(([model]) => {
+              const comparison = comparisons.get(model)
+              return comparison?.verdict !== 'credible'
+            }).length
+          """
+          new_counts = """  const modelFamilies = new Set(rows.map(([model]) => model.split('/')[0]))
+            const frontierRows = rows.filter(([, arm]) => arm.family?.includes('frontier'))
+            const missingComparisons = rows.filter(([model]) => !comparisons.has(model)).length
+            const hasCompleteComparisons = missingComparisons === 0
+            const frontierTies = frontierRows.filter(([model]) => {
+              const comparison = comparisons.get(model)
+              return comparison != null && comparison.verdict !== 'credible'
+            }).length
+          """
+          assert old_counts in component
+          component = component.replace(old_counts, new_counts)
+
+          old_intro = """            <h3 className=\"mt-1 text-base font-mono text-eoc-primary\">
+                            No solo model beats the coordinated Qwen society on lives.
+                          </h3>
+                          <p className=\"mt-1 text-[11px] leading-relaxed text-eoc-secondary\">
+                            Frontier solos reach the same outcome ceiling, but most pay substantially more.
+                            DeepSeek V4 Flash is the honest exception: it ties on lives and costs less.
+                          </p>
+          """
+          new_intro = """            <h3 className=\"mt-1 text-base font-mono text-eoc-primary\">
+                            {hasCompleteComparisons
+                              ? 'No solo model beats the coordinated Qwen society on lives.'
+                              : 'Some solo models lack a paired comparison.'}
+                          </h3>
+                          <p className=\"mt-1 text-[11px] leading-relaxed text-eoc-secondary\">
+                            {hasCompleteComparisons ? (
+                              <>
+                                Frontier solos reach the same outcome ceiling, but most pay substantially more.
+                                DeepSeek V4 Flash is the honest exception: it ties on lives and costs less.
+                              </>
+                            ) : (
+                              <>
+                                Rows without shared seeds are marked insufficient data and excluded from the tie
+                                and win counts; the available paired results remain visible below.
+                              </>
+                            )}
+                          </p>
+          """
+          assert old_intro in component
+          component = component.replace(old_intro, new_intro)
+
+          old_note = """        paired result is not credibly different under the benchmark’s CI + exact sign-test rule;
+                  it is not a claim of identical outputs. Qwen inference is stochastic.
+          """
+          new_note = """        paired result is not credibly different under the benchmark’s CI + exact sign-test rule;
+                  it is not a claim of identical outputs. Rows without a paired comparison are marked
+                  “insufficient data” and excluded from tie and win counts. Qwen inference is stochastic.
+          """
+          assert old_note in component
+          component = component.replace(old_note, new_note)
+          component_path.write_text(component)
+
+          test_path = Path('web/src/components/__tests__/BenchTab.test.tsx')
+          tests = test_path.read_text()
+          new_test = """
+
+            it('marks missing panel comparisons as insufficient data and excludes them from tie counts', async () => {
+              const incompleteFrontier: BenchResult = {
+                ...frontierResult,
+                panel_stats: [frontierResult.panel_stats![0]],
+              }
+              vi.mocked(api.bench).mockResolvedValue([benchResult, incompleteFrontier])
+              render(<BenchTab />)
+              const panelButton = await screen.findByRole('button', { name: /12-model frontier/i })
+              fireEvent.click(panelButton)
+
+              expect(screen.getByText(/Some solo models lack a paired comparison/i)).toBeInTheDocument()
+              expect(screen.getByText('insufficient data')).toBeInTheDocument()
+              expect(screen.getAllByText('ties society')).toHaveLength(1)
+              expect(screen.getByText(/excluded from tie and win counts/i)).toBeInTheDocument()
+            })
+          """
+          marker = "\n})\n"
+          assert tests.endswith(marker)
+          tests = tests[:-len(marker)] + new_test + marker
+          test_path.write_text(tests)
+          PY
+
+      - name: Run focused frontend validation
+        working-directory: web
+        run: |
+          npm ci
+          npm test -- --run src/components/__tests__/BenchTab.test.tsx
+          npm run build
+
+      - name: Commit fix and remove bootstrap workflow
+        run: |
+          rm .github/workflows/apply-frontier-comparison-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/src/components/BenchTab.tsx web/src/components/__tests__/BenchTab.test.tsx .github/workflows/apply-frontier-comparison-fix.yml
+          git commit -m "fix(web): treat missing panel comparisons as unavailable"
+          git push origin HEAD:${{ github.head_ref }}
