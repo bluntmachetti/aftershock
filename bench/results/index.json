@@ -591,9 +591,38 @@
       ],
       "verdict": null,
       "verdict_note": null
+    },
+    {
+      "ablate": null,
+      "conformance_verdict": null,
+      "cost_usd": 0.056820097499999986,
+      "dir": "2026-07-19-qwen37max-solo",
+      "field_notes_section": 29,
+      "git_sha": "c59157abfd0c05249e198191982d0bf405fb4ca3",
+      "kind": "results",
+      "lives_per_dollar": 1807.4590597103434,
+      "lives_saved": 102.7,
+      "mean_team_alignment": 0.7,
+      "model_endpoint": "dashscope-intl",
+      "records_committed": true,
+      "schema_version": 1,
+      "seeds": [
+        11,
+        23,
+        37,
+        42,
+        57,
+        73,
+        89,
+        101,
+        113,
+        127
+      ],
+      "verdict": null,
+      "verdict_note": null
     }
   ],
-  "generated_by_git_sha": "b95957f32d2d389d21fe6e15d56f31f5e08bb2fa",
-  "n_experiments": 23,
+  "generated_by_git_sha": "c59157abfd0c05249e198191982d0bf405fb4ca3",
+  "n_experiments": 24,
   "schema_version": 1
 }

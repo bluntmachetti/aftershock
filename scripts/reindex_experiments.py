@@ -74,6 +74,8 @@ _DIR_TO_SECTION: dict[str, int] = {
     "2026-06-30-fric-p1": 27,
     # §28 cross-family panel: one combined dir, arms keyed by MODEL id (solo arm).
     "2026-07-01-panelA-solo": 28,
+    # §29 the missing Qwen frontier cell: qwen3.7-max solo, served from dashscope-intl.
+    "2026-07-19-qwen37max-solo": 29,
 }
 
 # Dirs that predate the provenance stamp / verdict hardening — their verdict (if any)

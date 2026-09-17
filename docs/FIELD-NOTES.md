@@ -754,3 +754,38 @@ so a weaker cross-family score is partly prompt-fit — but all 12 parsed the JS
 the *frontier* tie is the load-bearing result. External list prices drift (as-of 2026-07-01). Spend
 ~$14.5. New reusable surface: family-agnostic provider (`DASHSCOPE_BASE_URL` → OpenRouter/Featherless)
 + `AFTERSHOCK_MODEL_PRICES`. Data: `bench/results/2026-07-01-panelA-solo/` (12 model cells + comparator).
+
+## 29. The missing Qwen frontier cell: a qwen3.7-max solo lands just under the cheap society (2026-07-19)
+
+§28's panel had one gap the critique could still lean on: its only *Qwen* solo was the open-weight
+qwen3-235b (−26 lives), not a frontier-class Qwen. This fills it. **qwen3.7-max** powers the `solo`
+arm over the same 10 paired seeds × 60 ticks as §28, served from **dashscope-intl** (not OpenRouter —
+the one endpoint difference from the rest of the panel, stamped in the cell's provenance), priced at
+the OpenRouter list of 2026-07-19 ($1.475 / $4.425 per Mtok, the panel's accounting basis; the
+recorded per-run cost reproduces exactly from the token counts). Comparator unchanged: the cheap
+all-flash Qwen society at **106.0 lives, $0.025/run, 4272 lives/$**.
+
+| solo model | lives (sd) | cost | lives/$ | Δ vs society | paired 95% CI | sign test | verdict |
+|---|---|---|---|---|---|---|---|
+| qwen3.7-max (dashscope-intl) | 102.7 (±15.4) | $0.0568 | 1807 | **−3.3** | [−7.0, +0.4] | 1+ / 8− / 1 tie, **p=0.039** | suggestive |
+
+**Reads.** (1) **Directionally it is the weakest frontier-class solo in the panel:** it lands below
+the society on 8 of 10 seeds and is the *only* frontier-class model whose sign test clears p<0.05 —
+but the paired-t CI grazes zero, so under the §16 hardened rule (CI *and* sign must agree) it stays
+"suggestive", not "credible". A bootstrap CI ([−6.2, −0.2]) would exclude zero; the harness's rule is
+deliberately the stricter one, so that is what is reported. (2) **The magnitude sits inside §28's
+frontier band** (Δ ∈ [−4.4, +3.0]) at the low end — so the honest headline is still "ties, slightly
+below", not "loses". (3) **Cost-efficiency tells the same story as every other frontier:** 2.3× the
+society's cost per run, 2.4× worse lives-per-$, for no lives gain. This is the Qwen-native version of
+§28's refinement: a big Qwen solo *reaches* the coordination ceiling but does not beat it, and it pays
+for the tie.
+
+**Caveats.** Independent-seed (§13); single endpoint differs from the OpenRouter-served panel cells
+(same contract, same prompts, same price basis — but not the same host); the provenance stamp records
+a dirty working tree at `c59157a` (the bench code path was unchanged on `main`; treat the stamp as a
+flag, not a defect). The intended companion cell — **qwen3.8-max-preview** — was **not run**: on
+release it was a Token-Plan-exclusive preview with no pay-as-you-go price, and routing a benchmark
+through a Token Plan both violates its terms and breaks the lives-per-$ accounting. It stays a
+pending cell until a per-token price exists. Spend ~$0.57 at list, drawn from the model's 1M-token
+free grant ($0 cash). Data: `bench/results/2026-07-19-qwen37max-solo/`; price basis added to
+`bench/panelA_prices.json`.

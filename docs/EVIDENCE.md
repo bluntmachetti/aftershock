@@ -312,6 +312,7 @@ all-flash Qwen **society** — 106.0 lives, $0.0248/run, 4,272 lives/$.
 | kimi-k2.7-code | CN frontier | 101.6 (±21.1) | $0.0755 | 1,345 | −4.4 | p=1.000 |
 | glm-5.2 | CN frontier | 105.4 (±15.2) | $0.0661 | 1,595 | −0.6 | p=0.508 |
 | **cheap Qwen society** | — | **106.0** | **$0.0248** | **4,272** | — | — |
+| qwen3.7-max † | CN frontier (Qwen) | 102.7 (±15.4) | $0.0568 | 1,807 | −3.3 | p=0.039 (CI grazes 0 → suggestive) |
 | mistral-large | open-weight | 95.1 (±13.9) | $0.0231 | 4,114 | −10.9 | **p=0.002** |
 | llama-3.3-70b | open-weight | 97.7 (±12.6) | $0.0035 | 28,141 | −8.3 | p=0.289 |
 | qwen3-235b | open-weight | 79.7 (±13.4) | $0.0029 | 27,638 | −26.3 | **p=0.002** |
@@ -334,6 +335,11 @@ all-flash Qwen **society** — 106.0 lives, $0.0248/run, 4,272 lives/$.
 3. **A clean cross-family capability floor:** below the frontier, solos fall off
    (mistral-large −10.9, qwen3-235b −26.3, both p=0.002) and an 8B model collapses
    (24.6 lives, p=0.002) — cf. §22's 1.7B collapse in the self-hosted size sweep.
+
+† Added 2026-07-19 (FIELD-NOTES §29): served from dashscope-intl rather than OpenRouter,
+same seeds/contract/price basis; the only frontier-class solo whose sign test clears
+p<0.05, but the paired CI [−7.0, +0.4] includes zero, so it stays "suggestive" — inside the
+frontier band, at its low end. Source: `bench/results/2026-07-19-qwen37max-solo/`.
 
 **Caveats:** independent-seed (the LLM layer is non-deterministic, §4); the
 prompts/contract are Qwen-tuned, so a weaker cross-family score is partly prompt-fit
