@@ -1,12 +1,20 @@
 # Aftershock
 
-[![Live observatory](https://img.shields.io/badge/observatory-live-06b6d4?style=flat-square&logo=react&logoColor=white)](https://aftershock.redoubtlabs.dev)
+[![Observatory](https://img.shields.io/badge/observatory-run%20locally-6b7280?style=flat-square&logo=react&logoColor=white)](#quickstart)
 [![CI](https://img.shields.io/github/actions/workflow/status/bluntmachetti/aftershock/ci.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/bluntmachetti/aftershock/actions/workflows/ci.yml)
 [![CodeQL](https://img.shields.io/github/actions/workflow/status/bluntmachetti/aftershock/codeql.yml?branch=main&style=flat-square&logo=github&label=CodeQL)](https://github.com/bluntmachetti/aftershock/actions/workflows/codeql.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)](pyproject.toml)
 [![Tests](https://img.shields.io/badge/tests-996%20passing-2ea043?style=flat-square&logo=pytest&logoColor=white)](tests)
 [![Determinism](https://img.shields.io/badge/determinism-verified-2ea043?style=flat-square)](docs/DESIGN.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+
+> **Project status (September 2026).** The Qwen Cloud Global AI Hackathon has concluded and
+> Aftershock was one of its recognised winners in the Agent Society track. The hosted
+> observatory at `aftershock.redoubtlabs.dev` has been retired now that judging is over; the
+> code, the benchmark results under [bench/results/](bench/results/), the proof bundle in
+> [docs/EVIDENCE.md](docs/EVIDENCE.md) and the field notes are the durable record, and the
+> observatory runs locally in two commands (see [Quickstart](#quickstart)). The project
+> continues as a research harness: new experiments land in [docs/FIELD-NOTES.md](docs/FIELD-NOTES.md).
 
 **A deterministic agent-society benchmark: a disaster-struck town run by a society of Qwen
 agents that split tasks and negotiate scarce rescue resources. Six cheap qwen3.5-flash workers
@@ -37,7 +45,8 @@ Aftershock is two things:
    small models with a negotiation protocol. Scored on lives saved, response latency, and
    cost per run.
 
-Built for the Qwen Cloud Global AI Hackathon (Agent Society track).
+Built for the Qwen Cloud Global AI Hackathon (Agent Society track), where it was one of the
+recognised winners.
 
 ## Current status
 
@@ -56,10 +65,11 @@ Aftershock is a working end-to-end prototype:
 - Real-data scenario packs committed under `scenarios/`, including the headline NYC Hurricane Ida
   pack.
 - Docker deployment with a Caddy HTTPS front door (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)). The
-  current public deployment is: <https://aftershock.redoubtlabs.dev>
+  judge-facing public deployment was retired after the hackathon; the same stack runs on any box
+  with Docker, or locally via `aftershock serve`.
 
-The public deployment requires an observatory token for mutating live-run endpoints; read-only
-surfaces such as recorded runs and scenario metadata are public.
+A deployment requires an observatory token for mutating live-run endpoints; read-only surfaces
+such as recorded runs and scenario metadata are public.
 
 ## Results (live benchmark, 2026-06-22)
 
