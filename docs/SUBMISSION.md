@@ -1,7 +1,8 @@
 # Hackathon Submission Draft
 
 > **Archived (September 2026).** This was the source of truth for the Devpost copy and the
-> demo-video script. The hackathon has concluded (Aftershock was one of the recognised winners)
+> demo-video script. The hackathon has concluded — Aftershock was named a **Winner — Top 10
+> Honorable Mention Projects** ([Devpost entry](https://devpost.com/software/aftershock-em9cju)) —
 > and the live demo it references has been retired; the repo and `bench/results/` are the record.
 > Kept verbatim below for provenance.
 

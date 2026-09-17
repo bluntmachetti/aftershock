@@ -8,8 +8,9 @@
 [![Determinism](https://img.shields.io/badge/determinism-verified-2ea043?style=flat-square)](docs/DESIGN.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
-> **Project status (September 2026).** The Qwen Cloud Global AI Hackathon has concluded and
-> Aftershock was one of its recognised winners in the Agent Society track. The hosted
+> **Project status (September 2026).** The Global AI Hackathon Series with Qwen Cloud has
+> concluded; Aftershock was named a **Winner — Top 10 Honorable Mention Projects**
+> ([Devpost entry](https://devpost.com/software/aftershock-em9cju), Agent Society track). The hosted
 > observatory at `aftershock.redoubtlabs.dev` has been retired now that judging is over; the
 > code, the benchmark results under [bench/results/](bench/results/), the proof bundle in
 > [docs/EVIDENCE.md](docs/EVIDENCE.md) and the field notes are the durable record, and the
@@ -45,8 +46,8 @@ Aftershock is two things:
    small models with a negotiation protocol. Scored on lives saved, response latency, and
    cost per run.
 
-Built for the Qwen Cloud Global AI Hackathon (Agent Society track), where it was one of the
-recognised winners.
+Built for the Global AI Hackathon Series with Qwen Cloud (Agent Society track), where it was
+named a Winner — Top 10 Honorable Mention Projects.
 
 ## Current status
 
