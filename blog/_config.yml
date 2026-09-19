@@ -7,8 +7,10 @@ description: >-
   we firmed and walked back, that got us to the honest numbers.
 # Publish posts even if their timestamp is ahead of the build clock (timezone-safe).
 future: true
-url: "https://bluntmachetti.github.io"
-baseurl: "/aftershock"
+# Custom domain (blog/CNAME + the repo Pages setting): the field log lives at the project's
+# own domain since the hosted observatory was retired; the github.io path redirects here.
+url: "https://aftershock.redoubtlabs.dev"
+baseurl: ""
 author:
   name: "Kenny Ademolu"
 # External links used by the nav + footer (the GitHub/Pages handle stays bluntmachetti — it is
