@@ -10,7 +10,7 @@ lives-per-dollar**. The society-vs-swarm lives edge is **suggestive only** (+8.9
 an early +28 figure firmed down, and we report the honest number. Full evidence:
 [docs/EVIDENCE.md](../docs/EVIDENCE.md).
 
-**📖 Read the rendered blog → <https://bluntmachetti.github.io/aftershock/>**
+**📖 Read the rendered blog → <https://aftershock.redoubtlabs.dev/>**
 
 This folder is the Jekyll source for that site (built to GitHub Pages by
 [`.github/workflows/pages.yml`](../.github/workflows/pages.yml)):

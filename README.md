@@ -11,7 +11,8 @@
 > **Project status (September 2026).** The Global AI Hackathon Series with Qwen Cloud has
 > concluded; Aftershock was named a **Winner — Top 10 Honorable Mention Projects**
 > ([Devpost entry](https://devpost.com/software/aftershock-em9cju), Agent Society track). The hosted
-> observatory at `aftershock.redoubtlabs.dev` has been retired now that judging is over; the
+> observatory has been retired now that judging is over and `aftershock.redoubtlabs.dev` now
+> serves the [Field Log](https://aftershock.redoubtlabs.dev/); the
 > code, the benchmark results under [bench/results/](bench/results/), the proof bundle in
 > [docs/EVIDENCE.md](docs/EVIDENCE.md) and the field notes are the durable record, and the
 > observatory runs locally in two commands (see [Quickstart](#quickstart)). The project
