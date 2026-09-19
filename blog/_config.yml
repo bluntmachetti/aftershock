@@ -1,7 +1,7 @@
 title: "Aftershock — Field Log"
 description: >-
-  The build journey of Aftershock — a disaster-response society of Qwen agents for the Qwen Cloud
-  Global AI Hackathon. The claims that survived scrutiny: written doctrine lifts protocol
+  The build journey of Aftershock — a disaster-response society of Qwen agents, named a Winner
+  (Top 10 Honorable Mention Projects) in the Global AI Hackathon Series with Qwen Cloud. The claims that survived scrutiny: written doctrine lifts protocol
   conformance (credible at p=0.031; 95% on the NYC-Ida demo run) and six small models out-deliver
   one big one at ~65% better lives-per-dollar — plus the negative results, and the lives headline
   we firmed and walked back, that got us to the honest numbers.
@@ -14,7 +14,7 @@ author:
 # External links used by the nav + footer (the GitHub/Pages handle stays bluntmachetti — it is
 # the account address; the displayed author name is Kenny Ademolu).
 links:
-  demo: "https://aftershock.redoubtlabs.dev"
+  demo: "https://github.com/bluntmachetti/aftershock#quickstart"
   repo: "https://github.com/bluntmachetti/aftershock"
 plugins:
   - jekyll-feed

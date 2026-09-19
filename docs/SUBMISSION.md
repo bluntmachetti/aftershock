@@ -1,6 +1,10 @@
 # Hackathon Submission Draft
 
-Use this as the source of truth for Devpost copy and the demo-video script.
+> **Archived (September 2026).** This was the source of truth for the Devpost copy and the
+> demo-video script. The hackathon has concluded — Aftershock was named a **Winner — Top 10
+> Honorable Mention Projects** ([Devpost entry](https://devpost.com/software/aftershock-em9cju)) —
+> and the live demo it references has been retired; the repo and `bench/results/` are the record.
+> Kept verbatim below for provenance.
 
 ## Project Overview
 
@@ -15,7 +19,7 @@ and matches frontier solo models at lower cost — with a receipt for every clai
 
 ### Try it out links
 
-- Live demo: https://aftershock.redoubtlabs.dev
+- Live demo: https://aftershock.redoubtlabs.dev (retired after judging; run locally with `aftershock serve`)
 - GitHub repo: https://github.com/bluntmachetti/aftershock
 - Four-arm Qwen benchmark: https://github.com/bluntmachetti/aftershock/tree/main/bench/results/2026-06-22-4arm-refresh
 - Cross-family panel (12 models, 10 families): https://github.com/bluntmachetti/aftershock/tree/main/bench/results/2026-07-01-panelA-solo
@@ -264,7 +268,7 @@ The live demo runs on Alibaba Cloud ECS:
 - Docker Compose application stack.
 - FastAPI backend serving the React observatory.
 - Caddy HTTPS reverse proxy.
-- Public URL: https://aftershock.redoubtlabs.dev
+- Public URL: https://aftershock.redoubtlabs.dev (retired after judging)
 
 ### GitHub repository
 
